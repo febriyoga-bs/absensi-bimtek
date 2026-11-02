@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment / secrets (file contoh tetap di-commit)
+.env
+.env.*
+!.env.example
+
+# Vercel CLI
+.vercel/
+
+# Foto absensi lokal (development tanpa R2)
+uploads/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor & OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Misc
+coverage/
+*.local
