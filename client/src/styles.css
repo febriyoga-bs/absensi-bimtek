@@ -323,3 +323,49 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
   .status-grid { grid-template-columns: 1fr; }
   .card { padding: 18px; }
 }
+
+/* ============ Riwayat ============ */
+.history-link { display: flex; align-items: center; gap: 14px; padding: 16px 20px; border-radius: var(--radius); background: var(--surface);
+  box-shadow: var(--shadow); text-decoration: none; color: var(--text); transition: transform .15s ease; }
+.history-link:hover { transform: translateY(-1px); }
+.history-link > span:nth-child(2) { display: grid; flex: 1; min-width: 0; }
+.history-link small { color: var(--muted); font-size: 13px; }
+.history-link > .icon:last-child { color: var(--muted); }
+.history-link__icon { flex: none; width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: #fff4dd; color: #a46200; }
+.link-row { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 16px; font-size: 14px; font-weight: 600; text-decoration: none; }
+
+.history { display: grid; gap: 18px; }
+.history__summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.history__summary > div { display: grid; text-align: center; padding: 10px 4px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.history__summary b { font-size: 22px; line-height: 1.1; } .history__summary small { font-size: 11.5px; color: var(--muted); font-weight: 600; }
+.history__summary .ok b { color: var(--ok); } .history__summary .warn b { color: var(--warn); } .history__summary .err b { color: var(--err); }
+.history__day h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 8px; }
+.history__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.history__item { display: flex; gap: 12px; align-items: flex-start; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.history__icon { flex: none; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; color: #fff; }
+.history__icon--ok { background: var(--ok); } .history__icon--warn { background: var(--warn); } .history__icon--err { background: var(--err); }
+.history__body { display: grid; gap: 3px; flex: 1; min-width: 0; }
+.history__top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.history__meta { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--muted); }
+.history__status { justify-self: start; margin-top: 4px; font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 99px; }
+.history__status--ok { background: var(--ok-soft); color: var(--ok); } .history__status--warn { background: var(--warn-soft); color: var(--warn); }
+.history__status--err { background: var(--err-soft); color: var(--err); }
+.history__time { flex: none; display: grid; text-align: right; font-weight: 800; font-size: 16px; font-variant-numeric: tabular-nums; }
+.history__time small { font-size: 11px; color: var(--muted); font-weight: 600; }
+.history__note { display: flex; gap: 8px; align-items: flex-start; margin: 0; padding-top: 14px; border-top: 1px dashed var(--line); }
+.empty { display: grid; justify-items: center; gap: 6px; text-align: center; padding: 20px 0; }
+.empty p { margin: 0 0 8px; }
+.empty__icon { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); color: var(--muted); margin-bottom: 4px; }
+
+.topbar__actions { display: flex; gap: 8px; flex: none; }
+.brand { white-space: nowrap; }
+@media (max-width: 480px) { .topbar__link--admin { display: none; } }
+
+/* ============ Logo Kemendikdasmen ============ */
+.brand__mark--logo { background: #fff !important; box-shadow: 0 2px 8px rgba(0,0,0,.12) !important; padding: 4px; border-radius: 12px; }
+.brand__mark { flex: none; }
+.brand__mark img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.brand__text { display: grid; line-height: 1.15; }
+.brand__text small { font-size: 11.5px; font-weight: 600; opacity: .75; letter-spacing: .02em; }
+.hero__logo { margin: 0 auto 10px; display: grid !important; place-items: center; }
+.venue__logo { margin: 0 auto 4px; display: grid !important; place-items: center; border-radius: 20px !important; padding: 8px !important; }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import Icon from '../components/Icon.jsx';
+import BrandMark from '../components/BrandMark.jsx';
 import { useNow, fmtClock, fmtDate, fmtHM, fmtRemaining, dayLabel } from '../lib/time.js';
 
 const ROLES = [
@@ -46,10 +47,13 @@ export default function Home() {
         <div className="hero__deco" aria-hidden="true" />
         <nav className="topbar">
           <span className="brand">
-            <span className="brand__mark"><Icon name="school" size={20} /></span>
-            Absensi BIMTEK
+            <BrandMark size={40} />
+            <span className="brand__text">Absensi BIMTEK<small>Kemendikdasmen</small></span>
           </span>
-          <Link to="/admin" className="topbar__link">Admin</Link>
+          <span className="topbar__actions">
+            <Link to="/riwayat" className="topbar__link"><Icon name="clock" size={16} />Riwayat</Link>
+            <Link to="/admin" className="topbar__link topbar__link--admin">Admin</Link>
+          </span>
         </nav>
 
         <div className="hero__body">
@@ -82,6 +86,12 @@ export default function Home() {
             </Link>
           ))}
         </section>
+
+        <Link to="/riwayat" className="history-link">
+          <span className="history-link__icon"><Icon name="clock" size={22} /></span>
+          <span><b>Cek riwayat absensi di perangkat ini</b><small>Lihat absen yang sudah dikirim dan status verifikasinya</small></span>
+          <Icon name="right" size={20} />
+        </Link>
 
         <section className="panel">
           <h2 className="panel__title">Cara absen</h2>

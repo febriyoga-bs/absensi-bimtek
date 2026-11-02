@@ -6,6 +6,7 @@ import { getDeviceId } from '../lib/device.js';
 import { useNow, fmtFull, fmtHM, fmtRemaining, initials } from '../lib/time.js';
 import CameraCapture from '../components/CameraCapture.jsx';
 import Icon from '../components/Icon.jsx';
+import BrandMark from '../components/BrandMark.jsx';
 
 const ROLE = {
   peserta: { label: 'Peserta', icon: 'cap', placeholder: 'contoh: P-001', field: 'Kode / Nomor Peserta' },
@@ -60,6 +61,7 @@ export default function Absen({ role }) {
           <span className="role-badge"><Icon name={R.icon} size={16} /> Absen {R.label}</span>
         </nav>
         <div className="hero__body hero__body--compact">
+          <BrandMark size={48} className="hero__logo" />
           <h1>{info?.event_name || 'BIMTEK Revitalisasi SD'}</h1>
           {info?.event_dates && <p className="hero__sub">{info.event_dates}</p>}
         </div>
@@ -120,6 +122,7 @@ export default function Absen({ role }) {
               {info?.require_venue_code && <li><Icon name="monitor" size={18} /><span>Siapkan <b>kode venue 6 digit</b> dari layar panitia.</span></li>}
               <li><Icon name="shield" size={18} /><span>Aplikasi Fake GPS terdeteksi otomatis dan absensi akan ditolak atau diperiksa panitia.</span></li>
             </ul>
+            <Link to="/riwayat" className="link-row"><Icon name="clock" size={16} />Sudah absen? Cek riwayat di perangkat ini</Link>
           </div>
         )}
 
@@ -322,7 +325,10 @@ function Done({ result, role, onClose }) {
         </div>
       )}
       <p className="muted small">Simpan bukti ini dengan screenshot bila diperlukan.</p>
-      <button className="btn btn--primary btn--lg" onClick={onClose}>Selesai</button>
+      <div className="row">
+        <Link to="/riwayat" className="btn"><Icon name="clock" size={18} />Riwayat</Link>
+        <button className="btn btn--primary" onClick={onClose}>Selesai</button>
+      </div>
     </div>
   );
 }

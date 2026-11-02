@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import './styles.css';
 import Home from './pages/Home.jsx';
 import Absen from './pages/Absen.jsx';
+import Riwayat from './pages/Riwayat.jsx';
 import AdminLayout from './pages/admin/AdminLayout.jsx';
 import Login from './pages/admin/Login.jsx';
 import Dashboard from './pages/admin/Dashboard.jsx';
@@ -21,6 +22,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <Route path="/" element={<Home />} />
         <Route path="/absen/peserta" element={<Absen key="peserta" role="peserta" />} />
         <Route path="/absen/panitia" element={<Absen key="panitia" role="panitia" />} />
+        <Route path="/riwayat" element={<Riwayat />} />
         <Route path="/admin/login" element={<Login />} />
         <Route path="/admin/kode-venue" element={<VenueCode />} />
         <Route path="/admin" element={<AdminLayout />}>

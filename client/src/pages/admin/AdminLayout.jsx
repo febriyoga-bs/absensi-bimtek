@@ -1,6 +1,7 @@
 import { NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom';
 import { adminToken } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
+import BrandMark from '../../components/BrandMark.jsx';
 
 const NAV = [
   { to: '/admin', end: true, icon: 'chart', label: 'Rekap' },
@@ -18,7 +19,7 @@ export default function AdminLayout() {
     <div className="admin">
       <aside className="admin__nav">
         <div className="admin__brand">
-          <span className="brand__mark"><Icon name="school" size={20} /></span>
+          <BrandMark size={38} />
           <span>Admin Absensi<small>BIMTEK Revitalisasi SD</small></span>
         </div>
         {NAV.map((n) => (

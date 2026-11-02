@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { api, adminToken } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
+import BrandMark from '../../components/BrandMark.jsx';
 
 export default function Login() {
   const [pw, setPw] = useState('');
@@ -20,7 +21,7 @@ export default function Login() {
   return (
     <div className="login">
       <form className="card form" onSubmit={submit}>
-        <span className="brand"><span className="brand__mark"><Icon name="school" size={20} /></span>Admin Absensi BIMTEK</span>
+        <span className="brand"><BrandMark size={44} /><span className="brand__text">Admin Absensi BIMTEK<small>Kemendikdasmen</small></span></span>
         <label>Password admin
           <span className="input-icon"><Icon name="key" /><input type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoFocus /></span>
         </label>

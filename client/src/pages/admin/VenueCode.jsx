@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Navigate, Link, useSearchParams } from 'react-router-dom';
 import { api, adminToken } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
+import BrandMark from '../../components/BrandMark.jsx';
 
 /** Tampilkan di proyektor / TV di meja registrasi masing-masing venue. */
 export default function VenueCode() {
@@ -41,6 +42,7 @@ export default function VenueCode() {
   if (!venueId) {
     return (
       <div className="venue">
+        <BrandMark size={84} className="venue__logo" />
         <div className="venue__title">{info?.event_name || 'BIMTEK Revitalisasi SD'}</div>
         <div className="venue__label">PILIH VENUE UNTUK LAYAR INI</div>
         <div className="venue__pick">
@@ -56,6 +58,7 @@ export default function VenueCode() {
   const code = data?.code || '------';
   return (
     <div className="venue">
+      <BrandMark size={96} className="venue__logo" />
       <div className="venue__title">{info?.event_name || 'BIMTEK Revitalisasi SD'}</div>
       <div className="venue__name"><Icon name="pin" size={34} />{data?.venue.name || '…'}</div>
       <div className="venue__label">KODE VENUE ABSENSI</div>
