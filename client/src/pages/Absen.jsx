@@ -149,7 +149,8 @@ function Signal({ accuracy }) {
 function CaptureStep({ role, info, ch, onDone, onRestart }) {
   const camRef = useRef(null);
   const watchRef = useRef(null);
-  const lastCheck = useRef(0);
+  const checkedOnce = useRef(false);
+  const [checking, setChecking] = useState(false);
   const [geo, setGeo] = useState({ samples: [], error: null });
   const [area, setArea] = useState(null);
   const [camLabel, setCamLabel] = useState('');
@@ -170,13 +171,21 @@ function CaptureStep({ role, info, ch, onDone, onRestart }) {
   const elapsed = (now - startedAt) / 1000;
   const gpsReady = geo.samples.length >= 3 || (geo.samples.length >= 1 && elapsed > 10);
 
-  // Cek area venue (maks. tiap 8 detik) agar peserta tahu posisinya sebelum foto
+  // Cek area venue SEKALI saat GPS siap (pakai sampel paling akurat), selebihnya lewat tombol "Cek ulang".
+  // Hemat request: dulu tiap 8 detik selama layar kamera terbuka.
+  function checkArea() {
+    const s = geo.samples.slice(-5).reduce((a, b) => (b.accuracy < a.accuracy ? b : a), geo.samples[geo.samples.length - 1]);
+    if (!s) return;
+    setChecking(true);
+    api('/precheck', { method: 'POST', body: { token: ch.token, lat: s.lat, lng: s.lng, accuracy: s.accuracy } })
+      .then(setArea).catch(() => {}).finally(() => setChecking(false));
+  }
   useEffect(() => {
-    if (!last || photo || Date.now() - lastCheck.current < 8000) return;
-    lastCheck.current = Date.now();
-    api('/precheck', { method: 'POST', body: { token: ch.token, lat: last.lat, lng: last.lng, accuracy: last.accuracy } })
-      .then(setArea).catch(() => {});
-  }, [last, photo, ch.token]);
+    if (!gpsReady || photo || checkedOnce.current) return;
+    checkedOnce.current = true;
+    checkArea();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gpsReady, photo]);
 
   function capture() {
     const lines = [
@@ -262,6 +271,13 @@ function CaptureStep({ role, info, ch, onDone, onRestart }) {
           {area?.distance_m != null && <span className="status__meta">{area.distance_m >= 1000 ? `${(area.distance_m / 1000).toFixed(1)} km` : `${area.distance_m} m`}</span>}
         </div>
       </div>
+      {!photo && gpsReady && !geo.error && (
+        <div className="recheck">
+          <button type="button" className="link-btn" onClick={checkArea} disabled={checking}>
+            <Icon name="refresh" size={14} />{checking ? 'Memeriksa lokasi…' : 'Cek ulang lokasi'}
+          </button>
+        </div>
+      )}
       {geo.error && <div className="alert alert--err"><Icon name="alert" size={18} /><span>{geo.error}</span></div>}
       {area?.inside && area.review && (
         <div className="alert alert--warn"><Icon name="info" size={18} />

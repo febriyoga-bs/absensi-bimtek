@@ -189,7 +189,8 @@ export function analyzeLocation(samples, venues, { maxAccuracy, clientTime } = {
   }
 
   const venue = loc.state === 'ok' || loc.state === 'uncertain' ? loc.venue : null;
-  return { lat, lng, accuracy: bestAcc, distance, venue, hard, flags };
+  // nearVenue: venue terdekat walau ditolak → agar percobaan diblokir tampil di dashboard LO venue tsb.
+  return { lat, lng, accuracy: bestAcc, distance, venue, nearVenue: loc.venue ?? null, hard, flags };
 }
 
 const VIRTUAL_CAM = /(virtual|obs|manycam|droidcam|snap ?camera|xsplit|epoccam|iriun|camo|ndi|v4l2loopback|dummy|fake)/i;
@@ -206,3 +207,15 @@ export function analyzeClientMeta(meta = {}) {
 }
 
 export const scoreOf = (flags) => flags.reduce((s, f) => s + (FLAG_WEIGHTS[f.code] || 1), 0);
+
+/**
+ * Ringkas sampel GPS untuk disimpan (±4 KB → ±0,6 KB per absen):
+ * [lat, lng, akurasi, altitude|null, detik relatif terhadap sampel pertama]
+ */
+export function compactSamples(samples) {
+  const t0 = samples[0]?.at ?? samples[0]?.ts ?? 0;
+  return samples.slice(-15).map((s) => [
+    Number(s.lat.toFixed(7)), Number(s.lng.toFixed(7)), Math.round(s.accuracy * 10) / 10,
+    s.altitude == null ? null : Math.round(s.altitude), t0 ? Math.round(((s.at ?? s.ts ?? t0) - t0) / 100) / 10 : null,
+  ]);
+}

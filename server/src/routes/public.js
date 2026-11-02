@@ -5,7 +5,7 @@ import { savePhoto, deletePhoto } from '../storage.js';
 import { q, getSettings } from '../db.js';
 import { ah, HttpError, haversine, verifyVenueCode, clientIp } from '../util.js';
 import { signChallenge, verifyChallenge } from '../auth.js';
-import { sanitizeSamples, analyzeLocation, analyzeClientMeta, scoreOf, locate } from '../antifake.js';
+import { sanitizeSamples, analyzeLocation, analyzeClientMeta, scoreOf, locate, compactSamples } from '../antifake.js';
 
 const r = Router();
 const ROLES = ['peserta', 'panitia'];
@@ -206,7 +206,7 @@ r.post('/attendance', ah(async (req, res) => {
     await q(
       `INSERT INTO attempt_logs (person_id, session_id, venue_id, reasons, lat, lng, accuracy_m, distance_m, device_id, ip, user_agent)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-      [person.id, session.id, loc.venue?.id ?? null, JSON.stringify(hard), loc.lat ?? null, loc.lng ?? null,
+      [person.id, session.id, loc.nearVenue?.id ?? null, JSON.stringify(hard), loc.lat ?? null, loc.lng ?? null,
         loc.accuracy ?? null, loc.distance ?? null, dev, ip, ua]
     );
     throw new HttpError(422, 'Absensi ditolak', { reasons: hard });
@@ -253,7 +253,7 @@ r.post('/attendance', ah(async (req, res) => {
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
      ON CONFLICT (person_id, session_id) DO NOTHING RETURNING id, created_at`,
     [person.id, session.id, loc.venue.id, file, loc.lat, loc.lng, loc.accuracy, loc.distance, status, score,
-      JSON.stringify(flags), JSON.stringify(samples), dev, ip, ua,
+      JSON.stringify(flags), JSON.stringify(compactSamples(samples)), dev, ip, ua,
       clientTime && !isNaN(new Date(clientTime)) ? new Date(clientTime) : null]
   );
   if (!ins.rows[0]) {

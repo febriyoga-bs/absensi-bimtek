@@ -1,26 +1,34 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useOutletContext, useSearchParams } from 'react-router-dom';
 import { api, adminUrl } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
 import { MapModal } from '../../components/MapEmbed.jsx';
 import { fmtDT, FLAG_LABEL } from './shared.js';
 
 const ST_LABEL = { valid: 'Valid', review: 'Perlu dicek', ditolak: 'Ditolak' };
+const PAGE = 48;
 const dist = (m) => (m == null ? '-' : m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`);
 
 export default function Records() {
   const [params, setParams] = useSearchParams();
   const [sessions, setSessions] = useState([]);
   const [venues, setVenues] = useState([]);
+  const { lo } = useOutletContext() || {};
   const [rows, setRows] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [counts, setCounts] = useState(null);
+  const [loading, setLoading] = useState(false);
   const [attempts, setAttempts] = useState([]);
   const [tab, setTab] = useState('absen');
   const [zoom, setZoom] = useState(null);
   const [mapPoint, setMapPoint] = useState(null);
   const sid = params.get('sesi') || '';
   const status = params.get('status') || '';
-  const venue = params.get('venue') || '';
-  const setParam = (k, v) => setParams({ sesi: sid, status, venue, [k]: v });
+  const venue = lo ? '' : params.get('venue') || '';
+  const page = Math.max(Number(params.get('hal')) || 1, 1);
+  // ganti filter → kembali ke halaman 1
+  const setParam = (k, v) => setParams({ sesi: sid, status, venue, hal: '1', [k]: v });
+  const pages = Math.max(Math.ceil(total / PAGE), 1);
 
   useEffect(() => {
     api('/admin/venues', { admin: true }).then(setVenues);
@@ -32,15 +40,27 @@ export default function Records() {
 
   const load = () => {
     if (!sid) return;
-    const qs = new URLSearchParams({ session_id: sid, ...(status && { status }), ...(venue && { venue_id: venue }) });
-    api(`/admin/attendance?${qs}`, { admin: true }).then(setRows);
-    api(`/admin/attempts?session_id=${sid}`, { admin: true }).then(setAttempts);
+    const qs = new URLSearchParams({
+      session_id: sid, limit: PAGE, offset: (page - 1) * PAGE,
+      ...(status && { status }), ...(venue && { venue_id: venue }),
+    });
+    setLoading(true);
+    api(`/admin/attendance?${qs}`, { admin: true })
+      .then((d) => { setRows(d.rows); setTotal(d.total); setCounts(d.counts); window.scrollTo({ top: 0 }); })
+      .finally(() => setLoading(false));
+    api(`/admin/attempts?session_id=${sid}${venue ? `&venue_id=${venue}` : ''}`, { admin: true }).then(setAttempts);
   };
-  useEffect(load, [sid, status, venue]);
+  useEffect(load, [sid, status, venue, page]);
 
   async function setStatus(id, st) {
     await api(`/admin/attendance/${id}`, { method: 'PATCH', admin: true, body: { status: st } });
     setRows((r) => r.map((x) => (x.id === id ? { ...x, status: st } : x)));
+    // perbarui hitungan per status tanpa memuat ulang halaman
+    setCounts((c) => {
+      if (!c) return c;
+      const old = rows.find((x) => x.id === id)?.status;
+      return old && old !== st ? { ...c, [old]: c[old] - 1, [st]: c[st] + 1 } : c;
+    });
   }
 
   return (
@@ -51,21 +71,23 @@ export default function Records() {
         <select value={sid} onChange={(e) => setParam('sesi', e.target.value)}>
           {sessions.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.role})</option>)}
         </select>
-        <select value={venue} onChange={(e) => setParam('venue', e.target.value)}>
-          <option value="">Semua venue</option>
-          {venues.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-        </select>
+        {!lo && venues.length > 1 && (
+          <select value={venue} onChange={(e) => setParam('venue', e.target.value)}>
+            <option value="">Semua venue</option>
+            {venues.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+          </select>
+        )}
         <select value={status} onChange={(e) => setParam('status', e.target.value)}>
-          <option value="">Semua status</option>
-          <option value="review">Perlu dicek</option>
-          <option value="valid">Valid</option>
-          <option value="ditolak">Ditolak</option>
+          <option value="">Semua status{counts ? ` (${counts.total})` : ''}</option>
+          <option value="review">Perlu dicek{counts ? ` (${counts.review})` : ''}</option>
+          <option value="valid">Valid{counts ? ` (${counts.valid})` : ''}</option>
+          <option value="ditolak">Ditolak{counts ? ` (${counts.ditolak})` : ''}</option>
         </select>
         <button className="btn btn--sm" onClick={load}><Icon name="refresh" size={15} />Muat ulang</button>
-        {sid && <a className="btn btn--sm" href={adminUrl(`/export?session_id=${sid}`)}><Icon name="download" size={15} />Unduh CSV</a>}
+        {sid && <a className="btn btn--sm" href={adminUrl(`/export?session_id=${sid}${venue ? `&venue_id=${venue}` : ''}`)}><Icon name="download" size={15} />Unduh CSV</a>}
       </div>
       <div className="tabs">
-        <button className={tab === 'absen' ? 'on' : ''} onClick={() => setTab('absen')}>Absensi masuk ({rows.length})</button>
+        <button className={tab === 'absen' ? 'on' : ''} onClick={() => setTab('absen')}>Absensi masuk ({total})</button>
         <button className={tab === 'blok' ? 'on' : ''} onClick={() => setTab('blok')}>Percobaan diblokir ({attempts.length})</button>
       </div>
 
@@ -98,7 +120,14 @@ export default function Records() {
               </div>
             </div>
           ))}
-          {!rows.length && <p className="muted">Belum ada data.</p>}
+          {!rows.length && <p className="muted">{loading ? 'Memuat…' : 'Belum ada data.'}</p>}
+        </div>
+      )}
+      {tab === 'absen' && pages > 1 && (
+        <div className="pager">
+          <button className="btn btn--sm" disabled={page <= 1 || loading} onClick={() => setParam('hal', String(page - 1))}><Icon name="left" size={15} />Sebelumnya</button>
+          <span className="muted small">Halaman <b>{page}</b> dari {pages} · {(page - 1) * PAGE + 1}–{Math.min(page * PAGE, total)} dari {total}</span>
+          <button className="btn btn--sm" disabled={page >= pages || loading} onClick={() => setParam('hal', String(page + 1))}>Berikutnya<Icon name="right" size={15} /></button>
         </div>
       )}
 

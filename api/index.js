@@ -1,5 +1,2 @@
-// Vercel Function: semua /api/* diarahkan ke sini (lihat vercel.json).
-import app, { attachErrorHandler } from '../server/src/app.js';
-
-attachErrorHandler(app);
-export default app;
+// Sisa konfigurasi lama (sebelum Vercel Services). Tidak dipakai lagi — folder api/ boleh dihapus.
+export { default } from '../server/src/app.js';

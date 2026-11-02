@@ -99,7 +99,7 @@ export default function Venues() {
       </form>
 
       <table className="table">
-        <thead><tr><th>Venue</th><th>Koordinat</th><th>Radius</th><th>Dikunci</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Venue</th><th>Koordinat</th><th>Radius</th><th>Dikunci</th><th>LO</th><th>Status</th><th></th></tr></thead>
         <tbody>
           {list.map((v) => (
             <tr key={v.id}>
@@ -109,6 +109,7 @@ export default function Venues() {
               })}><Icon name="pin" size={14} />{Number(v.lat).toFixed(5)}, {Number(v.lng).toFixed(5)}</button></td>
               <td>{v.radius_m} m</td>
               <td className="small">{v.people_count} orang</td>
+              <td className="small">{v.lo_count ? `${v.lo_count} akun` : <span className="muted">–</span>}</td>
               <td><span className={`tag ${v.active ? 'tag--open' : 'tag--off'}`}>{v.active ? 'Aktif' : 'Nonaktif'}</span></td>
               <td><div className="row">
                 <a className="btn btn--sm" href={`/admin/kode-venue?venue=${v.id}`} target="_blank" rel="noreferrer"><Icon name="monitor" size={15} />Layar kode</a>
@@ -117,7 +118,7 @@ export default function Venues() {
               </div></td>
             </tr>
           ))}
-          {!list.length && <tr><td colSpan={6} className="muted">Belum ada venue.</td></tr>}
+          {!list.length && <tr><td colSpan={7} className="muted">Belum ada venue.</td></tr>}
         </tbody>
       </table>
       <MapModal point={mapPoint} onClose={() => setMapPoint(null)} />

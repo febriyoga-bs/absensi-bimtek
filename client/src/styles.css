@@ -388,3 +388,16 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .map-modal__title .icon { color: var(--accent); }
 .map-modal__info { margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px 16px; font-size: 13.5px; }
 .map-modal__info div { display: grid; } .map-modal__info dt { color: var(--muted); font-size: 12px; } .map-modal__info dd { margin: 0; font-weight: 600; }
+
+/* ============ LO / pagination ============ */
+.admin__user { display: grid; gap: 2px; margin: 0 4px 12px; padding: 10px 12px; border-radius: 10px; background: rgba(255,255,255,.06); font-size: 13px; }
+.admin__user .tag { justify-self: start; }
+.admin__user small { display: flex; align-items: center; gap: 4px; color: #c9d4e3; }
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 12px; background: var(--surface-2); }
+.seg button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; background: none; font: inherit; font-weight: 700;
+  font-size: 14px; padding: 9px; border-radius: 9px; cursor: pointer; color: var(--muted); }
+.seg button.on { background: #fff; color: var(--accent); box-shadow: 0 1px 4px rgba(16,32,64,.12); }
+.pager { display: flex; justify-content: center; align-items: center; gap: 12px; flex-wrap: wrap; margin: 18px 0 4px; }
+.cred { display: grid; gap: 10px; border-color: #9fd8b0 !important; background: #f4fbf6; }
+.cred pre { margin: 0; padding: 12px; border-radius: 10px; background: #fff; border: 1px dashed var(--line); font-size: 13.5px; white-space: pre-wrap; }
+.recheck { display: flex; justify-content: flex-end; margin-top: -6px; }

@@ -39,6 +39,9 @@ export default function VenueCode() {
 
   if (!adminToken.get()) return <Navigate to="/admin/login" replace />;
 
+  // LO hanya punya satu venue → langsung tampilkan layar kodenya
+  if (!venueId && venues?.length === 1) return <Navigate to={`/admin/kode-venue?venue=${venues[0].id}`} replace />;
+
   if (!venueId) {
     return (
       <div className="venue">

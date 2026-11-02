@@ -31,6 +31,16 @@ Venue yang berlaku untuk seseorang dihitung dari **venue aktif ∩ venue sesi �
 
 Server memilih venue terdekat yang radiusnya mencakup posisi peserta. Bila **Kode Venue** diwajibkan, kode dicek terhadap venue tersebut, karena tiap venue punya layar kodenya sendiri. Venue yang sudah dipakai absen tidak bisa dihapus; nonaktifkan saja.
 
+## Akun LO per venue
+
+Admin utama membuat akun LO di menu **Akun LO**, berisi nama, username, password, dan venue. LO login di `/admin/login` lewat tab **LO Venue**, lalu hanya bisa:
+- melihat **Rekap** untuk venue-nya,
+- **memverifikasi** (sahkan atau tolak) absensi di venue-nya,
+- mengunduh **CSV** venue-nya,
+- membuka **layar kode venue** miliknya.
+
+Menu Peserta, Sesi, Venue, Akun LO, dan Pengaturan hanya untuk admin utama. Pembatasan ini dicek di server, jadi tidak bisa ditembus lewat URL. Akun yang dinonaktifkan langsung tidak bisa login.
+
 ## Alur absen
 
 1. Peserta/panitia memasukkan **kode** → server mengecek kode terdaftar, perannya sesuai halaman, ada sesi yang sedang dibuka, dan orang tersebut belum absen. Server lalu memberi token absen yang berlaku 5 menit.
@@ -119,7 +129,8 @@ Jalankan di belakang Caddy/Nginx dengan HTTPS. Kalau `R2_BUCKET` dikosongkan, fo
 
 ## Persiapan acara (checklist)
 
-1. **Pengaturan**: isi nama acara, penyelenggara, dan tanggal acara.
+1. Jalankan `npm run migrate` setiap kali ada update skema (misalnya fitur Akun LO).
+2. **Pengaturan**: isi nama acara, penyelenggara, dan tanggal acara.
 2. **Venue**: tambah setiap lokasi. Koordinat bisa ditempel dari Google Maps atau diambil dengan "Pakai lokasi saya" saat berada di venue. Radius 100–200 m cocok untuk hotel atau aula.
 3. **Peserta & Panitia**: impor CSV dengan format `kode,nama,peran,instansi,jabatan,telepon,venue`. Kolom venue berisi nama venue persis, atau dikosongkan agar bebas.
 4. **Sesi**: buat sesi masuk/pulang per hari, misalnya panitia dibuka 06.30 dan peserta 07.30–09.00. Sesi bisa dibatasi ke venue tertentu.

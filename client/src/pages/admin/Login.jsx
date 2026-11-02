@@ -1,32 +1,61 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { api, adminToken } from '../../api.js';
+import { api, adminToken, adminUser } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
 import BrandMark from '../../components/BrandMark.jsx';
 
 export default function Login() {
+  const [mode, setMode] = useState('lo'); // 'lo' | 'admin'
+  const [username, setUsername] = useState('');
   const [pw, setPw] = useState('');
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   const nav = useNavigate();
+
   async function submit(e) {
     e.preventDefault();
     setBusy(true);
+    setErr(null);
     try {
-      const { token } = await api('/admin/login', { method: 'POST', body: { password: pw } });
+      const body = mode === 'lo' ? { username, password: pw } : { password: pw };
+      const { token, user } = await api('/admin/login', { method: 'POST', body });
       adminToken.set(token);
+      adminUser.set(user);
       nav('/admin');
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   }
+
+  const switchMode = (m) => { setMode(m); setErr(null); setPw(''); };
+
   return (
     <div className="login">
       <form className="card form" onSubmit={submit}>
-        <span className="brand"><BrandMark size={44} /><span className="brand__text">Admin Absensi BIMTEK<small>Kemendikdasmen</small></span></span>
-        <label>Password admin
-          <span className="input-icon"><Icon name="key" /><input type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoFocus /></span>
+        <span className="brand"><BrandMark size={44} /><span className="brand__text">Dashboard Absensi BIMTEK<small>Kemendikdasmen</small></span></span>
+        <div className="seg" role="tablist">
+          <button type="button" role="tab" className={mode === 'lo' ? 'on' : ''} onClick={() => switchMode('lo')}>
+            <Icon name="pin" size={16} />LO Venue
+          </button>
+          <button type="button" role="tab" className={mode === 'admin' ? 'on' : ''} onClick={() => switchMode('admin')}>
+            <Icon name="settings" size={16} />Admin utama
+          </button>
+        </div>
+        {mode === 'lo' && (
+          <label>Username LO
+            <span className="input-icon"><Icon name="users" /><input value={username} onChange={(e) => setUsername(e.target.value)}
+              autoFocus autoCapitalize="none" autoComplete="username" placeholder="mis. andi.venue1" /></span>
+          </label>
+        )}
+        <label>Password
+          <span className="input-icon"><Icon name="key" /><input type="password" value={pw} onChange={(e) => setPw(e.target.value)}
+            autoFocus={mode === 'admin'} autoComplete="current-password" /></span>
         </label>
         {err && <div className="alert alert--err"><Icon name="alert" size={18} />{err}</div>}
-        <button className="btn btn--primary btn--lg" disabled={busy || !pw}>{busy ? 'Masuk…' : 'Masuk'}</button>
+        <button className="btn btn--primary btn--lg" disabled={busy || !pw || (mode === 'lo' && !username.trim())}>
+          {busy ? 'Masuk…' : 'Masuk'}
+        </button>
+        <p className="muted small" style={{ margin: 0, textAlign: 'center' }}>
+          {mode === 'lo' ? 'Akun LO dibuat oleh admin utama dan hanya bisa melihat data venue masing-masing.' : 'Akses penuh ke semua venue, peserta, sesi, dan pengaturan.'}
+        </p>
         <Link to="/" className="link">← Kembali ke beranda</Link>
       </form>
     </div>

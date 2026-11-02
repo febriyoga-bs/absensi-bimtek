@@ -114,3 +114,18 @@ ALTER TABLE people       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sessions     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE attendance   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE attempt_logs ENABLE ROW LEVEL SECURITY;
+
+-- ===== Akun LO per venue =====
+CREATE TABLE IF NOT EXISTS lo_accounts (
+  id            SERIAL PRIMARY KEY,
+  name          TEXT NOT NULL,
+  username      TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  venue_id      INT NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+  active        BOOLEAN NOT NULL DEFAULT TRUE,
+  last_login_at TIMESTAMPTZ,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS lo_accounts_username_uq ON lo_accounts (lower(username));
+CREATE INDEX IF NOT EXISTS attempt_logs_session_venue_idx ON attempt_logs (session_id, venue_id);
+ALTER TABLE lo_accounts ENABLE ROW LEVEL SECURITY;

@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import Icon from '../components/Icon.jsx';
 import BrandMark from '../components/BrandMark.jsx';
+import { useVisiblePolling } from '../lib/poll.js';
 import { useNow, fmtClock, fmtDate, fmtHM, fmtRemaining, dayLabel } from '../lib/time.js';
 
 const ROLES = [
@@ -34,12 +35,8 @@ export default function Home() {
   const [info, setInfo] = useState(null);
   const now = useNow();
 
-  useEffect(() => {
-    const load = () => api('/info').then(setInfo).catch(() => {});
-    load();
-    const t = setInterval(load, 30_000); // status sesi ikut diperbarui
-    return () => clearInterval(t);
-  }, []);
+  // status sesi diperbarui tiap 60 detik, hanya saat halaman sedang dilihat
+  useVisiblePolling(() => api('/info').then(setInfo).catch(() => {}), 60_000);
 
   return (
     <div className="home">

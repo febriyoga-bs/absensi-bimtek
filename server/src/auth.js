@@ -7,7 +7,13 @@ const SECRET = () => {
   return s;
 };
 
-export const signAdmin = () => jwt.sign({ adm: true }, SECRET(), { expiresIn: '12h' });
+/**
+ * Token login dashboard.
+ *  - Super admin : { adm: true, role: 'admin' }                      → akses penuh
+ *  - LO venue    : { adm: true, role: 'lo', lo: id, venue: venueId }  → hanya data venue-nya
+ */
+export const signAdmin = (payload = { role: 'admin' }) =>
+  jwt.sign({ adm: true, ...payload }, SECRET(), { expiresIn: '12h' });
 
 export function requireAdmin(req, res, next) {
   const header = req.headers.authorization || '';
@@ -16,16 +22,38 @@ export function requireAdmin(req, res, next) {
   try {
     const p = jwt.verify(String(token || ''), SECRET());
     if (!p.adm) throw new Error();
+    req.user = { role: p.role === 'lo' ? 'lo' : 'admin', lo: p.lo ?? null, venue: p.venue ?? null };
     next();
   } catch {
-    res.status(401).json({ error: 'Sesi admin berakhir, silakan login ulang' });
+    res.status(401).json({ error: 'Sesi login berakhir, silakan login ulang' });
   }
+}
+
+/** Hanya super admin (kelola peserta, sesi, venue, pengaturan, akun LO). */
+export function requireSuper(req, res, next) {
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Menu ini hanya untuk admin utama' });
+  next();
 }
 
 export function checkAdminPassword(pw) {
   const a = Buffer.from(String(pw || ''));
   const b = Buffer.from(String(process.env.ADMIN_PASSWORD || ''));
   return b.length > 0 && a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+/* ---------- Password akun LO (scrypt, tanpa dependensi tambahan) ---------- */
+export function hashPassword(pw) {
+  const salt = crypto.randomBytes(16);
+  const hash = crypto.scryptSync(String(pw), salt, 32);
+  return `scrypt$${salt.toString('hex')}$${hash.toString('hex')}`;
+}
+
+export function verifyPassword(pw, stored) {
+  const [alg, saltHex, hashHex] = String(stored || '').split('$');
+  if (alg !== 'scrypt' || !saltHex || !hashHex) return false;
+  const expected = Buffer.from(hashHex, 'hex');
+  const actual = crypto.scryptSync(String(pw), Buffer.from(saltHex, 'hex'), expected.length);
+  return crypto.timingSafeEqual(actual, expected);
 }
 
 /** Token absensi sekali pakai, mengikat orang + sesi + nonce, berlaku singkat. */
@@ -36,7 +64,8 @@ export function signChallenge(personId, sessionId, nonce) {
 
 export function verifyChallenge(token) {
   try {
-    return jwt.verify(String(token || ''), SECRET());
+    const p = jwt.verify(String(token || ''), SECRET());
+    return p.adm ? null : p; // token login admin tidak boleh dipakai sebagai token absen
   } catch {
     return null;
   }

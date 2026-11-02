@@ -14,6 +14,7 @@ import People from './pages/admin/People.jsx';
 import Settings from './pages/admin/Settings.jsx';
 import VenueCode from './pages/admin/VenueCode.jsx';
 import Venues from './pages/admin/Venues.jsx';
+import LoAccounts from './pages/admin/LoAccounts.jsx';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -31,6 +32,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="sesi" element={<Sessions />} />
           <Route path="orang" element={<People />} />
           <Route path="venue" element={<Venues />} />
+          <Route path="lo" element={<LoAccounts />} />
           <Route path="pengaturan" element={<Settings />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
