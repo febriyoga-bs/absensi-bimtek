@@ -5,7 +5,7 @@ import { savePhoto, deletePhoto } from '../storage.js';
 import { q, getSettings } from '../db.js';
 import { ah, HttpError, haversine, verifyVenueCode, clientIp } from '../util.js';
 import { signChallenge, verifyChallenge } from '../auth.js';
-import { sanitizeSamples, analyzeLocation, analyzeClientMeta, scoreOf, matchVenue } from '../antifake.js';
+import { sanitizeSamples, analyzeLocation, analyzeClientMeta, scoreOf, locate } from '../antifake.js';
 
 const r = Router();
 const ROLES = ['peserta', 'panitia'];
@@ -106,10 +106,31 @@ r.post('/challenge', ipLimiter, ah(async (req, res) => {
   });
 }));
 
+// Riwayat absensi yang pernah dikirim dari perangkat/browser ini (berdasarkan ID perangkat
+// acak yang disimpan di browser). POST agar ID tidak tercatat di log URL.
+r.post('/riwayat', ipLimiter, ah(async (req, res) => {
+  const deviceId = String(req.body?.deviceId || '');
+  if (!/^[\w-]{8,64}$/.test(deviceId)) throw new HttpError(400, 'ID perangkat tidak valid');
+  const { rows } = await q(
+    `SELECT a.created_at, a.status, a.distance_m,
+            s.name AS session, s.type AS session_type,
+            v.name AS venue, p.name, p.role
+     FROM attendance a
+     JOIN people p ON p.id = a.person_id
+     JOIN sessions s ON s.id = a.session_id
+     LEFT JOIN venues v ON v.id = a.venue_id
+     WHERE a.device_id = $1
+     ORDER BY a.created_at DESC
+     LIMIT 100`,
+    [deviceId]
+  );
+  res.json(rows.map((x) => ({ ...x, distance_m: Math.round(x.distance_m) })));
+}));
+
 // Cek posisi sebelum foto, supaya peserta tahu apakah sudah di dalam area venue.
 // Keputusan akhir tetap di /attendance (pakai banyak sampel + deteksi fake GPS).
 r.post('/precheck', ah(async (req, res) => {
-  const { token, lat, lng } = req.body || {};
+  const { token, lat, lng, accuracy } = req.body || {};
   const ch = verifyChallenge(token);
   if (!ch) throw new HttpError(401, 'Waktu absen habis. Silakan ulangi dari awal.');
   if (![lat, lng].every((x) => typeof x === 'number' && Number.isFinite(x))) throw new HttpError(400, 'Lokasi tidak valid');
@@ -118,9 +139,19 @@ r.post('/precheck', ah(async (req, res) => {
     q('SELECT * FROM sessions WHERE id=$1', [ch.s]),
   ]);
   if (!person || !session) throw new HttpError(400, 'Data tidak ditemukan');
-  const m = matchVenue(lat, lng, await allowedVenues(person, session));
-  if (!m) return res.json({ inside: false, venue: null });
-  res.json({ inside: m.inside, venue: m.venue.name, distance_m: Math.round(m.distance), radius_m: m.venue.radius_m });
+  const settings = await getSettings();
+  const acc = typeof accuracy === 'number' && Number.isFinite(accuracy) ? accuracy : 0;
+  const l = locate(lat, lng, acc, await allowedVenues(person, session), settings.max_accuracy_m);
+  if (l.state === 'none') return res.json({ state: 'none', inside: false, venue: null });
+  res.json({
+    state: l.state,                       // ok | uncertain | outside | unknown
+    inside: l.state === 'ok' || l.state === 'uncertain',
+    review: l.state === 'uncertain' || !!l.lowAccuracy, // akan diverifikasi manual
+    venue: l.venue?.name ?? null,
+    distance_m: l.distance != null ? Math.round(l.distance) : null,
+    radius_m: l.venue?.radius_m ?? null,
+    max_accuracy_m: settings.max_accuracy_m,
+  });
 }));
 
 // Langkah 2: kirim foto realtime + sampel GPS

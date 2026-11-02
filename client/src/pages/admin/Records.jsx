@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, adminUrl } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
+import { MapModal } from '../../components/MapEmbed.jsx';
 import { fmtDT, FLAG_LABEL } from './shared.js';
 
 const ST_LABEL = { valid: 'Valid', review: 'Perlu dicek', ditolak: 'Ditolak' };
+const dist = (m) => (m == null ? '-' : m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`);
 
 export default function Records() {
   const [params, setParams] = useSearchParams();
@@ -14,6 +16,7 @@ export default function Records() {
   const [attempts, setAttempts] = useState([]);
   const [tab, setTab] = useState('absen');
   const [zoom, setZoom] = useState(null);
+  const [mapPoint, setMapPoint] = useState(null);
   const sid = params.get('sesi') || '';
   const status = params.get('status') || '';
   const venue = params.get('venue') || '';
@@ -77,7 +80,11 @@ export default function Records() {
                 <div className="muted small">{r.code} · {r.institution || '-'}</div>
                 {r.venue_name && <div><span className="tag tag--venue">{r.venue_name}</span></div>}
                 <div className="small">{fmtDT(r.created_at)} · {Math.round(r.distance_m)} m · ±{Math.round(r.accuracy_m)} m</div>
-                <a className="small" href={`https://maps.google.com/?q=${r.lat},${r.lng}`} target="_blank" rel="noreferrer">Lihat di peta</a>
+                <button type="button" className="link-btn" onClick={() => setMapPoint({
+                  lat: r.lat, lng: r.lng, title: `${r.name} — ${r.venue_name || 'lokasi absen'}`,
+                  rows: [['Waktu', fmtDT(r.created_at) + ' WIB'], ['Venue', r.venue_name], ['Jarak ke venue', dist(r.distance_m)],
+                    ['Akurasi GPS', `±${Math.round(r.accuracy_m)} m`], ['Status', ST_LABEL[r.status]]],
+                })}><Icon name="pin" size={14} />Lihat di peta</button>
                 {r.flags.length > 0 && (
                   <ul className="flags">
                     {r.flags.map((f, i) => <li key={i} title={f.detail}>{FLAG_LABEL[f.code] || f.code}<br /><small>{f.detail}</small></li>)}
@@ -104,8 +111,13 @@ export default function Records() {
                 <td className="small">{fmtDT(a.created_at)}</td>
                 <td>{a.name} <span className="muted small">{a.code}</span></td>
                 <td className="small">{a.reasons.join(' ')}</td>
-                <td>{a.distance_m != null ? `${Math.round(a.distance_m)} m` : '-'}</td>
-                <td>{a.lat != null && <a href={`https://maps.google.com/?q=${a.lat},${a.lng}`} target="_blank" rel="noreferrer">peta</a>}</td>
+                <td>{dist(a.distance_m)}</td>
+                <td>{a.lat != null && (
+                  <button type="button" className="link-btn" onClick={() => setMapPoint({
+                    lat: a.lat, lng: a.lng, title: `${a.name || 'Percobaan'} — diblokir`,
+                    rows: [['Waktu', fmtDT(a.created_at) + ' WIB'], ['Venue terdekat', a.venue_name], ['Jarak', dist(a.distance_m)],
+                      ['Akurasi GPS', a.accuracy_m != null ? `±${Math.round(a.accuracy_m)} m` : null], ['Alasan', a.reasons.join(' ')]],
+                  })}><Icon name="pin" size={14} />peta</button>)}</td>
               </tr>
             ))}
             {!attempts.length && <tr><td colSpan={5} className="muted">Tidak ada.</td></tr>}
@@ -114,6 +126,7 @@ export default function Records() {
       )}
 
       {zoom && <div className="modal" onClick={() => setZoom(null)}><img src={zoom} alt="" /></div>}
+      <MapModal point={mapPoint} onClose={() => setMapPoint(null)} />
     </>
   );
 }

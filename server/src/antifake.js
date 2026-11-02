@@ -14,6 +14,8 @@ import { haversine, median } from './util.js';
  */
 
 export const FLAG_WEIGHTS = {
+  akurasi_rendah: 2,
+  luar_radius_akurasi: 2,
   koordinat_statis: 2,
   presisi_rendah: 2,
   lompatan_lokasi: 2,
@@ -71,9 +73,38 @@ export function matchVenue(lat, lng, venues) {
   return inside ? { ...inside, inside: true } : nearest ? { ...nearest, inside: false } : null;
 }
 
+/** Di atas batas ini posisi GPS dianggap tidak bermakna sama sekali → tetap ditolak. */
+export const ACCURACY_HARD_CAP = 1000;
+
+/**
+ * Tentukan posisi relatif terhadap venue, dengan memperhitungkan akurasi GPS.
+ *  - ok       : di dalam radius venue
+ *  - uncertain: di luar radius, TETAPI akurasi GPS rendah dan lingkaran ketidakpastiannya
+ *               menyentuh area venue → boleh absen, wajib diverifikasi panitia/LO
+ *  - outside  : jelas di luar area venue → ditolak
+ *  - unknown  : akurasi > ACCURACY_HARD_CAP → posisi tidak bisa dipastikan → ditolak
+ */
+export function locate(lat, lng, accuracy, venues, maxAccuracy) {
+  if (!venues.length) return { state: 'none' };
+  if (accuracy > ACCURACY_HARD_CAP) return { state: 'unknown', accuracy };
+  const m = matchVenue(lat, lng, venues);
+  if (m.inside) return { state: 'ok', venue: m.venue, distance: m.distance, lowAccuracy: accuracy > maxAccuracy };
+  // venue dengan tepi terdekat
+  let near = null;
+  for (const v of venues) {
+    const d = haversine(lat, lng, v.lat, v.lng);
+    if (!near || d - v.radius_m < near.distance - near.venue.radius_m) near = { venue: v, distance: d };
+  }
+  if (accuracy > maxAccuracy && near.distance - accuracy <= near.venue.radius_m) {
+    return { state: 'uncertain', venue: near.venue, distance: near.distance, lowAccuracy: true };
+  }
+  return { state: 'outside', venue: near.venue, distance: near.distance };
+}
+
 /**
  * @param venues  venue yang BOLEH dipakai orang ini di sesi ini
- * @param opts.maxAccuracy  batas akurasi GPS (meter)
+ * @param opts.maxAccuracy  batas akurasi GPS (meter); di atasnya absen tetap diterima
+ *                          tetapi berstatus "review" untuk diverifikasi manual
  */
 export function analyzeLocation(samples, venues, { maxAccuracy, clientTime } = {}) {
   const hard = [];
@@ -87,22 +118,25 @@ export function analyzeLocation(samples, venues, { maxAccuracy, clientTime } = {
   const lat = median(samples.map((s) => s.lat));
   const lng = median(samples.map((s) => s.lng));
   const bestAcc = Math.min(...samples.map((s) => s.accuracy));
-  const match = matchVenue(lat, lng, venues);
-  const distance = match?.distance ?? null;
+  const loc = locate(lat, lng, bestAcc, venues, maxAccuracy);
+  const distance = loc.distance ?? null;
+  const acc = Math.round(bestAcc);
 
-  // ---- Penolakan langsung ----
-  if (bestAcc > maxAccuracy) {
-    hard.push(
-      `Akurasi GPS terlalu rendah (±${Math.round(bestAcc)} m, maks ${maxAccuracy} m). ` +
-        'Aktifkan mode lokasi akurasi tinggi dan pindah ke area terbuka.'
-    );
-  }
-  if (!match) {
+  // ---- Penolakan langsung (hanya kasus yang jelas) ----
+  if (loc.state === 'none') {
     hard.push('Tidak ada venue yang ditetapkan untuk Anda di sesi ini. Hubungi panitia.');
-  } else if (!match.inside) {
-    hard.push(
-      `Anda berada ${fmtDist(match.distance)} dari venue terdekat (${match.venue.name}, maks ${match.venue.radius_m} m).`
-    );
+  } else if (loc.state === 'unknown') {
+    hard.push(`Lokasi tidak dapat dipastikan (akurasi GPS ±${acc} m). Aktifkan GPS / mode lokasi akurasi tinggi, lalu coba lagi.`);
+  } else if (loc.state === 'outside') {
+    hard.push(`Anda berada ${fmtDist(loc.distance)} dari venue terdekat (${loc.venue.name}, maks ${loc.venue.radius_m} m).`);
+  }
+
+  // ---- Akurasi rendah → tidak diblokir, tetapi wajib verifikasi manual LO/panitia ----
+  if (loc.state === 'uncertain') {
+    add('luar_radius_akurasi',
+      `Titik GPS ${fmtDist(loc.distance)} dari ${loc.venue.name} (radius ${loc.venue.radius_m} m), akurasi ±${acc} m`);
+  } else if (loc.lowAccuracy) {
+    add('akurasi_rendah', `Akurasi GPS ±${acc} m (batas ${maxAccuracy} m)`);
   }
 
   // ---- Indikasi fake GPS ----
@@ -154,7 +188,8 @@ export function analyzeLocation(samples, venues, { maxAccuracy, clientTime } = {
     }
   }
 
-  return { lat, lng, accuracy: bestAcc, distance, venue: match?.inside ? match.venue : null, hard, flags };
+  const venue = loc.state === 'ok' || loc.state === 'uncertain' ? loc.venue : null;
+  return { lat, lng, accuracy: bestAcc, distance, venue, hard, flags };
 }
 
 const VIRTUAL_CAM = /(virtual|obs|manycam|droidcam|snap ?camera|xsplit|epoccam|iriun|camo|ndi|v4l2loopback|dummy|fake)/i;

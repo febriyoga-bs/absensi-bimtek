@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
+import { MapEmbed, MapModal, validCoord } from '../../components/MapEmbed.jsx';
 
 const blank = { id: null, name: '', address: '', lat: '', lng: '', radius_m: 150, active: true };
 
@@ -9,6 +10,7 @@ export default function Venues() {
   const [form, setForm] = useState(blank);
   const [msg, setMsg] = useState(null);
   const [locating, setLocating] = useState(false);
+  const [mapPoint, setMapPoint] = useState(null);
 
   const load = () => api('/admin/venues', { admin: true }).then(setList);
   useEffect(() => { load(); }, []);
@@ -81,12 +83,14 @@ export default function Venues() {
           <button type="button" className="btn" onClick={useMyLocation} disabled={locating}>
             <Icon name="crosshair" size={18} />{locating ? 'Mengambil lokasi…' : 'Pakai lokasi saya sekarang'}
           </button>
-          {form.lat && form.lng && (
-            <a className="btn" href={`https://maps.google.com/?q=${form.lat},${form.lng}`} target="_blank" rel="noreferrer">
-              <Icon name="pin" size={18} />Cek di Google Maps
-            </a>
-          )}
         </div>
+        {validCoord(form.lat, form.lng) && (
+          <div className="span2 form" style={{ gap: 6 }}>
+            <b style={{ fontSize: 14 }}>Pratinjau titik venue</b>
+            <span className="muted small">Pastikan pin tepat di gedung/ruangan acara. Radius absensi: {form.radius_m} m dari titik ini.</span>
+            <MapEmbed lat={form.lat} lng={form.lng} height={300} />
+          </div>
+        )}
         {msg && <div className={`alert span2 ${msg.err ? 'alert--err' : 'alert--ok'}`}>{msg.text}</div>}
         <div className="row span2">
           <button className="btn btn--primary"><Icon name={form.id ? 'check' : 'plus'} size={18} />{form.id ? 'Simpan perubahan' : 'Tambah venue'}</button>
@@ -100,8 +104,9 @@ export default function Venues() {
           {list.map((v) => (
             <tr key={v.id}>
               <td><b>{v.name}</b>{v.address && <div className="muted small">{v.address}</div>}</td>
-              <td><a href={`https://maps.google.com/?q=${v.lat},${v.lng}`} target="_blank" rel="noreferrer" className="small">
-                {Number(v.lat).toFixed(5)}, {Number(v.lng).toFixed(5)}</a></td>
+              <td><button type="button" className="link-btn small" onClick={() => setMapPoint({
+                lat: v.lat, lng: v.lng, title: v.name, rows: [['Alamat', v.address], ['Radius', `${v.radius_m} m`]],
+              })}><Icon name="pin" size={14} />{Number(v.lat).toFixed(5)}, {Number(v.lng).toFixed(5)}</button></td>
               <td>{v.radius_m} m</td>
               <td className="small">{v.people_count} orang</td>
               <td><span className={`tag ${v.active ? 'tag--open' : 'tag--off'}`}>{v.active ? 'Aktif' : 'Nonaktif'}</span></td>
@@ -115,6 +120,7 @@ export default function Venues() {
           {!list.length && <tr><td colSpan={6} className="muted">Belum ada venue.</td></tr>}
         </tbody>
       </table>
+      <MapModal point={mapPoint} onClose={() => setMapPoint(null)} />
     </>
   );
 }

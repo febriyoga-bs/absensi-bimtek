@@ -174,7 +174,7 @@ function CaptureStep({ role, info, ch, onDone, onRestart }) {
   useEffect(() => {
     if (!last || photo || Date.now() - lastCheck.current < 8000) return;
     lastCheck.current = Date.now();
-    api('/precheck', { method: 'POST', body: { token: ch.token, lat: last.lat, lng: last.lng } })
+    api('/precheck', { method: 'POST', body: { token: ch.token, lat: last.lat, lng: last.lng, accuracy: last.accuracy } })
       .then(setArea).catch(() => {});
   }, [last, photo, ch.token]);
 
@@ -218,6 +218,7 @@ function CaptureStep({ role, info, ch, onDone, onRestart }) {
   }
 
   const multiVenue = ch.venues.length > 1;
+  const lowAcc = !!(last && area?.max_accuracy_m && last.accuracy > area.max_accuracy_m);
 
   return (
     <div className="card capture">
@@ -236,7 +237,7 @@ function CaptureStep({ role, info, ch, onDone, onRestart }) {
           : <CameraCapture ref={camRef} onReady={setCamLabel} />}
         {!photo && (
           <div className="viewfinder__hud" aria-hidden="true">
-            <span className="hud-chip"><span className="rec" /> LIVE</span>
+            <span className="hud-chip"><span className="rec-dot" /> LIVE</span>
             <span className="hud-chip">{now.toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta' })}</span>
           </div>
         )}
@@ -244,7 +245,7 @@ function CaptureStep({ role, info, ch, onDone, onRestart }) {
       </div>
 
       <div className="status-grid">
-        <div className={`status ${geo.error ? 'status--err' : gpsReady ? 'status--ok' : 'status--wait'}`}>
+        <div className={`status ${geo.error ? 'status--err' : !gpsReady ? 'status--wait' : lowAcc ? 'status--warn' : 'status--ok'}`}>
           <span className="status__icon"><Icon name="crosshair" /></span>
           <span className="status__text">
             <small>GPS</small>
@@ -252,16 +253,27 @@ function CaptureStep({ role, info, ch, onDone, onRestart }) {
           </span>
           {!geo.error && <Signal accuracy={last?.accuracy} />}
         </div>
-        <div className={`status ${!area ? 'status--wait' : area.inside ? 'status--ok' : 'status--err'}`}>
+        <div className={`status ${!area ? 'status--wait' : !area.inside ? 'status--err' : area.review ? 'status--warn' : 'status--ok'}`}>
           <span className="status__icon"><Icon name="pin" /></span>
           <span className="status__text">
             <small>Venue</small>
-            <b>{!area ? 'Memeriksa…' : area.inside ? area.venue : 'Di luar area'}</b>
+            <b>{!area ? 'Memeriksa…' : area.inside ? area.venue : area.state === 'unknown' ? 'Tidak pasti' : 'Di luar area'}</b>
           </span>
-          {area && <span className="status__meta">{area.distance_m >= 1000 ? `${(area.distance_m / 1000).toFixed(1)} km` : `${area.distance_m} m`}</span>}
+          {area?.distance_m != null && <span className="status__meta">{area.distance_m >= 1000 ? `${(area.distance_m / 1000).toFixed(1)} km` : `${area.distance_m} m`}</span>}
         </div>
       </div>
       {geo.error && <div className="alert alert--err"><Icon name="alert" size={18} /><span>{geo.error}</span></div>}
+      {area?.inside && area.review && (
+        <div className="alert alert--warn"><Icon name="info" size={18} />
+          <span><b>Akurasi GPS rendah.</b> Anda tetap bisa absen, tetapi absensi akan <b>diverifikasi manual oleh LO/panitia</b>.
+            Agar langsung tercatat, aktifkan mode lokasi akurasi tinggi, dekati jendela/area terbuka, lalu tunggu beberapa detik.</span>
+        </div>
+      )}
+      {area?.state === 'unknown' && (
+        <div className="alert alert--err"><Icon name="alert" size={18} />
+          <span>Lokasi belum bisa dipastikan (akurasi GPS terlalu buruk). Aktifkan GPS / mode lokasi akurasi tinggi lalu tunggu sebentar.</span>
+        </div>
+      )}
       {area && !area.inside && area.venue && (
         <div className="alert alert--warn"><Icon name="pin" size={18} />
           <span>Venue terdekat untuk Anda: <b>{area.venue}</b> (radius {area.radius_m} m).

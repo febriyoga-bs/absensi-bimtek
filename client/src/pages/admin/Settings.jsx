@@ -24,9 +24,10 @@ export default function Settings() {
         <label className="span2">Nama acara<input value={s.event_name} onChange={f('event_name')} /></label>
         <label>Penyelenggara<input value={s.organizer} onChange={f('organizer')} placeholder="Dinas Pendidikan Kota …" /></label>
         <label>Tanggal acara (teks)<input value={s.event_dates} onChange={f('event_dates')} placeholder="10–12 November 2026" /></label>
-        <label>Akurasi GPS maksimum (meter)
+        <label>Batas akurasi GPS untuk lolos otomatis (meter)
           <input type="number" min="5" value={s.max_accuracy_m} onChange={f('max_accuracy_m')} />
-          <small className="muted">Absen ditolak bila akurasi GPS HP lebih buruk dari ini. 50–100 m wajar untuk dalam ruangan.</small>
+          <small className="muted">Akurasi lebih buruk dari ini <b>tidak diblokir</b>, tetapi masuk status <b>Perlu dicek</b> untuk diverifikasi
+            manual oleh LO/panitia. Absen tetap ditolak bila jelas di luar area venue atau akurasi lebih buruk dari 1.000 m.</small>
         </label>
         <span />
         <label className="check span2">

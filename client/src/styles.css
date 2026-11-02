@@ -185,7 +185,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .viewfinder__hud { position: absolute; top: 22px; left: 22px; right: 22px; display: flex; justify-content: space-between; z-index: 2; pointer-events: none; }
 .hud-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 99px; background: rgba(0,0,0,.45);
   color: #fff; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.rec { width: 8px; height: 8px; border-radius: 50%; background: #ff4d4d; animation: blink 1.2s infinite; }
+.rec-dot { width: 8px; height: 8px; border-radius: 50%; background: #ff4d4d; animation: blink 1.2s infinite; }
 @keyframes blink { 50% { opacity: .25; } }
 .viewfinder__hint { position: absolute; left: 0; right: 0; bottom: 18px; margin: 0; text-align: center; color: #fff; font-size: 13px; font-weight: 600;
   text-shadow: 0 1px 4px rgba(0,0,0,.6); z-index: 2; }
@@ -200,6 +200,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .status__meta { font-size: 12px; font-weight: 700; color: var(--muted); }
 .status--ok { background: var(--ok-soft); border-color: #bfe5cb; } .status--ok .status__icon { color: var(--ok); }
 .status--err { background: var(--err-soft); border-color: #f4caca; } .status--err .status__icon { color: var(--err); }
+.status--warn { background: var(--warn-soft); border-color: #f3d29b; } .status--warn .status__icon { color: var(--warn); }
 .status--wait .status__icon { animation: blink 1.2s infinite; color: var(--warn); }
 .signal { display: inline-flex; align-items: flex-end; gap: 2px; height: 18px; }
 .signal i { width: 4px; border-radius: 2px; background: #cfd8e5; } .signal i.on { background: var(--ok); }
@@ -369,3 +370,21 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .brand__text small { font-size: 11.5px; font-weight: 600; opacity: .75; letter-spacing: .02em; }
 .hero__logo { margin: 0 auto 10px; display: grid !important; place-items: center; }
 .venue__logo { margin: 0 auto 4px; display: grid !important; place-items: center; border-radius: 20px !important; padding: 8px !important; }
+
+/* ============ Peta tertanam ============ */
+.link-btn { display: inline-flex; align-items: center; gap: 4px; background: none; border: 0; padding: 0; color: var(--accent);
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; justify-self: start; }
+.map-embed { position: relative; width: 100%; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--line); background: #e8eef5; }
+.map-embed iframe { width: 100%; height: 100%; border: 0; display: block; }
+.map-embed__toggle { position: absolute; top: 10px; right: 10px; display: flex; background: #fff; border-radius: 10px; padding: 3px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+.map-embed__toggle button { border: 0; background: none; font: inherit; font-size: 12.5px; font-weight: 700; padding: 5px 10px; border-radius: 8px; cursor: pointer; color: var(--muted); }
+.map-embed__toggle button.on { background: var(--accent); color: #fff; }
+.map-modal { position: fixed; inset: 0; z-index: 20; background: rgba(5,12,24,.6); display: grid; place-items: center; padding: 16px; }
+.map-modal__box { width: min(860px, 100%); max-height: calc(100vh - 32px); overflow: auto; background: #fff; border-radius: var(--radius); padding: 16px; display: grid; gap: 12px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+.map-modal__head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.map-modal__title { display: inline-flex; align-items: center; gap: 8px; font-weight: 800; font-size: 16px; color: var(--text); }
+.map-modal__title .icon { color: var(--accent); }
+.map-modal__info { margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px 16px; font-size: 13.5px; }
+.map-modal__info div { display: grid; } .map-modal__info dt { color: var(--muted); font-size: 12px; } .map-modal__info dd { margin: 0; font-weight: 600; }

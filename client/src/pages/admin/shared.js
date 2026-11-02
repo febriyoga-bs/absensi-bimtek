@@ -2,6 +2,8 @@ export const fmtDT = (d) =>
   new Date(d).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' });
 
 export const FLAG_LABEL = {
+  akurasi_rendah: 'Akurasi GPS rendah — cek manual',
+  luar_radius_akurasi: 'Di tepi/luar radius, akurasi rendah — cek manual',
   koordinat_statis: 'Koordinat statis (indikasi Fake GPS)',
   presisi_rendah: 'Koordinat diketik manual',
   lompatan_lokasi: 'Lokasi melompat',
