@@ -9,7 +9,7 @@ import Icon from '../components/Icon.jsx';
 import BrandMark from '../components/BrandMark.jsx';
 
 const ROLE = {
-  peserta: { label: 'Peserta', icon: 'cap', placeholder: 'contoh: P-001', field: 'Kode / Nomor Peserta' },
+  peserta: { label: 'Peserta', icon: 'cap', placeholder: 'contoh: B-20100001 / P-20100001', field: 'Kode / Nomor Peserta' },
   panitia: { label: 'Panitia', icon: 'idcard', placeholder: 'contoh: PN-01', field: 'Kode Panitia' },
 };
 const STEPS = ['Kode', 'Foto & Lokasi', 'Selesai'];
@@ -109,8 +109,13 @@ export default function Absen({ role }) {
                   <input value={code} onChange={(e) => setCode(e.target.value)} autoFocus required
                     placeholder={R.placeholder} autoComplete="off" autoCapitalize="characters" />
                 </span>
+                {role === 'peserta' && (
+                  <small className="muted" style={{ fontWeight: 400 }}>
+                    Bendahara: <b>B-</b>NPSN sekolah · Pengawas: <b>P-</b>NPSN salah satu sekolah binaan
+                  </small>
+                )}
               </label>
-              {error && <div className="alert alert--err"><Icon name="alert" size={18} /><span>{error}</span></div>}
+              {error &&<div className="alert alert--err"><Icon name="alert" size={18} /><span>{error}</span></div>}
               <button className="btn btn--primary btn--lg" disabled={busy || !code.trim()}>
                 {busy ? 'Memeriksa…' : <>Lanjut <Icon name="right" size={18} /></>}
               </button>
@@ -236,6 +241,7 @@ function CaptureStep({ role, info, ch, onDone, onRestart }) {
         <span className="person__text">
           <b>{ch.person.name}</b>
           <small>{[ch.person.position, ch.person.institution].filter(Boolean).join(' · ') || ch.person.code}</small>
+          {ch.person.ruangan && <small>Ruangan: <b>{ch.person.ruangan}</b></small>}
         </span>
         <span className="tag tag--type">{ch.session.type}</span>
       </div>

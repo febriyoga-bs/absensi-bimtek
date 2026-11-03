@@ -1,8 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
 
-const blank = { id: null, code: '', name: '', role: 'peserta', institution: '', position: '', phone: '', venue_id: '' };
+// urutan alami: LO2-01 sebelum LO10-01, tanpa peduli huruf besar/kecil
+const cmp = (a, b) => String(a ?? '').localeCompare(String(b ?? ''), 'id', { numeric: true, sensitivity: 'base' });
+const SORTS = { code: 'Kode', name: 'Nama', institution: 'Instansi', position: 'Jabatan', kab_kota: 'Kab/Kota', ruangan: 'Ruangan', venue_name: 'Venue' };
+
+// kolom tambahan sesuai file Pemetaan Sekolah
+const EXTRA = [
+  ['npsn', 'NPSN'], ['region', 'Region'], ['ruangan', 'Ruangan'], ['peringkat', 'Peringkat'],
+  ['provinsi', 'Provinsi'], ['kab_kota', 'Kab/Kota'], ['ptn', 'PTN'],
+  ['koor_pelaporan', 'Koor Pelaporan'], ['fasil_pelaporan', 'Fasil Pelaporan'], ['notes', 'Catatan'],
+];
+const blank = {
+  id: null, code: '', name: '', role: 'peserta', institution: '', position: '', phone: '', venue_id: '',
+  ...Object.fromEntries(EXTRA.map(([k]) => [k, ''])),
+};
+const PAGE = 200;
 
 export default function People() {
   const [role, setRole] = useState('peserta');
@@ -12,6 +26,14 @@ export default function People() {
   const [form, setForm] = useState(blank);
   const [csv, setCsv] = useState('');
   const [msg, setMsg] = useState(null);
+  const [fVenue, setFVenue] = useState('');       // '' semua | 'none' tanpa venue | id
+  const [fPos, setFPos] = useState('');
+  const [fRegion, setFRegion] = useState('');
+  const [fRoom, setFRoom] = useState('');
+  const [fProv, setFProv] = useState('');
+  const [limit, setLimit] = useState(PAGE);
+  const [busy, setBusy] = useState(false);
+  const [sort, setSort] = useState({ key: 'code', dir: 1 });
 
   useEffect(() => { api('/admin/venues', { admin: true }).then(setVenues); }, []);
   const load = () => api(`/admin/people?role=${role}&q=${encodeURIComponent(search)}`, { admin: true }).then(setList);
@@ -29,12 +51,17 @@ export default function People() {
   }
 
   async function importCsv() {
-    const r = await api('/admin/people/import', { method: 'POST', admin: true, body: { csv, role } });
-    const notes = [...r.errors, ...(r.warnings || [])];
-    setMsg({ err: r.errors.length > 0, warn: !r.errors.length && notes.length > 0,
-      text: `${r.imported} data diimpor (data dengan kode yang sama diperbarui).${notes.length ? ' ' + notes.join(' | ') : ''}` });
-    if (!r.errors.length) setCsv('');
-    load();
+    setBusy(true);
+    try {
+      const r = await api('/admin/people/import', { method: 'POST', admin: true, body: { csv, role } });
+      const notes = [...r.errors, ...(r.warnings || [])];
+      const parts = Object.entries(r.summary || {}).map(([k, n]) => `${n} ${k}`).join(', ');
+      setMsg({ err: r.errors.length > 0, warn: !r.errors.length && notes.length > 0,
+        text: `${r.format === 'pemetaan' ? 'File Pemetaan Sekolah dikenali. ' : ''}${r.imported} data diimpor${parts ? ` (${parts})` : ''}; kode yang sudah ada diperbarui.${notes.length ? ' ' + notes.join(' | ') : ''}` });
+      if (!r.errors.length) setCsv('');
+      load();
+    } catch (e) { setMsg({ err: true, text: e.message }); }
+    finally { setBusy(false); }
   }
 
   async function del(p) {
@@ -43,7 +70,35 @@ export default function People() {
     load();
   }
 
-  const switchRole = (r) => { setRole(r); setForm({ ...blank, role: r }); };
+  const switchRole = (r) => { setRole(r); setForm({ ...blank, role: r }); resetFilters(); };
+  const resetFilters = () => { setFVenue(''); setFPos(''); setFRegion(''); setFRoom(''); setFProv(''); };
+
+  // pilihan filter diambil dari data yang ada
+  const uniq = (k) => [...new Set(list.map((p) => p[k]).filter(Boolean))].sort(cmp);
+  const posOpts = useMemo(() => uniq('position'), [list]);
+  const regionOpts = useMemo(() => uniq('region'), [list]);
+  const roomOpts = useMemo(() => uniq('ruangan'), [list]);
+  const provOpts = useMemo(() => uniq('provinsi'), [list]);
+
+  const shown = useMemo(() => {
+    const out = list.filter((p) =>
+      (!fVenue || (fVenue === 'none' ? !p.venue_id : String(p.venue_id) === fVenue)) &&
+      (!fPos || p.position === fPos) &&
+      (!fRegion || p.region === fRegion) &&
+      (!fRoom || p.ruangan === fRoom) &&
+      (!fProv || p.provinsi === fProv));
+    return out.sort((a, b) => cmp(a[sort.key] ?? (sort.key === 'venue_name' ? '\uffff' : ''), b[sort.key] ?? (sort.key === 'venue_name' ? '\uffff' : '')) * sort.dir
+      || cmp(a.code, b.code));
+  }, [list, fVenue, fPos, fRegion, fRoom, fProv, sort]);
+  useEffect(() => setLimit(PAGE), [list, fVenue, fPos, fRegion, fRoom, fProv, sort]);
+
+  const filtered = fVenue || fPos || fRegion || fRoom || fProv;
+  const sortBy = (key) => setSort((s) => (s.key === key ? { key, dir: -s.dir } : { key, dir: 1 }));
+  const Th = ({ k, children }) => (
+    <th className="th-sort" onClick={() => sortBy(k)} aria-sort={sort.key === k ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'}>
+      {children}<span className="th-sort__arrow">{sort.key === k ? (sort.dir > 0 ? '▲' : '▼') : '↕'}</span>
+    </th>
+  );
 
   return (
     <>
@@ -65,6 +120,14 @@ export default function People() {
           <label>Peran<select value={form.role} onChange={f('role')}>
             <option value="peserta">Peserta</option><option value="panitia">Panitia</option>
           </select></label>
+          <details className="span2 more-fields" open={EXTRA.some(([k]) => form[k])}>
+            <summary>Data sekolah / pemetaan (NPSN, ruangan, wilayah, PTN…)</summary>
+            <div className="form--grid">
+              {EXTRA.map(([k, l]) => (
+                <label key={k} className={k === 'notes' ? 'span2' : ''}>{l}<input value={form[k] || ''} onChange={f(k)} /></label>
+              ))}
+            </div>
+          </details>
           <label className="span2">Venue<select value={form.venue_id ?? ''} onChange={f('venue_id')}>
             <option value="">Semua venue (bebas)</option>
             {venues.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
@@ -75,38 +138,104 @@ export default function People() {
           </div>
         </form>
 
-        <div className="card form">
+        <div className="card form" style={{ alignSelf: 'start' }}>
           <h3>Impor CSV / tempel dari Excel</h3>
-          <p className="muted small" style={{ margin: 0 }}>Kolom: <code>kode, nama, peran, instansi, jabatan, telepon, venue</code>.
-            Peran kosong = "{role}". Venue diisi <b>nama venue persis</b> atau kosong (bebas). Pemisah koma / titik-koma.</p>
+          <p className="muted small" style={{ margin: 0 }}>Kolom: <code>kode, nama, peran, instansi, jabatan, telepon, venue</code>
+            {' '}(+ opsional <code>npsn, region, ruangan, provinsi, kab/kota, ptn, peringkat, catatan</code> bila ada header).
+            Peran kosong = "{role}". Venue diisi <b>nama venue</b> atau kosong (bebas). Pemisah koma / titik-koma.</p>
+          <p className="muted small" style={{ margin: 0 }}>File <b>Pemetaan Sekolah</b> bisa langsung dipilih: Bendahara → kode <code>B-NPSN</code>,
+            Pengawas (digabung per orang) → kode <code>P-NPSN</code>. Perencana tidak diimpor.</p>
+          <label className="btn file-pick">
+            <Icon name="list" size={18} />Pilih file CSV…
+            <input type="file" accept=".csv,text/csv,.txt" hidden onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              file.text().then((t) => {
+                setCsv(t.replace(/^﻿/, ''));
+                setMsg({ text: `File "${file.name}" dimuat (${t.trim().split(/\r?\n/).length - 1} baris data). Periksa lalu klik Impor.` });
+              });
+              e.target.value = '';
+            }} />
+          </label>
           <textarea rows={8} value={csv} onChange={(e) => setCsv(e.target.value)}
-            placeholder={`kode,nama,peran,instansi,jabatan,telepon,venue\nP-001,Siti Aminah,peserta,SDN 1 Contoh,Kepala Sekolah,0812...,${venues[0]?.name || 'Hotel A'}`} />
-          <button className="btn" onClick={importCsv} disabled={!csv.trim()}><Icon name="download" size={18} />Impor</button>
+            placeholder={`…atau tempel isi CSV / salin dari Excel di sini\n\nkode,nama,peran,instansi,jabatan,telepon,venue\nP-001,Siti Aminah,peserta,SDN 1 Contoh,Kepala Sekolah,0812...,${venues[0]?.name || 'Hotel A'}`} />
+          <button className="btn btn--primary" onClick={importCsv} disabled={busy || !csv.trim()}><Icon name="download" size={18} />{busy ? 'Mengimpor…' : 'Impor'}</button>
         </div>
       </div>
       {msg && <div className={`alert ${msg.err ? 'alert--err' : msg.warn ? 'alert--warn' : 'alert--ok'}`} style={{ marginBottom: 12 }}>{msg.text}</div>}
 
-      <div className="toolbar">
-        <input placeholder="Cari nama / kode / instansi" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <span className="muted">{list.length} orang</span>
+      <div className="toolbar filters">
+        <input placeholder="Cari nama / kode / sekolah / NPSN / kab/kota" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <select value={fVenue} onChange={(e) => setFVenue(e.target.value)} aria-label="Filter venue">
+          <option value="">Semua venue</option>
+          <option value="none">— Tanpa venue (bebas)</option>
+          {venues.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+        </select>
+        <select value={fPos} onChange={(e) => setFPos(e.target.value)} aria-label="Filter jabatan">
+          <option value="">Semua jabatan</option>
+          {posOpts.map((x) => <option key={x} value={x}>{x}</option>)}
+        </select>
+        {regionOpts.length > 0 && (
+          <select value={fRegion} onChange={(e) => setFRegion(e.target.value)} aria-label="Filter region">
+            <option value="">Semua region</option>
+            {regionOpts.map((x) => <option key={x} value={x}>{x}</option>)}
+          </select>
+        )}
+        {roomOpts.length > 0 && (
+          <select value={fRoom} onChange={(e) => setFRoom(e.target.value)} aria-label="Filter ruangan">
+            <option value="">Semua ruangan</option>
+            {roomOpts.map((x) => <option key={x} value={x}>{x}</option>)}
+          </select>
+        )}
+        {provOpts.length > 0 && (
+          <select value={fProv} onChange={(e) => setFProv(e.target.value)} aria-label="Filter provinsi">
+            <option value="">Semua provinsi</option>
+            {provOpts.map((x) => <option key={x} value={x}>{x}</option>)}
+          </select>
+        )}
+        <select value={`${sort.key}:${sort.dir}`} onChange={(e) => { const [key, dir] = e.target.value.split(':'); setSort({ key, dir: Number(dir) }); }} aria-label="Urutkan">
+          {Object.entries(SORTS).flatMap(([k, l]) => [
+            <option key={k + '1'} value={`${k}:1`}>Urut: {l} (A–Z)</option>,
+            <option key={k + '-1'} value={`${k}:-1`}>Urut: {l} (Z–A)</option>,
+          ])}
+        </select>
+        {filtered && <button className="btn btn--sm" onClick={resetFilters}><Icon name="x" size={14} />Reset filter</button>}
+        <span className="muted">{filtered ? `${shown.length} dari ${list.length}` : list.length} orang</span>
       </div>
       <table className="table">
-        <thead><tr><th>Kode</th><th>Nama</th><th>Instansi</th><th>Jabatan</th><th>Venue</th><th></th></tr></thead>
+        <thead><tr>
+          <Th k="code">Kode</Th><Th k="name">Nama</Th><Th k="position">Jabatan</Th><Th k="institution">Instansi / Sekolah</Th>
+          <Th k="kab_kota">Wilayah</Th><Th k="ruangan">Ruangan</Th><Th k="venue_name">Venue</Th><th></th>
+        </tr></thead>
         <tbody>
-          {list.map((p) => (
+          {shown.slice(0, limit).map((p) => (
             <tr key={p.id}>
-              <td><code>{p.code}</code></td><td><b>{p.name}</b>{p.phone && <div className="muted small">{p.phone}</div>}</td>
-              <td>{p.institution}</td><td>{p.position}</td>
+              <td className="nowrap"><code>{p.code}</code></td>
+              <td><b>{p.name}</b>{p.phone && <div className="muted small">{p.phone}</div>}
+                {p.notes && <div className="note-flag small" title={p.notes}><Icon name="alert" size={12} /> {p.notes}</div>}</td>
+              <td>{p.position}</td>
+              <td className="cell-clamp" title={p.institution || ''}>{p.institution}
+                {p.npsn && <div className="muted small">NPSN {p.npsn}</div>}</td>
+              <td className="small cell-clamp" title={[p.kab_kota, p.provinsi].filter(Boolean).join(', ')}>
+                {p.kab_kota}{p.provinsi && <div className="muted">{p.provinsi}</div>}</td>
+              <td className="small">{p.ruangan}{p.region && <div className="muted">{p.region}</div>}</td>
               <td>{p.venue_name ? <span className="tag tag--venue">{p.venue_name}</span> : <span className="muted small">Semua</span>}</td>
               <td><div className="row">
-                <button className="btn btn--sm" onClick={() => setForm({ ...p, venue_id: p.venue_id ?? '' })}>Ubah</button>
+                <button className="btn btn--sm" onClick={() => { setForm({ ...p, venue_id: p.venue_id ?? '' }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Ubah</button>
                 <button className="btn btn--sm btn--danger" onClick={() => del(p)}>Hapus</button>
               </div></td>
             </tr>
           ))}
-          {!list.length && <tr><td colSpan={6} className="muted">Belum ada data.</td></tr>}
+          {!shown.length && <tr><td colSpan={8} className="muted">{list.length ? 'Tidak ada yang cocok dengan filter.' : 'Belum ada data.'}</td></tr>}
         </tbody>
       </table>
+      {shown.length > limit && (
+        <div className="pager">
+          <span className="muted small">Menampilkan {limit} dari {shown.length}</span>
+          <button className="btn btn--sm" onClick={() => setLimit(limit + PAGE * 2)}>Tampilkan lebih banyak</button>
+          <button className="btn btn--sm" onClick={() => setLimit(shown.length)}>Tampilkan semua</button>
+        </div>
+      )}
     </>
   );
 }

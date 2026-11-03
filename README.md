@@ -41,6 +41,19 @@ Admin utama membuat akun LO di menu **Akun LO**, berisi nama, username, password
 
 Menu Peserta, Sesi, Venue, Akun LO, dan Pengaturan hanya untuk admin utama. Pembatasan ini dicek di server, jadi tidak bisa ditembus lewat URL. Akun yang dinonaktifkan langsung tidak bisa login.
 
+## Data peserta (Bendahara & Pengawas)
+
+File **Pemetaan Sekolah** (CSV dari Excel) bisa langsung diimpor di *Peserta & Panitia → Pilih file CSV…*. Formatnya dikenali otomatis:
+
+- **Bendahara**: 1 orang per sekolah, kode `B-<NPSN>`.
+- **Pengawas**: dikelompokkan per kolom *Pengawas — Nama Gabungan*, karena satu pengawas bisa membawahi beberapa sekolah. Kodenya `P-<NPSN terkecil>`. Saat absen, `P-<NPSN sekolah binaan mana pun>` juga diterima. Tanda hubung boleh tidak diketik.
+- **Perencana** (tidak diundang) dan nama "(BELUM ADA)" dilewati.
+- Kolom NPSN, region, ruangan, peringkat, provinsi, kab/kota, PTN, koor/fasil pelaporan, dan status penggabungan nama ikut disimpan, lalu tampil di tabel, filter, dan ekspor CSV.
+- Nama hotel dipetakan ke nama venue yang sama dengan data LO (mis. *Mercure Harmoni* → *Grand Mercure Jakarta Harmoni*). Buat venue dengan nama itu terlebih dahulu, lalu impor ulang untuk menautkan venue.
+- Pengawas yang terdaftar di lebih dari satu hotel dibuat bebas venue dan diberi catatan untuk dicek.
+
+Hasil konversinya juga tersedia di `data/peserta-bendahara-pengawas.csv`: 2.031 Bendahara + 1.559 Pengawas.
+
 ## Alur absen
 
 1. Peserta/panitia memasukkan **kode** → server mengecek kode terdaftar, perannya sesuai halaman, ada sesi yang sedang dibuka, dan orang tersebut belum absen. Server lalu memberi token absen yang berlaku 5 menit.

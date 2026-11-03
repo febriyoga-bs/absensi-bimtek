@@ -8,6 +8,7 @@ import {
   requireAdmin, requireSuper, signAdmin, checkAdminPassword, hashPassword, verifyPassword,
 } from '../auth.js';
 import { photoUrl } from '../storage.js';
+import { parsePeople, EXTRA_FIELDS } from '../peopleImport.js';
 
 const r = Router();
 
@@ -208,50 +209,68 @@ r.get('/people', requireSuper, ah(async (req, res) => {
   const { rows } = await q(
     `SELECT p.*, v.name AS venue_name FROM people p LEFT JOIN venues v ON v.id=p.venue_id
      WHERE ($1::text IS NULL OR p.role=$1)
-       AND ($2::text = '' OR p.name ILIKE '%'||$2||'%' OR p.code ILIKE '%'||$2||'%' OR p.institution ILIKE '%'||$2||'%')
+       AND ($2::text = '' OR p.name ILIKE '%'||$2||'%' OR p.code ILIKE '%'||$2||'%' OR p.institution ILIKE '%'||$2||'%'
+            OR p.npsn ILIKE '%'||$2||'%' OR p.kab_kota ILIKE '%'||$2||'%' OR p.ruangan ILIKE '%'||$2||'%')
      ORDER BY p.role, p.name`,
     [role, String(req.query.q || '')]
   );
   res.json(rows);
 }));
 
+const BASE_FIELDS = ['code', 'name', 'role', 'institution', 'position', 'phone', 'venue_id'];
+const PERSON_FIELDS = [...BASE_FIELDS, ...EXTRA_FIELDS];
+
 function cleanPerson(p, defRole) {
   const role = String(p.role || defRole || '').toLowerCase().trim();
   const venueId = p.venue_id === '' || p.venue_id == null ? null : Number(p.venue_id);
+  const txt = (x, max = 2000) => String(x ?? '').trim().slice(0, max) || null;
   const out = {
     code: String(p.code || '').trim(),
     name: String(p.name || '').trim(),
     role,
-    institution: String(p.institution || '').trim() || null,
-    position: String(p.position || '').trim() || null,
-    phone: String(p.phone || '').trim() || null,
+    institution: txt(p.institution, 4000),
+    position: txt(p.position),
+    phone: txt(p.phone),
     venue_id: Number.isInteger(venueId) ? venueId : null,
   };
+  for (const f of EXTRA_FIELDS) out[f] = txt(p[f], 4000);
   if (!out.code || !out.name) throw new HttpError(400, 'Kode dan nama wajib diisi');
   if (!['peserta', 'panitia'].includes(role)) throw new HttpError(400, `Peran "${role}" tidak valid (peserta/panitia)`);
   return out;
 }
 
-const upsertPerson = (p) =>
-  q(
-    `INSERT INTO people (code, name, role, institution, position, phone, venue_id) VALUES ($1,$2,$3,$4,$5,$6,$7)
-     ON CONFLICT (lower(code)) DO UPDATE SET name=EXCLUDED.name, role=EXCLUDED.role,
-       institution=EXCLUDED.institution, position=EXCLUDED.position, phone=EXCLUDED.phone, venue_id=EXCLUDED.venue_id
-     RETURNING *`,
-    [p.code, p.name, p.role, p.institution, p.position, p.phone, p.venue_id]
-  );
+/** Simpan banyak orang sekaligus (satu query per 500 baris); kode yang sama → diperbarui */
+async function upsertPeople(list) {
+  const cols = PERSON_FIELDS.join(', ');
+  const types = PERSON_FIELDS.map((f) => `${f} ${f === 'venue_id' ? 'int' : 'text'}`).join(', ');
+  const set = PERSON_FIELDS.filter((f) => f !== 'code').map((f) => `${f}=EXCLUDED.${f}`).join(', ');
+  const out = [];
+  for (let i = 0; i < list.length; i += 500) {
+    const { rows } = await q(
+      `INSERT INTO people (${cols})
+       SELECT ${cols} FROM jsonb_to_recordset($1::jsonb) AS x(${types})
+       ON CONFLICT (lower(code)) DO UPDATE SET ${set}
+       RETURNING *`,
+      [JSON.stringify(list.slice(i, i + 500))]
+    );
+    out.push(...rows);
+  }
+  return out;
+}
 
 r.post('/people', requireSuper, ah(async (req, res) => {
-  const { rows } = await upsertPerson(cleanPerson(req.body || {}));
-  res.json(rows[0]);
+  const [row] = await upsertPeople([cleanPerson(req.body || {})]);
+  res.json(row);
 }));
 
 r.put('/people/:id', requireSuper, ah(async (req, res) => {
   const p = cleanPerson(req.body || {});
   const { rows } = await q(
-    `UPDATE people SET code=$1, name=$2, role=$3, institution=$4, position=$5, phone=$6, venue_id=$7 WHERE id=$8 RETURNING *`,
-    [p.code, p.name, p.role, p.institution, p.position, p.phone, p.venue_id, req.params.id]
+    `UPDATE people SET ${PERSON_FIELDS.map((f, i) => `${f}=$${i + 1}`).join(', ')}
+     WHERE id=$${PERSON_FIELDS.length + 1} RETURNING *`,
+    [...PERSON_FIELDS.map((f) => p[f]), req.params.id]
   );
+  if (!rows[0]) throw new HttpError(404, 'Data tidak ditemukan');
   res.json(rows[0]);
 }));
 
@@ -260,51 +279,38 @@ r.delete('/people/:id', requireSuper, ah(async (req, res) => {
   res.json({ ok: true });
 }));
 
-/** CSV: kode,nama,peran,instansi,jabatan,telepon,venue (header opsional; pemisah , atau ;) */
-function parseCsv(text) {
-  const lines = String(text || '').replace(/\r/g, '').split('\n').filter((l) => l.trim());
-  if (!lines.length) return [];
-  const sep = (lines[0].match(/;/g) || []).length > (lines[0].match(/,/g) || []).length ? ';' : ',';
-  const split = (line) => {
-    const out = []; let cur = ''; let quoted = false;
-    for (let i = 0; i < line.length; i++) {
-      const c = line[i];
-      if (c === '"') { if (quoted && line[i + 1] === '"') { cur += '"'; i++; } else quoted = !quoted; }
-      else if (c === sep && !quoted) { out.push(cur); cur = ''; }
-      else cur += c;
-    }
-    out.push(cur);
-    return out.map((s) => s.trim());
-  };
-  let rows = lines.map(split);
-  if (/^(kode.*|code|nik|nip|no\.?|nomor.*)$/i.test(rows[0][0])) rows = rows.slice(1);
-  return rows.map(([code, name, role, institution, position, phone, venue]) =>
-    ({ code, name, role, institution, position, phone, venue }));
-}
-
+/**
+ * Impor CSV. Format dikenali otomatis (lihat peopleImport.js):
+ * urutan kolom lama, CSV ber-header (urutan bebas), atau file "Pemetaan Sekolah".
+ */
 r.post('/people/import', requireSuper, ah(async (req, res) => {
-  const list = parseCsv(req.body?.csv);
+  const { format, people, skipped } = parsePeople(req.body?.csv);
   const { rows: venues } = await q('SELECT id, name FROM venues');
   // cocokkan nama venue tanpa peduli huruf besar/kecil, spasi, dan tanda baca
   const norm = (x) => String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
   const byName = new Map(venues.map((v) => [norm(v.name), v.id]));
   const errors = [];
   const missing = new Map(); // nama venue belum ada → jumlah orang
-  let ok = 0;
-  for (const [i, raw] of list.entries()) {
+  const byCode = new Map(); // kode ganda dalam satu file → baris terakhir yang dipakai
+  for (const [i, raw] of people.entries()) {
     try {
       let venue_id = null;
       if (raw.venue) {
         venue_id = byName.get(norm(raw.venue)) ?? null;
         if (!venue_id) missing.set(raw.venue, (missing.get(raw.venue) || 0) + 1);
       }
-      await upsertPerson(cleanPerson({ ...raw, venue_id }, req.body?.role));
-      ok++;
+      const p = cleanPerson({ ...raw, venue_id }, req.body?.role);
+      byCode.set(p.code.toLowerCase(), p);
     } catch (e) { errors.push(`Baris ${i + 1}: ${e.message}`); }
   }
+  const saved = errors.length > 20 ? [] : await upsertPeople([...byCode.values()]);
+  if (errors.length > 20) errors.unshift('Terlalu banyak baris bermasalah, tidak ada yang disimpan. Periksa format file.');
   const warnings = [...missing].map(([v, n]) =>
     `Venue "${v}" belum ada → ${n} orang diimpor tanpa venue. Tambahkan venue dengan nama itu lalu impor ulang file yang sama.`);
-  res.json({ imported: ok, errors, warnings });
+  const summary = {};
+  for (const p of saved) summary[p.position || p.role] = (summary[p.position || p.role] || 0) + 1;
+  if (skipped) warnings.push(`${skipped} nama kosong/"(BELUM ADA)" dilewati.`);
+  res.json({ imported: saved.length, format, summary, errors: errors.slice(0, 30), warnings });
 }));
 
 /* ---------- Sesi ---------- */
@@ -460,6 +466,7 @@ r.get('/export', ah(async (req, res) => {
   if (!s) throw new HttpError(404, 'Sesi tidak ditemukan');
   const { rows } = await q(
     `SELECT p.code, p.name, p.role, p.institution, p.position, pv.name AS assigned_venue,
+            p.npsn, p.region, p.ruangan, p.provinsi, p.kab_kota, p.ptn,
             a.status, a.created_at, av.name AS venue, a.lat, a.lng, a.distance_m, a.accuracy_m, a.flags
      FROM people p
      LEFT JOIN venues pv ON pv.id=p.venue_id
@@ -477,10 +484,12 @@ r.get('/export', ah(async (req, res) => {
   if (v) venueName = (await q('SELECT name FROM venues WHERE id=$1', [v])).rows[0]?.name || '';
   const esc = (x) => `"${String(x ?? '').replace(/"/g, '""')}"`;
   const fmt = (d) => d ? new Date(d).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) : '';
-  const header = ['Kode', 'Nama', 'Peran', 'Instansi', 'Jabatan', 'Venue Ditetapkan', 'Kehadiran', 'Status Verifikasi',
+  const header = ['Kode', 'Nama', 'Peran', 'Instansi / Sekolah', 'Jabatan', 'NPSN', 'Region', 'Ruangan', 'Provinsi',
+    'Kab/Kota', 'PTN', 'Venue Ditetapkan', 'Kehadiran', 'Status Verifikasi',
     'Waktu (WIB)', 'Venue Absen', 'Latitude', 'Longitude', 'Jarak (m)', 'Akurasi (m)', 'Catatan'];
   const lines = rows.map((x) => [
-    x.code, x.name, x.role, x.institution, x.position, x.assigned_venue || 'Semua',
+    x.code, x.name, x.role, x.institution, x.position, x.npsn, x.region, x.ruangan, x.provinsi,
+    x.kab_kota, x.ptn, x.assigned_venue || 'Semua',
     x.status && x.status !== 'ditolak' ? 'Hadir' : 'Tidak hadir', x.status || '',
     fmt(x.created_at), x.venue || '', x.lat ?? '', x.lng ?? '',
     x.distance_m != null ? Math.round(x.distance_m) : '', x.accuracy_m != null ? Math.round(x.accuracy_m) : '',

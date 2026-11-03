@@ -76,7 +76,20 @@ r.post('/challenge', ipLimiter, ah(async (req, res) => {
   if (!ROLES.includes(role)) throw new HttpError(400, 'Peran tidak valid');
   const settings = await getSettings();
 
-  const { rows } = await q('SELECT * FROM people WHERE lower(code) = lower($1)', [String(code || '').trim()]);
+  const input = String(code || '').trim();
+  let { rows } = await q('SELECT * FROM people WHERE lower(code) = lower($1)', [input]);
+  // Kode NPSN boleh diketik tanpa tanda hubung (B20100001). Pengawas membawahi beberapa
+  // sekolah: P-<NPSN sekolah mana pun> juga diterima.
+  const m = !rows[0] && input.match(/^([BP])\s*-?\s*(\d{6,10})$/i);
+  if (m) {
+    const letter = m[1].toUpperCase();
+    ({ rows } = await q('SELECT * FROM people WHERE lower(code) = lower($1)', [`${letter}-${m[2]}`]));
+    if (!rows[0] && letter === 'P') {
+      ({ rows } = await q(
+        `SELECT * FROM people WHERE position ILIKE 'pengawas' AND $1 = ANY(string_to_array(replace(npsn, ' ', ''), ';')) LIMIT 1`,
+        [m[2]]));
+    }
+  }
   const person = rows[0];
   if (!person) throw new HttpError(404, 'Kode tidak terdaftar. Periksa kembali atau hubungi panitia.');
   if (person.role !== role) {
@@ -99,7 +112,14 @@ r.post('/challenge', ipLimiter, ah(async (req, res) => {
   res.json({
     token: signChallenge(person.id, session.id, nonce),
     nonce,
-    person: { name: person.name, institution: person.institution, position: person.position, code: person.code },
+    person: {
+      name: person.name, position: person.position, code: person.code, ruangan: person.ruangan,
+      // pengawas bisa membawahi banyak sekolah → ringkas
+      institution: (() => {
+        const list = String(person.institution || '').split('; ').filter(Boolean);
+        return list.length > 2 ? `${list.slice(0, 2).join('; ')} +${list.length - 2} sekolah` : person.institution;
+      })(),
+    },
     session: publicSession(session),
     venues: venues.map((v) => ({ name: v.name, address: v.address, radius_m: v.radius_m })),
     require_venue_code: settings.require_venue_code,

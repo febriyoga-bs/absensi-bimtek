@@ -413,3 +413,23 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .chip-btn.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 
 .tag--type { text-transform: none; letter-spacing: 0; font-size: 11.5px; }
+.form label.file-pick { display: inline-flex; gap: 8px; cursor: pointer; justify-self: start; font-size: 14px; }
+/* Filter & urutan tabel */
+.filters select { min-width: 0; width: auto; max-width: 260px; }
+.filters input { min-width: 220px; }
+.th-sort { cursor: pointer; user-select: none; white-space: nowrap; }
+.th-sort:hover { color: var(--text); }
+.th-sort__arrow { margin-left: 5px; font-size: 10px; opacity: .45; }
+.th-sort[aria-sort='ascending'] .th-sort__arrow, .th-sort[aria-sort='descending'] .th-sort__arrow { opacity: 1; color: var(--accent); }
+
+/* ===== Peserta: data pemetaan sekolah ===== */
+.more-fields { border: 1px dashed var(--line); border-radius: 12px; padding: 10px 12px; }
+.more-fields summary { cursor: pointer; font-weight: 600; font-size: 14px; color: var(--muted); }
+.more-fields[open] summary { margin-bottom: 10px; }
+.more-fields .form--grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+.more-fields .form--grid label { display: grid; gap: 4px; }
+@media (max-width: 640px) { .more-fields .form--grid { grid-template-columns: 1fr; } }
+.table td.cell-clamp { max-width: 280px; overflow-wrap: anywhere; }
+.note-flag { display: flex; gap: 4px; align-items: flex-start; color: #b45309; margin-top: 2px; max-width: 260px; }
+.note-flag svg { flex: none; margin-top: 2px; }
+.nowrap { white-space: nowrap; }

@@ -132,3 +132,16 @@ ALTER TABLE lo_accounts ENABLE ROW LEVEL SECURITY;
 
 -- ===== Jenis sesi bebas (bukan hanya masuk/pulang), mis. "Cek acak 1" =====
 ALTER TABLE sessions DROP CONSTRAINT IF EXISTS sessions_type_check;
+
+-- ===== Data pemetaan sekolah (Bendahara & Pengawas) =====
+ALTER TABLE people ADD COLUMN IF NOT EXISTS region          TEXT;
+ALTER TABLE people ADD COLUMN IF NOT EXISTS ruangan         TEXT;
+ALTER TABLE people ADD COLUMN IF NOT EXISTS npsn            TEXT;  -- pengawas: bisa beberapa, dipisah "; "
+ALTER TABLE people ADD COLUMN IF NOT EXISTS provinsi        TEXT;
+ALTER TABLE people ADD COLUMN IF NOT EXISTS kab_kota        TEXT;
+ALTER TABLE people ADD COLUMN IF NOT EXISTS ptn             TEXT;
+ALTER TABLE people ADD COLUMN IF NOT EXISTS koor_pelaporan  TEXT;
+ALTER TABLE people ADD COLUMN IF NOT EXISTS fasil_pelaporan TEXT;
+ALTER TABLE people ADD COLUMN IF NOT EXISTS peringkat       TEXT;
+ALTER TABLE people ADD COLUMN IF NOT EXISTS notes           TEXT;
+CREATE INDEX IF NOT EXISTS people_role_idx ON people (role);
