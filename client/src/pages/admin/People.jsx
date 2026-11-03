@@ -93,6 +93,31 @@ export default function People() {
   useEffect(() => setLimit(PAGE), [list, fVenue, fPos, fRegion, fRoom, fProv, sort]);
 
   const filtered = fVenue || fPos || fRegion || fRoom || fProv;
+  const qrLink = (p) => `${window.location.origin}/qr/${p.qr_token}`;
+
+  // CSV berisi link QR pribadi + link WhatsApp siap kirim (mengikuti filter yang aktif)
+  function exportQrLinks() {
+    const esc = (x) => `"${String(x ?? '').replace(/"/g, '""')}"`;
+    const waNum = (ph) => {
+      const d = String(ph || '').replace(/\D/g, '');
+      return d.startsWith('0') ? '62' + d.slice(1) : d.startsWith('8') ? '62' + d : d;
+    };
+    const head = ['Kode', 'Nama', 'Jabatan', 'Instansi / Sekolah', 'Venue', 'Ruangan', 'Telepon', 'Link QR', 'Link WhatsApp'];
+    const lines = shown.filter((p) => p.qr_token).map((p) => {
+      const msg = `Yth. ${p.name},\nBerikut QR absensi pribadi Anda untuk BIMTEK Revitalisasi SD:\n${qrLink(p)}\n\n`
+        + `Saat absen, tunjukkan QR tersebut kepada LO/panitia untuk dipindai.${p.ruangan ? ` Ruangan Anda: ${p.ruangan}.` : ''}`
+        + ' Mohon tidak dibagikan ke orang lain. Terima kasih.';
+      const wa = waNum(p.phone);
+      return [p.code, p.name, p.position, p.institution, p.venue_name || 'Semua', p.ruangan, p.phone, qrLink(p),
+        `https://wa.me/${wa}?text=${encodeURIComponent(msg)}` /* tanpa nomor → pilih kontak di WA */].map(esc).join(',');
+    });
+    const blob = new Blob(['\uFEFF' + [head.map(esc).join(','), ...lines].join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `link-qr-${role}${filtered ? '-filter' : ''}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
   const sortBy = (key) => setSort((s) => (s.key === key ? { key, dir: -s.dir } : { key, dir: 1 }));
   const Th = ({ k, children }) => (
     <th className="th-sort" onClick={() => sortBy(k)} aria-sort={sort.key === k ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'}>
@@ -201,6 +226,8 @@ export default function People() {
         </select>
         {filtered && <button className="btn btn--sm" onClick={resetFilters}><Icon name="x" size={14} />Reset filter</button>}
         <span className="muted">{filtered ? `${shown.length} dari ${list.length}` : list.length} orang</span>
+        <button className="btn btn--sm" onClick={exportQrLinks} disabled={!shown.length} title="CSV berisi link QR pribadi & link WhatsApp untuk orang yang tampil">
+          <Icon name="share" size={14} />Ekspor link QR (WA)</button>
       </div>
       <table className="table">
         <thead><tr>
@@ -221,6 +248,7 @@ export default function People() {
               <td className="small">{p.ruangan}{p.region && <div className="muted">{p.region}</div>}</td>
               <td>{p.venue_name ? <span className="tag tag--venue">{p.venue_name}</span> : <span className="muted small">Semua</span>}</td>
               <td><div className="row">
+                {p.qr_token && <a className="btn btn--sm" href={qrLink(p)} target="_blank" rel="noreferrer" title="Buka kartu QR"><Icon name="qr" size={14} />QR</a>}
                 <button className="btn btn--sm" onClick={() => { setForm({ ...p, venue_id: p.venue_id ?? '' }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Ubah</button>
                 <button className="btn btn--sm btn--danger" onClick={() => del(p)}>Hapus</button>
               </div></td>

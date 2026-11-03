@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import './styles.css';
 import Home from './pages/Home.jsx';
 import Absen from './pages/Absen.jsx';
 import Riwayat from './pages/Riwayat.jsx';
+// halaman QR memuat pustaka QR (± 160 kB) → dimuat terpisah agar halaman absen tetap ringan
+const QrCard = lazy(() => import('./pages/QrCard.jsx'));
 import AdminLayout from './pages/admin/AdminLayout.jsx';
 import Login from './pages/admin/Login.jsx';
 import Dashboard from './pages/admin/Dashboard.jsx';
@@ -15,20 +17,24 @@ import Settings from './pages/admin/Settings.jsx';
 import VenueCode from './pages/admin/VenueCode.jsx';
 import Venues from './pages/admin/Venues.jsx';
 import LoAccounts from './pages/admin/LoAccounts.jsx';
+const Scan = lazy(() => import('./pages/admin/Scan.jsx'));
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
+      <Suspense fallback={<p className="muted" style={{ padding: 24 }}>Memuat…</p>}>
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/absen/peserta" element={<Absen key="peserta" role="peserta" />} />
         <Route path="/absen/panitia" element={<Absen key="panitia" role="panitia" />} />
         <Route path="/riwayat" element={<Riwayat />} />
+        <Route path="/qr/:token" element={<QrCard />} />
         <Route path="/admin/login" element={<Login />} />
         <Route path="/admin/kode-venue" element={<VenueCode />} />
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<Dashboard />} />
           <Route path="absensi" element={<Records />} />
+          <Route path="scan" element={<Scan />} />
           <Route path="sesi" element={<Sessions />} />
           <Route path="orang" element={<People />} />
           <Route path="venue" element={<Venues />} />
@@ -37,6 +43,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
     </BrowserRouter>
   </React.StrictMode>
 );

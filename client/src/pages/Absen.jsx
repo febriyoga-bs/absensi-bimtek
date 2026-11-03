@@ -19,6 +19,10 @@ export default function Absen({ role }) {
   const [info, setInfo] = useState(null);
   const [step, setStep] = useState(0);
   const [code, setCode] = useState('');
+  // peserta: cari lewat NPSN lalu pilih jabatan; panitia: ketik kode
+  const [mode, setMode] = useState(role === 'peserta' ? 'npsn' : 'kode');
+  const [npsn, setNpsn] = useState('');
+  const [found, setFound] = useState(null);
   const [ch, setCh] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -33,12 +37,20 @@ export default function Absen({ role }) {
 
   const sess = info?.sessions?.[role];
 
-  async function verify(e) {
+  async function findNpsn(e) {
     e.preventDefault();
+    setError(null); setFound(null); setBusy(true);
+    try { setFound(await api('/npsn', { method: 'POST', body: { npsn } })); }
+    catch (err) { setError(err.message); }
+    finally { setBusy(false); }
+  }
+
+  async function verify(e, pick) {
+    e?.preventDefault();
     setError(null);
     setBusy(true);
     try {
-      setCh(await api('/challenge', { method: 'POST', body: { code, role } }));
+      setCh(await api('/challenge', { method: 'POST', body: { code: pick || code, role } }));
       setStep(1);
     } catch (err) {
       setError(err.status === 409 && err.data.at ? `${err.message} (${fmtFull(err.data.at)})` : err.message);
@@ -48,7 +60,7 @@ export default function Absen({ role }) {
   }
 
   function reset() {
-    setStep(0); setCh(null); setResult(null); setError(null); setCode('');
+    setStep(0); setCh(null); setResult(null); setError(null); setCode(''); setNpsn(''); setFound(null);
     api('/info').then(setInfo).catch(() => {});
   }
 
@@ -101,6 +113,53 @@ export default function Absen({ role }) {
               </div>
             ) : null}
 
+            {mode === 'npsn' && (
+              <div className="form">
+                <form onSubmit={findNpsn} className="form">
+                  <label>
+                    NPSN sekolah
+                    <span className="input-icon">
+                      <Icon name="school" />
+                      <input value={npsn} inputMode="numeric" maxLength={8} autoFocus required placeholder="8 digit, contoh: 20311972"
+                        onChange={(e) => { setNpsn(e.target.value.replace(/\D/g, '')); setFound(null); }} />
+                    </span>
+                    <small className="muted" style={{ fontWeight: 400 }}>Pengawas: isi NPSN salah satu sekolah binaan.</small>
+                  </label>
+                  {!found && (
+                    <button className="btn btn--primary btn--lg" disabled={busy || npsn.length !== 8}>
+                      {busy ? 'Mencari…' : <>Cari <Icon name="right" size={18} /></>}
+                    </button>
+                  )}
+                </form>
+                {found && (
+                  <div className="npsn-pick">
+                    <div className="npsn-pick__school"><Icon name="school" size={18} /><span><b>{found.school || 'Sekolah'}</b><small>NPSN {found.npsn}</small></span></div>
+                    <p className="muted small" style={{ margin: 0 }}>Anda hadir sebagai:</p>
+                    {found.options.map((o) => (o.people.length ? o.people.map((p) => (
+                      <button key={p.code} type="button" className="npsn-opt" disabled={busy} onClick={(e) => verify(e, p.code)}>
+                        <span className="npsn-opt__role">{p.position || o.label}</span>
+                        <b>{p.name}</b>
+                        <Icon name="right" size={18} />
+                      </button>
+                    )) : (
+                      <div key={o.key} className="npsn-opt npsn-opt--off">
+                        <span className="npsn-opt__role">{o.label}</span>
+                        <span className="muted small">Tidak terdaftar sebagai peserta</span>
+                      </div>
+                    )))}
+                    <button type="button" className="link-btn" onClick={() => { setFound(null); setNpsn(''); setError(null); }}>
+                      <Icon name="left" size={14} />Ganti NPSN
+                    </button>
+                  </div>
+                )}
+                {error && <div className="alert alert--err"><Icon name="alert" size={18} /><span>{error}</span></div>}
+                <button type="button" className="link-btn" onClick={() => { setMode('kode'); setError(null); }}>
+                  <Icon name="key" size={14} />Pakai kode peserta
+                </button>
+              </div>
+            )}
+
+            {mode === 'kode' && (
             <form onSubmit={verify} className="form">
               <label>
                 {R.field}
@@ -119,7 +178,13 @@ export default function Absen({ role }) {
               <button className="btn btn--primary btn--lg" disabled={busy || !code.trim()}>
                 {busy ? 'Memeriksa…' : <>Lanjut <Icon name="right" size={18} /></>}
               </button>
+              {role === 'peserta' && (
+                <button type="button" className="link-btn" onClick={() => { setMode('npsn'); setError(null); }}>
+                  <Icon name="school" size={14} />Cari lewat NPSN sekolah
+                </button>
+              )}
             </form>
+            )}
 
             <ul className="checklist">
               <li><Icon name="crosshair" size={18} /><span>Aktifkan <b>GPS / Lokasi</b> lalu izinkan akses <b>Kamera</b> & <b>Lokasi</b> saat diminta.</span></li>

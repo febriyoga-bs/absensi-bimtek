@@ -96,23 +96,26 @@ export default function Records() {
           {rows.map((r) => (
             <div key={r.id} className={`rec rec--${r.status}`}>
               <div>
-                <img src={r.photo_url || adminUrl(`/photo/${r.id}`)} alt={r.name} loading="lazy" title="Klik untuk memperbesar"
-                  onClick={() => setZoom(r.photo_url || adminUrl(`/photo/${r.id}`))} />
+                {r.method === 'qr'
+                  ? <div className="rec__qr"><Icon name="qr" size={40} /><b>Scan QR</b><small>{r.scanned_by || 'LO / panitia'}</small></div>
+                  : <img src={r.photo_url || adminUrl(`/photo/${r.id}`)} alt={r.name} loading="lazy" title="Klik untuk memperbesar"
+                    onClick={() => setZoom(r.photo_url || adminUrl(`/photo/${r.id}`))} />}
               </div>
               <div className="rec__body">
                 <div className="rec__name">{r.name} <span className={`tag tag--${r.role}`}>{r.role}</span></div>
                 <div className="muted small">{r.code} · {r.institution || '-'}</div>
                 {r.venue_name && <div><span className="tag tag--venue">{r.venue_name}</span></div>}
+                {r.lat == null ? <div className="small">{fmtDT(r.created_at)} WIB · dipindai {r.scanned_by || 'LO'}</div> : <>
                 <div className="small">{fmtDT(r.created_at)} WIB · {dist(r.distance_m)} dari venue · akurasi ±{Math.round(r.accuracy_m)} m</div>
                 <div className="rec__geo">{Number(r.lat).toFixed(6)}, {Number(r.lng).toFixed(6)}</div>
                 <button type="button" className="link-btn" onClick={() => setMapPoint({
                   lat: r.lat, lng: r.lng, title: `${r.name} — ${r.venue_name || 'lokasi absen'}`,
                   rows: [['Waktu', fmtDT(r.created_at) + ' WIB'], ['Venue', r.venue_name], ['Jarak ke venue', dist(r.distance_m)],
                     ['Akurasi GPS', `±${Math.round(r.accuracy_m)} m`], ['Status', ST_LABEL[r.status]]],
-                })}><Icon name="pin" size={14} />Lihat di peta</button>
-                {r.flags.length > 0 && (
+                })}><Icon name="pin" size={14} />Lihat di peta</button></>}
+                {r.flags.some((f) => f.code !== 'qr_lo') && (
                   <ul className="flags">
-                    {r.flags.map((f, i) => <li key={i} title={f.detail}>{FLAG_LABEL[f.code] || f.code}<br /><small>{f.detail}</small></li>)}
+                    {r.flags.filter((f) => f.code !== 'qr_lo').map((f, i) => <li key={i} title={f.detail}>{FLAG_LABEL[f.code] || f.code}<br /><small>{f.detail}</small></li>)}
                   </ul>
                 )}
                 <div className="row">
