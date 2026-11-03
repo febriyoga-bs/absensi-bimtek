@@ -3,7 +3,7 @@ import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
 import fs from 'fs';
 import { q, getSettings } from '../db.js';
-import { ah, HttpError, venueCode } from '../util.js';
+import { ah, HttpError, venueCode, clientIp } from '../util.js';
 import {
   requireAdmin, requireSuper, signAdmin, checkAdminPassword, hashPassword, verifyPassword,
 } from '../auth.js';
@@ -381,6 +381,66 @@ r.delete('/sessions/:id', requireSuper, ah(async (req, res) => {
   res.json({ ok: true });
 }));
 
+/* ---------- Scan QR peserta oleh LO / admin ---------- */
+/**
+ * Body: { qr } (isi QR: link /qr/<token> atau token saja) atau { code } (ketik manual),
+ * opsional venue_id (admin utama). LO selalu tercatat di venue-nya sendiri.
+ */
+r.post('/scan', ah(async (req, res) => {
+  const raw = String(req.body?.qr || '').trim();
+  const code = String(req.body?.code || '').trim();
+  const token = (raw.match(/([a-f0-9]{32})\s*$/i) || [])[1];
+  if (!token && !code) throw new HttpError(400, 'QR tidak dikenali. Pastikan memindai QR absen peserta.');
+  const { rows: [person] } = token
+    ? await q('SELECT * FROM people WHERE qr_token=$1', [token.toLowerCase()])
+    : await q('SELECT * FROM people WHERE lower(code)=lower($1)', [code]);
+  if (!person) throw new HttpError(404, token ? 'QR tidak terdaftar (mungkin QR lama/tidak valid).' : 'Kode tidak terdaftar.');
+
+  const lo = req.user.role === 'lo';
+  let scannedBy = 'Admin utama';
+  let venueId;
+  if (lo) {
+    const { rows: [acc] } = await q('SELECT name, active FROM lo_accounts WHERE id=$1', [req.user.lo]);
+    if (!acc?.active) throw new HttpError(401, 'Akun LO tidak aktif. Silakan login ulang.');
+    scannedBy = `LO ${acc.name}`;
+    venueId = req.user.venue;
+  } else {
+    venueId = Number(req.body?.venue_id) || person.venue_id || null;
+  }
+  const brief = {
+    name: person.name, code: person.code, role: person.role, position: person.position,
+    institution: person.institution, ruangan: person.ruangan,
+  };
+  if (lo && person.venue_id && person.venue_id !== venueId) {
+    const { rows: [pv] } = await q('SELECT name FROM venues WHERE id=$1', [person.venue_id]);
+    throw new HttpError(403, `Terdaftar di venue lain (${pv?.name || '-'}). Arahkan ke venue tersebut.`, { person: brief });
+  }
+
+  const { rows: [session] } = await q(
+    `SELECT * FROM sessions WHERE role IN ($1,'semua') AND now() BETWEEN starts_at AND ends_at
+     ORDER BY starts_at LIMIT 1`, [person.role]);
+  if (!session) throw new HttpError(400, `Belum ada sesi absensi ${person.role} yang dibuka saat ini.`, { person: brief });
+  if (venueId && session.venue_ids?.length && !session.venue_ids.includes(venueId)) {
+    throw new HttpError(400, `Sesi "${session.name}" tidak berlaku untuk venue ini.`, { person: brief });
+  }
+
+  const { rows: [ins] } = await q(
+    `INSERT INTO attendance (person_id, session_id, venue_id, status, risk_score, flags, method, scanned_by, ip, user_agent)
+     VALUES ($1,$2,$3,'valid',0,$4,'qr',$5,$6,$7)
+     ON CONFLICT (person_id, session_id) DO NOTHING
+     RETURNING created_at`,
+    [person.id, session.id, venueId, JSON.stringify([{ code: 'qr_lo', detail: `Dipindai oleh ${scannedBy}` }]),
+      scannedBy, clientIp(req), String(req.get('user-agent') || '').slice(0, 300)]
+  );
+  const sess = { name: session.name, type: session.type };
+  if (!ins) {
+    const { rows: [a] } = await q('SELECT created_at, status, method FROM attendance WHERE person_id=$1 AND session_id=$2',
+      [person.id, session.id]);
+    throw new HttpError(409, 'Sudah absen di sesi ini.', { person: brief, session: sess, at: a?.created_at, status: a?.status, method: a?.method });
+  }
+  res.json({ ok: true, person: brief, session: sess, at: ins.created_at });
+}));
+
 /* ---------- Absensi ---------- */
 /** Daftar absen per sesi, dengan halaman (default 48 per halaman) agar ringan. */
 r.get('/attendance', ah(async (req, res) => {
@@ -392,7 +452,7 @@ r.get('/attendance', ah(async (req, res) => {
   const [{ rows }, { rows: [c] }] = await Promise.all([
     q(
       `SELECT a.id, a.status, a.risk_score, a.flags, a.lat, a.lng, a.accuracy_m, a.distance_m,
-              a.created_at, a.device_id, a.user_agent, a.ip, a.photo_path, a.venue_id,
+              a.created_at, a.device_id, a.user_agent, a.ip, a.photo_path, a.venue_id, a.method, a.scanned_by,
               p.name, p.code, p.role, p.institution, p.position, v.name AS venue_name
        FROM attendance a JOIN people p ON p.id=a.person_id LEFT JOIN venues v ON v.id=a.venue_id
        WHERE ${where} AND ($3::text IS NULL OR a.status=$3)
@@ -410,7 +470,7 @@ r.get('/attendance', ah(async (req, res) => {
     ),
   ]);
   // Signed URL R2 hanya untuk foto di halaman ini (bukan semua foto sesi)
-  const out = await Promise.all(rows.map(async ({ photo_path, ...x }) => ({ ...x, photo_url: await photoUrl(photo_path) })));
+  const out = await Promise.all(rows.map(async ({ photo_path, ...x }) => ({ ...x, photo_url: photo_path ? await photoUrl(photo_path) : null })));
   res.json({
     rows: out,
     total: status ? c[status] : c.total,
@@ -447,7 +507,7 @@ r.get('/attempts', ah(async (req, res) => {
 r.get('/photo/:id', ah(async (req, res) => {
   await assertOwnAttendance(req, req.params.id);
   const { rows } = await q('SELECT photo_path FROM attendance WHERE id=$1', [req.params.id]);
-  if (!rows[0]) return res.status(404).end();
+  if (!rows[0]?.photo_path) return res.status(404).end();
   const url = await photoUrl(rows[0].photo_path, 600);
   if (url) return res.redirect(302, url);
   if (!fs.existsSync(rows[0].photo_path)) return res.status(404).end();
@@ -467,7 +527,7 @@ r.get('/export', ah(async (req, res) => {
   const { rows } = await q(
     `SELECT p.code, p.name, p.role, p.institution, p.position, pv.name AS assigned_venue,
             p.npsn, p.region, p.ruangan, p.provinsi, p.kab_kota, p.ptn,
-            a.status, a.created_at, av.name AS venue, a.lat, a.lng, a.distance_m, a.accuracy_m, a.flags
+            a.status, a.created_at, av.name AS venue, a.lat, a.lng, a.distance_m, a.accuracy_m, a.flags, a.method
      FROM people p
      LEFT JOIN venues pv ON pv.id=p.venue_id
      LEFT JOIN attendance a ON a.person_id=p.id AND a.session_id=$1
@@ -485,12 +545,13 @@ r.get('/export', ah(async (req, res) => {
   const esc = (x) => `"${String(x ?? '').replace(/"/g, '""')}"`;
   const fmt = (d) => d ? new Date(d).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) : '';
   const header = ['Kode', 'Nama', 'Peran', 'Instansi / Sekolah', 'Jabatan', 'NPSN', 'Region', 'Ruangan', 'Provinsi',
-    'Kab/Kota', 'PTN', 'Venue Ditetapkan', 'Kehadiran', 'Status Verifikasi',
+    'Kab/Kota', 'PTN', 'Venue Ditetapkan', 'Kehadiran', 'Status Verifikasi', 'Metode',
     'Waktu (WIB)', 'Venue Absen', 'Latitude', 'Longitude', 'Jarak (m)', 'Akurasi (m)', 'Catatan'];
   const lines = rows.map((x) => [
     x.code, x.name, x.role, x.institution, x.position, x.npsn, x.region, x.ruangan, x.provinsi,
     x.kab_kota, x.ptn, x.assigned_venue || 'Semua',
     x.status && x.status !== 'ditolak' ? 'Hadir' : 'Tidak hadir', x.status || '',
+    x.method === 'qr' ? 'Scan QR' : x.method ? 'Selfie + GPS' : '',
     fmt(x.created_at), x.venue || '', x.lat ?? '', x.lng ?? '',
     x.distance_m != null ? Math.round(x.distance_m) : '', x.accuracy_m != null ? Math.round(x.accuracy_m) : '',
     (x.flags || []).map((f) => f.detail).join('; '),

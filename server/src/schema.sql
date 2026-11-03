@@ -145,3 +145,17 @@ ALTER TABLE people ADD COLUMN IF NOT EXISTS fasil_pelaporan TEXT;
 ALTER TABLE people ADD COLUMN IF NOT EXISTS peringkat       TEXT;
 ALTER TABLE people ADD COLUMN IF NOT EXISTS notes           TEXT;
 CREATE INDEX IF NOT EXISTS people_role_idx ON people (role);
+
+-- ===== QR absen per orang (dipindai LO/panitia) =====
+ALTER TABLE people ADD COLUMN IF NOT EXISTS qr_token TEXT;
+ALTER TABLE people ALTER COLUMN qr_token SET DEFAULT md5(random()::text || clock_timestamp()::text);
+UPDATE people SET qr_token = md5(random()::text || clock_timestamp()::text || id::text) WHERE qr_token IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS people_qr_uq ON people (qr_token);
+-- absen lewat QR tidak punya foto & GPS peserta
+ALTER TABLE attendance ALTER COLUMN photo_path DROP NOT NULL;
+ALTER TABLE attendance ALTER COLUMN lat        DROP NOT NULL;
+ALTER TABLE attendance ALTER COLUMN lng        DROP NOT NULL;
+ALTER TABLE attendance ALTER COLUMN accuracy_m DROP NOT NULL;
+ALTER TABLE attendance ALTER COLUMN distance_m DROP NOT NULL;
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS method     TEXT NOT NULL DEFAULT 'selfie';
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS scanned_by TEXT;

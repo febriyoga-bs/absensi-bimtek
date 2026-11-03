@@ -70,6 +70,44 @@ r.get('/info', ah(async (req, res) => {
   });
 }));
 
+// Kartu QR pribadi (link dikirim via WA). Token acak 32 karakter, tidak bisa ditebak.
+r.get('/qr/:token', ipLimiter, ah(async (req, res) => {
+  const token = String(req.params.token || '').toLowerCase();
+  if (!/^[a-f0-9]{32}$/.test(token)) throw new HttpError(404, 'QR tidak ditemukan');
+  const { rows: [p] } = await q(
+    `SELECT p.name, p.code, p.role, p.position, p.institution, p.ruangan, v.name AS venue
+     FROM people p LEFT JOIN venues v ON v.id=p.venue_id WHERE p.qr_token=$1`, [token]);
+  if (!p) throw new HttpError(404, 'QR tidak ditemukan atau sudah tidak berlaku. Hubungi panitia.');
+  const s = await getSettings();
+  res.json({ ...p, event_name: s.event_name });
+}));
+
+// Cari peserta lewat NPSN sekolah → pilih Bendahara / Pengawas / Kepala Sekolah
+const NPSN_ROLES = [
+  { key: 'bendahara', label: 'Bendahara', match: /bendahara/i },
+  { key: 'pengawas', label: 'Pengawas', match: /pengawas/i },
+  { key: 'kepsek', label: 'Kepala Sekolah', match: /kepala\s*sekolah|kepsek/i },
+];
+r.post('/npsn', ipLimiter, ah(async (req, res) => {
+  const npsn = String(req.body?.npsn || '').replace(/\D/g, '');
+  if (!/^\d{8}$/.test(npsn)) throw new HttpError(400, 'NPSN terdiri dari 8 digit angka.');
+  const { rows } = await q(
+    `SELECT code, name, position, institution, npsn FROM people
+     WHERE role='peserta' AND $1 = ANY(string_to_array(replace(COALESCE(npsn,''), ' ', ''), ';'))
+     ORDER BY position, name`, [npsn]);
+  if (!rows.length) throw new HttpError(404, 'NPSN tidak ditemukan di daftar peserta. Periksa kembali atau hubungi panitia.');
+  // nama sekolah sesuai NPSN ini (pengawas menyimpan beberapa sekolah)
+  const own = rows.find((r) => r.npsn === npsn) || rows[0];
+  const idx = String(own.npsn || '').split('; ').indexOf(npsn);
+  const school = idx >= 0 ? String(own.institution || '').split('; ')[idx] || own.institution : own.institution;
+  const options = NPSN_ROLES.map(({ key, label, match }) => ({
+    key, label, people: rows.filter((r) => match.test(r.position || '')).map(({ code, name }) => ({ code, name })),
+  }));
+  const other = rows.filter((r) => !NPSN_ROLES.some((x) => x.match.test(r.position || '')));
+  if (other.length) options.push({ key: 'lain', label: 'Lainnya', people: other.map(({ code, name, position }) => ({ code, name, position })) });
+  res.json({ npsn, school, options });
+}));
+
 // Langkah 1: verifikasi kode peserta/panitia → token absen berlaku singkat
 r.post('/challenge', ipLimiter, ah(async (req, res) => {
   const { code, role } = req.body || {};
@@ -80,7 +118,7 @@ r.post('/challenge', ipLimiter, ah(async (req, res) => {
   let { rows } = await q('SELECT * FROM people WHERE lower(code) = lower($1)', [input]);
   // Kode NPSN boleh diketik tanpa tanda hubung (B20100001). Pengawas membawahi beberapa
   // sekolah: P-<NPSN sekolah mana pun> juga diterima.
-  const m = !rows[0] && input.match(/^([BP])\s*-?\s*(\d{6,10})$/i);
+  const m = !rows[0] && input.match(/^([BPK])\s*-?\s*(\d{6,10})$/i);
   if (m) {
     const letter = m[1].toUpperCase();
     ({ rows } = await q('SELECT * FROM people WHERE lower(code) = lower($1)', [`${letter}-${m[2]}`]));
