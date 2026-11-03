@@ -30,7 +30,9 @@ export default function People() {
 
   async function importCsv() {
     const r = await api('/admin/people/import', { method: 'POST', admin: true, body: { csv, role } });
-    setMsg({ err: r.errors.length > 0, text: `${r.imported} data diimpor.${r.errors.length ? ' ' + r.errors.join(' | ') : ''}` });
+    const notes = [...r.errors, ...(r.warnings || [])];
+    setMsg({ err: r.errors.length > 0, warn: !r.errors.length && notes.length > 0,
+      text: `${r.imported} data diimpor (data dengan kode yang sama diperbarui).${notes.length ? ' ' + notes.join(' | ') : ''}` });
     if (!r.errors.length) setCsv('');
     load();
   }
@@ -82,7 +84,7 @@ export default function People() {
           <button className="btn" onClick={importCsv} disabled={!csv.trim()}><Icon name="download" size={18} />Impor</button>
         </div>
       </div>
-      {msg && <div className={`alert ${msg.err ? 'alert--err' : 'alert--ok'}`} style={{ marginBottom: 12 }}>{msg.text}</div>}
+      {msg && <div className={`alert ${msg.err ? 'alert--err' : msg.warn ? 'alert--warn' : 'alert--ok'}`} style={{ marginBottom: 12 }}>{msg.text}</div>}
 
       <div className="toolbar">
         <input placeholder="Cari nama / kode / instansi" value={search} onChange={(e) => setSearch(e.target.value)} />

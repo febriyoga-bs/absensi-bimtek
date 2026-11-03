@@ -95,13 +95,16 @@ export default function Records() {
         <div className="grid">
           {rows.map((r) => (
             <div key={r.id} className={`rec rec--${r.status}`}>
-              <img src={r.photo_url || adminUrl(`/photo/${r.id}`)} alt={r.name} loading="lazy"
-                onClick={() => setZoom(r.photo_url || adminUrl(`/photo/${r.id}`))} />
+              <div>
+                <img src={r.photo_url || adminUrl(`/photo/${r.id}`)} alt={r.name} loading="lazy" title="Klik untuk memperbesar"
+                  onClick={() => setZoom(r.photo_url || adminUrl(`/photo/${r.id}`))} />
+              </div>
               <div className="rec__body">
                 <div className="rec__name">{r.name} <span className={`tag tag--${r.role}`}>{r.role}</span></div>
                 <div className="muted small">{r.code} · {r.institution || '-'}</div>
                 {r.venue_name && <div><span className="tag tag--venue">{r.venue_name}</span></div>}
-                <div className="small">{fmtDT(r.created_at)} · {Math.round(r.distance_m)} m · ±{Math.round(r.accuracy_m)} m</div>
+                <div className="small">{fmtDT(r.created_at)} WIB · {dist(r.distance_m)} dari venue · akurasi ±{Math.round(r.accuracy_m)} m</div>
+                <div className="rec__geo">{Number(r.lat).toFixed(6)}, {Number(r.lng).toFixed(6)}</div>
                 <button type="button" className="link-btn" onClick={() => setMapPoint({
                   lat: r.lat, lng: r.lng, title: `${r.name} — ${r.venue_name || 'lokasi absen'}`,
                   rows: [['Waktu', fmtDT(r.created_at) + ' WIB'], ['Venue', r.venue_name], ['Jarak ke venue', dist(r.distance_m)],

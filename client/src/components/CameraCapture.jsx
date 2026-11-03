@@ -62,15 +62,28 @@ const CameraCapture = forwardRef(function CameraCapture({ onReady }, ref) {
       ctx.drawImage(v, 0, 0, w, h);
       ctx.setTransform(1, 0, 0, 1, 0, 0);
 
-      const fs = Math.max(14, Math.round(w / 34));
+      const fs = Math.max(13, Math.round(w / 36));
       const pad = fs * 0.6;
-      const boxH = lines.length * fs * 1.35 + pad * 2;
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
-      ctx.fillRect(0, h - boxH, w, boxH);
-      ctx.fillStyle = '#fff';
+      const lh = fs * 1.3;
       ctx.font = `600 ${fs}px system-ui, sans-serif`;
       ctx.textBaseline = 'top';
-      lines.forEach((l, i) => ctx.fillText(l, pad, h - boxH + pad + i * fs * 1.35, w - pad * 2));
+      // Pindah baris otomatis bila teks lebih lebar dari foto (tidak dipadatkan / terpotong)
+      const maxW = w - pad * 2;
+      const wrapped = [];
+      for (const line of lines) {
+        let cur = '';
+        for (const word of String(line).split(' ')) {
+          const test = cur ? `${cur} ${word}` : word;
+          if (cur && ctx.measureText(test).width > maxW) { wrapped.push(cur); cur = word; }
+          else cur = test;
+        }
+        wrapped.push(cur);
+      }
+      const boxH = wrapped.length * lh + pad * 2;
+      ctx.fillStyle = 'rgba(0,0,0,0.62)';
+      ctx.fillRect(0, h - boxH, w, boxH);
+      ctx.fillStyle = '#fff';
+      wrapped.forEach((l, i) => ctx.fillText(l, pad, h - boxH + pad + i * lh, maxW));
       return c.toDataURL('image/jpeg', 0.75);
     },
   }));

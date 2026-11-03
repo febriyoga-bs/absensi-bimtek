@@ -285,21 +285,26 @@ function parseCsv(text) {
 r.post('/people/import', requireSuper, ah(async (req, res) => {
   const list = parseCsv(req.body?.csv);
   const { rows: venues } = await q('SELECT id, name FROM venues');
-  const byName = new Map(venues.map((v) => [v.name.trim().toLowerCase(), v.id]));
+  // cocokkan nama venue tanpa peduli huruf besar/kecil, spasi, dan tanda baca
+  const norm = (x) => String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const byName = new Map(venues.map((v) => [norm(v.name), v.id]));
   const errors = [];
+  const missing = new Map(); // nama venue belum ada → jumlah orang
   let ok = 0;
   for (const [i, raw] of list.entries()) {
     try {
       let venue_id = null;
       if (raw.venue) {
-        venue_id = byName.get(raw.venue.toLowerCase());
-        if (!venue_id) throw new HttpError(400, `venue "${raw.venue}" tidak ditemukan`);
+        venue_id = byName.get(norm(raw.venue)) ?? null;
+        if (!venue_id) missing.set(raw.venue, (missing.get(raw.venue) || 0) + 1);
       }
       await upsertPerson(cleanPerson({ ...raw, venue_id }, req.body?.role));
       ok++;
     } catch (e) { errors.push(`Baris ${i + 1}: ${e.message}`); }
   }
-  res.json({ imported: ok, errors });
+  const warnings = [...missing].map(([v, n]) =>
+    `Venue "${v}" belum ada → ${n} orang diimpor tanpa venue. Tambahkan venue dengan nama itu lalu impor ulang file yang sama.`);
+  res.json({ imported: ok, errors, warnings });
 }));
 
 /* ---------- Sesi ---------- */
@@ -336,13 +341,13 @@ function cleanSession(b) {
   const ids = Array.isArray(b.venue_ids) ? b.venue_ids.map(Number).filter(Number.isInteger) : [];
   const s = {
     name: String(b.name || '').trim(),
-    role: b.role, type: b.type || 'masuk',
+    role: b.role, type: String(b.type ?? '').trim().replace(/\s+/g, ' ').replace(/\s*-\s*$/, '') || 'Sesi Absensi',
     starts_at: new Date(b.starts_at), ends_at: new Date(b.ends_at),
     venue_ids: ids.length ? ids : null,
   };
   if (!s.name) throw new HttpError(400, 'Nama sesi wajib diisi');
   if (!['peserta', 'panitia', 'semua'].includes(s.role)) throw new HttpError(400, 'Peran sesi tidak valid');
-  if (!['masuk', 'pulang'].includes(s.type)) throw new HttpError(400, 'Jenis sesi tidak valid');
+  if (s.type.length > 80) throw new HttpError(400, 'Jenis sesi maksimal 80 karakter');
   if (isNaN(s.starts_at) || isNaN(s.ends_at) || s.ends_at <= s.starts_at) {
     throw new HttpError(400, 'Waktu mulai/selesai tidak valid');
   }

@@ -129,3 +129,6 @@ CREATE TABLE IF NOT EXISTS lo_accounts (
 CREATE UNIQUE INDEX IF NOT EXISTS lo_accounts_username_uq ON lo_accounts (lower(username));
 CREATE INDEX IF NOT EXISTS attempt_logs_session_venue_idx ON attempt_logs (session_id, venue_id);
 ALTER TABLE lo_accounts ENABLE ROW LEVEL SECURITY;
+
+-- ===== Jenis sesi bebas (bukan hanya masuk/pulang), mis. "Cek acak 1" =====
+ALTER TABLE sessions DROP CONSTRAINT IF EXISTS sessions_type_check;

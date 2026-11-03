@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
 import { fmtDT, toLocalInput } from './shared.js';
@@ -6,7 +6,7 @@ import { fmtDT, toLocalInput } from './shared.js';
 const blank = () => {
   const s = new Date(); s.setMinutes(0, 0, 0);
   const e = new Date(s); e.setHours(e.getHours() + 1);
-  return { id: null, name: '', role: 'peserta', type: 'masuk', starts_at: toLocalInput(s), ends_at: toLocalInput(e), venue_ids: [] };
+  return { id: null, name: '', role: 'peserta', type: '', starts_at: toLocalInput(s), ends_at: toLocalInput(e), venue_ids: [] };
 };
 
 export default function Sessions() {
@@ -14,6 +14,15 @@ export default function Sessions() {
   const [venues, setVenues] = useState([]);
   const [form, setForm] = useState(blank());
   const [err, setErr] = useState(null);
+  const typeRef = useRef(null);
+  // "Sesi Absensi N - " lalu kursor langsung di akhir untuk mengetik keterangan
+  const pickPrefix = (n) => {
+    const prefix = `Sesi Absensi ${n} - `;
+    const rest = form.type.replace(/^Sesi Absensi \d+ - ?/i, '');
+    setForm({ ...form, type: prefix + rest });
+    requestAnimationFrame(() => { const el = typeRef.current; if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } });
+  };
+  const activeN = (form.type.match(/^Sesi Absensi (\d+) - /i) || [])[1];
   const load = () => api('/admin/sessions', { admin: true }).then(setList);
   useEffect(() => { load(); api('/admin/venues', { admin: true }).then(setVenues); }, []);
   const f = (k) => (e) => setForm({ ...form, [k]: e.target.value });
@@ -53,9 +62,18 @@ export default function Sessions() {
         <label>Untuk<select value={form.role} onChange={f('role')}>
           <option value="peserta">Peserta</option><option value="panitia">Panitia</option><option value="semua">Semua</option>
         </select></label>
-        <label>Jenis<select value={form.type} onChange={f('type')}>
-          <option value="masuk">Masuk</option><option value="pulang">Pulang</option>
-        </select></label>
+        <label>Jenis absen
+          <input ref={typeRef} value={form.type} onChange={f('type')} maxLength={80} required
+            placeholder="Sesi Absensi 1 - Pembukaan" />
+          <span className="chips" style={{ marginTop: 2 }}>
+            {[1, 2, 3].map((n) => (
+              <button key={n} type="button" className={`chip-btn ${activeN === String(n) ? 'on' : ''}`} onClick={() => pickPrefix(n)}>
+                Sesi Absensi {n} - …
+              </button>
+            ))}
+          </span>
+          <small className="muted" style={{ fontWeight: 400 }}>Klik salah satu, lalu ketik keterangannya (mis. Pembukaan, Materi 2, Penutupan). Bisa juga diketik bebas.</small>
+        </label>
         <label>Dibuka<input type="datetime-local" value={form.starts_at} onChange={f('starts_at')} required /></label>
         <label>Ditutup<input type="datetime-local" value={form.ends_at} onChange={f('ends_at')} required /></label>
         <div className="span2 form" style={{ gap: 8 }}>
