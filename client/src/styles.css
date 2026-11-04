@@ -544,3 +544,4 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 @keyframes toploader { from { left: -40%; } to { left: 100%; } }
 @media (prefers-reduced-motion: reduce) { .skel, .spinner, .top-loader span { animation-duration: 3s; } }
 .session-box--skel { display: flex; gap: 12px; align-items: center; }
+.field-err { color: var(--err); font-weight: 600; font-size: 12.5px; }

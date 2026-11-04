@@ -14,6 +14,7 @@ const NAV = [
   { to: '/admin/venue', icon: 'pin', label: 'Venue' },
   { to: '/admin/lo', icon: 'idcard', label: 'Akun LO' },
   { to: '/admin/pengaturan', icon: 'settings', label: 'Pengaturan' },
+  { to: '/admin/password', icon: 'key', label: 'Ganti Password', lo: true, loOnly: true },
 ];
 
 export default function AdminLayout() {
@@ -30,7 +31,7 @@ export default function AdminLayout() {
   if (!adminToken.get()) return <Navigate to="/admin/login" replace />;
 
   const lo = user?.role === 'lo';
-  const items = NAV.filter((n) => !lo || n.lo);
+  const items = NAV.filter((n) => (lo ? n.lo : !n.loOnly));
   // LO yang membuka menu admin utama lewat URL → kembalikan ke Rekap
   if (lo && !items.some((n) => (n.end ? loc.pathname === n.to : loc.pathname.startsWith(n.to)))) {
     return <Navigate to="/admin" replace />;

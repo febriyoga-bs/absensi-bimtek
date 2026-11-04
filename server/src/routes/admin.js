@@ -60,6 +60,23 @@ r.get('/me', ah(async (req, res) => {
   res.json({ role: 'lo', name: lo.name, venue: { id: lo.venue_id, name: lo.venue_name } });
 }));
 
+/* ---------- Ganti password akun sendiri (LO) ---------- */
+r.post('/me/password', loginLimiter, ah(async (req, res) => {
+  if (req.user.role !== 'lo') {
+    throw new HttpError(400, 'Password admin utama diatur lewat variabel ADMIN_PASSWORD di Vercel, bukan dari sini.');
+  }
+  const oldPw = String(req.body?.old_password || '');
+  const newPw = String(req.body?.new_password || '');
+  if (newPw.length < 8) throw new HttpError(400, 'Password baru minimal 8 karakter.');
+  if (newPw.length > 72) throw new HttpError(400, 'Password baru terlalu panjang (maks. 72 karakter).');
+  if (newPw === oldPw) throw new HttpError(400, 'Password baru harus berbeda dari password lama.');
+  const { rows: [lo] } = await q('SELECT id, password_hash, active FROM lo_accounts WHERE id=$1', [req.user.lo]);
+  if (!lo || !lo.active) throw new HttpError(401, 'Akun LO tidak aktif. Silakan login ulang.');
+  if (!verifyPassword(oldPw, lo.password_hash)) throw new HttpError(400, 'Password lama salah.');
+  await q('UPDATE lo_accounts SET password_hash=$1 WHERE id=$2', [hashPassword(newPw), lo.id]);
+  res.json({ ok: true });
+}));
+
 /* ---------- Pengaturan acara (admin utama) ---------- */
 const publicSettings = ({ venue_secret, venue_name, venue_lat, venue_lng, radius_m, ...s }) => s;
 
