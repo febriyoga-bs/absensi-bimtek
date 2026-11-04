@@ -5,13 +5,15 @@ import Icon from '../components/Icon.jsx';
 import BrandMark from '../components/BrandMark.jsx';
 import { useVisiblePolling } from '../lib/poll.js';
 import { useNow, fmtClock, fmtDate, fmtHM, fmtRemaining, dayLabel } from '../lib/time.js';
+import { Skel, SkelCards } from '../components/Skeleton.jsx';
 
 const ROLES = [
   { key: 'peserta', title: 'Absen Peserta', desc: 'Kepala sekolah, guru, dan peserta BIMTEK', icon: 'cap' },
   { key: 'panitia', title: 'Absen Panitia', desc: 'Panitia, narasumber, dan fasilitator', icon: 'idcard' },
 ];
 
-function SessionStatus({ s, now }) {
+function SessionStatus({ s, now, loading }) {
+  if (loading) return <Skel w={210} h={26} r={99} />;
   if (s?.open) {
     return (
       <span className="pill pill--live">
@@ -77,7 +79,7 @@ export default function Home() {
               <span className="role__text">
                 <b>{r.title}</b>
                 <small>{r.desc}</small>
-                <SessionStatus s={info?.sessions?.[r.key]} now={now} />
+                <SessionStatus s={info?.sessions?.[r.key]} now={now} loading={!info} />
               </span>
               <span className="role__go"><Icon name="right" size={22} /></span>
             </Link>
@@ -95,8 +97,8 @@ export default function Home() {
           <ol className="steps">
             <li>
               <span className="steps__icon"><Icon name="key" /></span>
-              <b>Masukkan kode</b>
-              <small>Kode peserta / panitia dari panitia.</small>
+              <b>Masukkan NPSN / kode</b>
+              <small>Peserta: NPSN sekolah lalu pilih jabatan. Panitia: kode panitia.</small>
             </li>
             <li>
               <span className="steps__icon"><Icon name="camera" /></span>
@@ -116,6 +118,9 @@ export default function Home() {
           )}
         </section>
 
+        {!info && (
+          <section className="panel"><Skel w={140} h={18} /><div className="venues" style={{ marginTop: 14 }}><SkelCards n={2} h={90} /></div></section>
+        )}
         {info?.venues?.length > 0 && (
           <section className="panel">
             <h2 className="panel__title">Lokasi venue</h2>

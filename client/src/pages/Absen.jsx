@@ -7,6 +7,7 @@ import { useNow, fmtFull, fmtHM, fmtRemaining, initials } from '../lib/time.js';
 import CameraCapture from '../components/CameraCapture.jsx';
 import Icon from '../components/Icon.jsx';
 import BrandMark from '../components/BrandMark.jsx';
+import { Skel, Spinner } from '../components/Skeleton.jsx';
 
 const ROLE = {
   peserta: { label: 'Peserta', icon: 'cap', placeholder: 'contoh: B-20100001 / P-20100001', field: 'Kode / Nomor Peserta' },
@@ -23,6 +24,7 @@ export default function Absen({ role }) {
   const [mode, setMode] = useState(role === 'peserta' ? 'npsn' : 'kode');
   const [npsn, setNpsn] = useState('');
   const [found, setFound] = useState(null);
+  const [picking, setPicking] = useState(null);
   const [ch, setCh] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -56,6 +58,7 @@ export default function Absen({ role }) {
       setError(err.status === 409 && err.data.at ? `${err.message} (${fmtFull(err.data.at)})` : err.message);
     } finally {
       setBusy(false);
+      setPicking(null);
     }
   }
 
@@ -101,6 +104,8 @@ export default function Absen({ role }) {
                   </span>
                 </span>
               </div>
+            ) : !info ? (
+              <div className="session-box session-box--skel"><Skel w={44} h={44} r={12} /><span style={{ flex: 1, display: 'grid', gap: 8 }}><Skel w="40%" h={12} /><Skel w="75%" h={16} /></span></div>
             ) : info ? (
               <div className="session-box session-box--off">
                 <span className="session-box__icon"><Icon name="clock" /></span>
@@ -127,7 +132,7 @@ export default function Absen({ role }) {
                   </label>
                   {!found && (
                     <button className="btn btn--primary btn--lg" disabled={busy || npsn.length !== 8}>
-                      {busy ? 'Mencari…' : <>Cari <Icon name="right" size={18} /></>}
+                      {busy ? <><Spinner /> Mencari…</> : <>Cari <Icon name="right" size={18} /></>}
                     </button>
                   )}
                 </form>
@@ -136,10 +141,10 @@ export default function Absen({ role }) {
                     <div className="npsn-pick__school"><Icon name="school" size={18} /><span><b>{found.school || 'Sekolah'}</b><small>NPSN {found.npsn}</small></span></div>
                     <p className="muted small" style={{ margin: 0 }}>Anda hadir sebagai:</p>
                     {found.options.map((o) => (o.people.length ? o.people.map((p) => (
-                      <button key={p.code} type="button" className="npsn-opt" disabled={busy} onClick={(e) => verify(e, p.code)}>
+                      <button key={p.code} type="button" className="npsn-opt" disabled={busy} onClick={(e) => { setPicking(p.code); verify(e, p.code); }}>
                         <span className="npsn-opt__role">{p.position || o.label}</span>
                         <b>{p.name}</b>
-                        <Icon name="right" size={18} />
+                        {picking === p.code ? <Spinner size={18} /> : <Icon name="right" size={18} />}
                       </button>
                     )) : (
                       <div key={o.key} className="npsn-opt npsn-opt--off">
@@ -176,7 +181,7 @@ export default function Absen({ role }) {
               </label>
               {error &&<div className="alert alert--err"><Icon name="alert" size={18} /><span>{error}</span></div>}
               <button className="btn btn--primary btn--lg" disabled={busy || !code.trim()}>
-                {busy ? 'Memeriksa…' : <>Lanjut <Icon name="right" size={18} /></>}
+                {busy ? <><Spinner /> Memeriksa…</> : <>Lanjut <Icon name="right" size={18} /></>}
               </button>
               {role === 'peserta' && (
                 <button type="button" className="link-btn" onClick={() => { setMode('npsn'); setError(null); }}>
@@ -231,6 +236,9 @@ function CaptureStep({ role, info, ch, onDone, onRestart }) {
   const [busy, setBusy] = useState(false);
   const [startedAt] = useState(Date.now());
   const now = useNow();
+
+  // tampilkan bingkai kamera + tombol tanpa perlu scroll
+  useEffect(() => { document.querySelector('.capture')?.scrollIntoView({ block: 'start' }); }, []);
 
   useEffect(() => {
     watchRef.current = startGeoWatch(setGeo);
@@ -291,6 +299,8 @@ function CaptureStep({ role, info, ch, onDone, onRestart }) {
         ? <><b>{e.message}</b><ul>{e.data.reasons.map((x) => <li key={x}>{x}</li>)}</ul></>
         : e.message);
       if (e.status === 401 || e.status === 409) setTimeout(onRestart, 3000);
+      // pesan error ada di bawah bingkai kamera → gulir agar terlihat
+      setTimeout(() => document.querySelector('.capture .alert--err')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
     } finally {
       setBusy(false);
     }
@@ -321,8 +331,44 @@ function CaptureStep({ role, info, ch, onDone, onRestart }) {
             <span className="hud-chip">{now.toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta' })}</span>
           </div>
         )}
-        {!photo && <p className="viewfinder__hint">Posisikan wajah di dalam bingkai</p>}
+
+        {/* Tombol ada DI DALAM bingkai kamera agar tidak perlu scroll */}
+        <div className={`viewfinder__actions ${photo ? 'viewfinder__actions--below' : ''}`}>
+          {!photo ? (
+            <>
+              <span className={`vf-note ${geo.error || (area && !area.inside) ? 'vf-note--err' : !gpsReady || area?.review ? 'vf-note--warn' : ''}`}>
+                {geo.error ? 'GPS tidak tersedia'
+                  : !gpsReady ? 'Mengunci sinyal GPS…'
+                    : !area ? 'Memeriksa lokasi…'
+                      : !area.inside ? `Di luar area venue${area.distance_m != null ? ` (${area.distance_m >= 1000 ? `${(area.distance_m / 1000).toFixed(1)} km` : `${area.distance_m} m`})` : ''}`
+                        : area.review ? `${area.venue} · akurasi rendah` : `Posisikan wajah di bingkai · ${area.venue}`}
+              </span>
+              <button type="button" className="shutter" onClick={capture} disabled={!gpsReady || !!geo.error}
+                aria-label="Ambil foto"><Icon name="camera" size={30} /></button>
+            </>
+          ) : (
+            <>
+              {ch.require_venue_code && (
+                <label className="vf-code">
+                  <span>Kode venue dari layar panitia</span>
+                  <input inputMode="numeric" maxLength={6} value={venueCode} placeholder="000000" autoFocus
+                    onChange={(e) => setVenueCode(e.target.value.replace(/\D/g, ''))} className="input-code" />
+                </label>
+              )}
+              <div className="vf-buttons">
+                <button className="btn" onClick={() => { setPhoto(null); setError(null); }} disabled={busy}>
+                  <Icon name="refresh" size={18} /> Ulangi
+                </button>
+                <button className="btn btn--primary" onClick={submit}
+                  disabled={busy || (ch.require_venue_code && venueCode.length !== 6)}>
+                  {busy ? <><Spinner /> Mengirim…</> : <><Icon name="check" size={18} /> Kirim Absensi</>}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
+      {error && <div className="alert alert--err"><Icon name="alert" size={18} /><div>{error}</div></div>}
 
       <div className="status-grid">
         <div className={`status ${geo.error ? 'status--err' : !gpsReady ? 'status--wait' : lowAcc ? 'status--warn' : 'status--ok'}`}>
@@ -345,7 +391,7 @@ function CaptureStep({ role, info, ch, onDone, onRestart }) {
       {!photo && gpsReady && !geo.error && (
         <div className="recheck">
           <button type="button" className="link-btn" onClick={checkArea} disabled={checking}>
-            <Icon name="refresh" size={14} />{checking ? 'Memeriksa lokasi…' : 'Cek ulang lokasi'}
+            {checking ? <><Spinner size={13} /> Memeriksa lokasi…</> : <><Icon name="refresh" size={14} />Cek ulang lokasi</>}
           </button>
         </div>
       )}
@@ -368,32 +414,6 @@ function CaptureStep({ role, info, ch, onDone, onRestart }) {
         </div>
       )}
 
-      {error && <div className="alert alert--err"><Icon name="alert" size={18} /><div>{error}</div></div>}
-
-      {!photo ? (
-        <button className="btn btn--primary btn--lg btn--shutter" onClick={capture} disabled={!gpsReady || !!geo.error}>
-          <Icon name="camera" size={22} /> {gpsReady ? 'Ambil Foto' : 'Mengunci sinyal GPS…'}
-        </button>
-      ) : (
-        <>
-          {ch.require_venue_code && (
-            <label className="form code-field">
-              <span><Icon name="monitor" size={16} /> Kode venue dari layar panitia{area?.inside ? ` ${area.venue}` : ''}</span>
-              <input inputMode="numeric" maxLength={6} value={venueCode} placeholder="000000" autoFocus
-                onChange={(e) => setVenueCode(e.target.value.replace(/\D/g, ''))} className="input-code" />
-            </label>
-          )}
-          <div className="row">
-            <button className="btn" onClick={() => { setPhoto(null); setError(null); }} disabled={busy}>
-              <Icon name="refresh" size={18} /> Ulangi
-            </button>
-            <button className="btn btn--primary" onClick={submit}
-              disabled={busy || (ch.require_venue_code && venueCode.length !== 6)}>
-              {busy ? 'Mengirim…' : <><Icon name="check" size={18} /> Kirim Absensi</>}
-            </button>
-          </div>
-        </>
-      )}
       <button className="link" onClick={onRestart}>Batal</button>
     </div>
   );

@@ -4,6 +4,7 @@ import { api, adminUrl } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
 import { MapModal } from '../../components/MapEmbed.jsx';
 import { fmtDT, FLAG_LABEL } from './shared.js';
+import { SkelCards } from '../../components/Skeleton.jsx';
 
 const ST_LABEL = { valid: 'Valid', review: 'Perlu dicek', ditolak: 'Ditolak' };
 const PAGE = 48;
@@ -17,7 +18,7 @@ export default function Records() {
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [counts, setCounts] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [attempts, setAttempts] = useState([]);
   const [tab, setTab] = useState('absen');
   const [zoom, setZoom] = useState(null);
@@ -35,6 +36,7 @@ export default function Records() {
     api('/admin/sessions', { admin: true }).then((s) => {
       setSessions(s);
       if (!sid && s.length) setParams({ sesi: (s.find((x) => x.is_open) || s[s.length - 1]).id });
+      if (!s.length) setLoading(false);
     });
   }, []);
 
@@ -91,13 +93,15 @@ export default function Records() {
         <button className={tab === 'blok' ? 'on' : ''} onClick={() => setTab('blok')}>Percobaan diblokir ({attempts.length})</button>
       </div>
 
+      {tab === 'absen' && loading && !rows.length && <div className="grid"><SkelCards n={4} h={200} /></div>}
       {tab === 'absen' && (
-        <div className="grid">
+        <div className="grid" style={loading && rows.length ? { opacity: 0.5, transition: 'opacity .2s' } : undefined}>
           {rows.map((r) => (
             <div key={r.id} className={`rec rec--${r.status}`}>
               <div>
-                {r.method === 'qr'
-                  ? <div className="rec__qr"><Icon name="qr" size={40} /><b>Scan QR</b><small>{r.scanned_by || 'LO / panitia'}</small></div>
+                {r.method && r.method !== 'selfie'
+                  ? <div className="rec__qr"><Icon name={r.method === 'qr' ? 'qr' : 'users'} size={40} />
+                    <b>{r.method === 'qr' ? 'Scan QR' : 'Diabsenkan LO'}</b><small>{r.scanned_by || 'LO / panitia'}</small></div>
                   : <img src={r.photo_url || adminUrl(`/photo/${r.id}`)} alt={r.name} loading="lazy" title="Klik untuk memperbesar"
                     onClick={() => setZoom(r.photo_url || adminUrl(`/photo/${r.id}`))} />}
               </div>
@@ -105,7 +109,7 @@ export default function Records() {
                 <div className="rec__name">{r.name} <span className={`tag tag--${r.role}`}>{r.role}</span></div>
                 <div className="muted small">{r.code} · {r.institution || '-'}</div>
                 {r.venue_name && <div><span className="tag tag--venue">{r.venue_name}</span></div>}
-                {r.lat == null ? <div className="small">{fmtDT(r.created_at)} WIB · dipindai {r.scanned_by || 'LO'}</div> : <>
+                {r.lat == null ? <div className="small">{fmtDT(r.created_at)} WIB · {r.method === 'qr' ? 'dipindai' : 'diabsenkan'} {r.scanned_by || 'LO'}</div> : <>
                 <div className="small">{fmtDT(r.created_at)} WIB · {dist(r.distance_m)} dari venue · akurasi ±{Math.round(r.accuracy_m)} m</div>
                 <div className="rec__geo">{Number(r.lat).toFixed(6)}, {Number(r.lng).toFixed(6)}</div>
                 <button type="button" className="link-btn" onClick={() => setMapPoint({
@@ -126,7 +130,7 @@ export default function Records() {
               </div>
             </div>
           ))}
-          {!rows.length && <p className="muted">{loading ? 'Memuat…' : 'Belum ada data.'}</p>}
+          {!rows.length && !loading && <p className="muted">Belum ada data.</p>}
         </div>
       )}
       {tab === 'absen' && pages > 1 && (

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
+import { Skel, SkelRows, SkelLines, Spinner } from '../../components/Skeleton.jsx';
 
 // urutan alami: LO2-01 sebelum LO10-01, tanpa peduli huruf besar/kecil
 const cmp = (a, b) => String(a ?? '').localeCompare(String(b ?? ''), 'id', { numeric: true, sensitivity: 'base' });
@@ -22,6 +23,7 @@ export default function People() {
   const [role, setRole] = useState('peserta');
   const [search, setSearch] = useState('');
   const [list, setList] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [venues, setVenues] = useState([]);
   const [form, setForm] = useState(blank);
   const [csv, setCsv] = useState('');
@@ -36,7 +38,7 @@ export default function People() {
   const [sort, setSort] = useState({ key: 'code', dir: 1 });
 
   useEffect(() => { api('/admin/venues', { admin: true }).then(setVenues); }, []);
-  const load = () => api(`/admin/people?role=${role}&q=${encodeURIComponent(search)}`, { admin: true }).then(setList);
+  const load = () => { setLoading(true); return api(`/admin/people?role=${role}&q=${encodeURIComponent(search)}`, { admin: true }).then(setList).finally(() => setLoading(false)); };
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [role, search]);
   const f = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
@@ -70,7 +72,7 @@ export default function People() {
     load();
   }
 
-  const switchRole = (r) => { setRole(r); setForm({ ...blank, role: r }); resetFilters(); };
+  const switchRole = (r) => { if (r !== role) setList([]); setRole(r); setForm({ ...blank, role: r }); resetFilters(); };
   const resetFilters = () => { setFVenue(''); setFPos(''); setFRegion(''); setFRoom(''); setFProv(''); };
 
   // pilihan filter diambil dari data yang ada
@@ -97,6 +99,12 @@ export default function People() {
 
   // CSV berisi link QR pribadi + link WhatsApp siap kirim (mengikuti filter yang aktif)
   function exportQrLinks() {
+    const missing = shown.filter((p) => !p.qr_token).length;
+    if (missing === shown.length) {
+      setMsg({ err: true, text: 'Token QR belum ada di database. Jalankan "npm run migrate" di folder server (database produksi), lalu muat ulang halaman ini.' });
+      return;
+    }
+    if (missing) setMsg({ warn: true, text: `${missing} orang belum punya token QR dan tidak ikut diekspor. Jalankan "npm run migrate" lalu ekspor ulang.` });
     const esc = (x) => `"${String(x ?? '').replace(/"/g, '""')}"`;
     const waNum = (ph) => {
       const d = String(ph || '').replace(/\D/g, '');
@@ -184,7 +192,7 @@ export default function People() {
           </label>
           <textarea rows={8} value={csv} onChange={(e) => setCsv(e.target.value)}
             placeholder={`…atau tempel isi CSV / salin dari Excel di sini\n\nkode,nama,peran,instansi,jabatan,telepon,venue\nP-001,Siti Aminah,peserta,SDN 1 Contoh,Kepala Sekolah,0812...,${venues[0]?.name || 'Hotel A'}`} />
-          <button className="btn btn--primary" onClick={importCsv} disabled={busy || !csv.trim()}><Icon name="download" size={18} />{busy ? 'Mengimpor…' : 'Impor'}</button>
+          <button className="btn btn--primary" onClick={importCsv} disabled={busy || !csv.trim()}><Icon name="download" size={18} />{busy ? <><Spinner /> Mengimpor…</> : 'Impor'}</button>
         </div>
       </div>
       {msg && <div className={`alert ${msg.err ? 'alert--err' : msg.warn ? 'alert--warn' : 'alert--ok'}`} style={{ marginBottom: 12 }}>{msg.text}</div>}
@@ -225,7 +233,7 @@ export default function People() {
           ])}
         </select>
         {filtered && <button className="btn btn--sm" onClick={resetFilters}><Icon name="x" size={14} />Reset filter</button>}
-        <span className="muted">{filtered ? `${shown.length} dari ${list.length}` : list.length} orang</span>
+        <span className="muted">{loading ? <><Spinner size={14} /> Memuat…</> : <>{filtered ? `${shown.length} dari ${list.length}` : list.length} orang</>}</span>
         <button className="btn btn--sm" onClick={exportQrLinks} disabled={!shown.length} title="CSV berisi link QR pribadi & link WhatsApp untuk orang yang tampil">
           <Icon name="share" size={14} />Ekspor link QR (WA)</button>
       </div>
@@ -234,7 +242,7 @@ export default function People() {
           <Th k="code">Kode</Th><Th k="name">Nama</Th><Th k="position">Jabatan</Th><Th k="institution">Instansi / Sekolah</Th>
           <Th k="kab_kota">Wilayah</Th><Th k="ruangan">Ruangan</Th><Th k="venue_name">Venue</Th><th></th>
         </tr></thead>
-        <tbody>
+        <tbody style={loading && list.length ? { opacity: 0.55, transition: 'opacity .2s' } : undefined}>
           {shown.slice(0, limit).map((p) => (
             <tr key={p.id}>
               <td className="nowrap"><code>{p.code}</code></td>
@@ -254,7 +262,8 @@ export default function People() {
               </div></td>
             </tr>
           ))}
-          {!shown.length && <tr><td colSpan={8} className="muted">{list.length ? 'Tidak ada yang cocok dengan filter.' : 'Belum ada data.'}</td></tr>}
+          {loading && !list.length && <SkelRows rows={8} cols={8} />}
+          {!loading && !shown.length && <tr><td colSpan={8} className="muted">{list.length ? 'Tidak ada yang cocok dengan filter.' : 'Belum ada data.'}</td></tr>}
         </tbody>
       </table>
       {shown.length > limit && (

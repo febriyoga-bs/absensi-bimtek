@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
 import { fmtDT, toLocalInput } from './shared.js';
+import { Skel, SkelRows, SkelLines, Spinner } from '../../components/Skeleton.jsx';
 
 const blank = () => {
   const s = new Date(); s.setMinutes(0, 0, 0);
@@ -11,6 +12,7 @@ const blank = () => {
 
 export default function Sessions() {
   const [list, setList] = useState([]);
+  const [loaded, setLoaded] = useState(false);
   const [venues, setVenues] = useState([]);
   const [form, setForm] = useState(blank());
   const [err, setErr] = useState(null);
@@ -23,7 +25,7 @@ export default function Sessions() {
     requestAnimationFrame(() => { const el = typeRef.current; if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } });
   };
   const activeN = (form.type.match(/^Sesi Absensi (\d+) - /i) || [])[1];
-  const load = () => api('/admin/sessions', { admin: true }).then(setList);
+  const load = () => api('/admin/sessions', { admin: true }).then(setList).finally(() => setLoaded(true));
   useEffect(() => { load(); api('/admin/venues', { admin: true }).then(setVenues); }, []);
   const f = (k) => (e) => setForm({ ...form, [k]: e.target.value });
   const venueName = (id) => venues.find((v) => v.id === id)?.name || `#${id}`;
@@ -111,7 +113,8 @@ export default function Sessions() {
               </div></td>
             </tr>
           ))}
-          {!list.length && <tr><td colSpan={6} className="muted">Belum ada sesi.</td></tr>}
+          {!loaded && <SkelRows rows={5} cols={6} />}
+          {loaded && !list.length && <tr><td colSpan={6} className="muted">Belum ada sesi.</td></tr>}
         </tbody>
       </table>
     </>

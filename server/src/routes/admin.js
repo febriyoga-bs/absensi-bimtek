@@ -424,13 +424,15 @@ r.post('/scan', ah(async (req, res) => {
     throw new HttpError(400, `Sesi "${session.name}" tidak berlaku untuk venue ini.`, { person: brief });
   }
 
+  const method = token ? 'qr' : 'manual';
   const { rows: [ins] } = await q(
     `INSERT INTO attendance (person_id, session_id, venue_id, status, risk_score, flags, method, scanned_by, ip, user_agent)
-     VALUES ($1,$2,$3,'valid',0,$4,'qr',$5,$6,$7)
+     VALUES ($1,$2,$3,'valid',0,$4,$8,$5,$6,$7)
      ON CONFLICT (person_id, session_id) DO NOTHING
      RETURNING created_at`,
-    [person.id, session.id, venueId, JSON.stringify([{ code: 'qr_lo', detail: `Dipindai oleh ${scannedBy}` }]),
-      scannedBy, clientIp(req), String(req.get('user-agent') || '').slice(0, 300)]
+    [person.id, session.id, venueId,
+      JSON.stringify([{ code: 'qr_lo', detail: `${method === 'qr' ? 'Dipindai' : 'Diabsenkan'} oleh ${scannedBy}` }]),
+      scannedBy, clientIp(req), String(req.get('user-agent') || '').slice(0, 300), method]
   );
   const sess = { name: session.name, type: session.type };
   if (!ins) {
@@ -439,6 +441,61 @@ r.post('/scan', ah(async (req, res) => {
     throw new HttpError(409, 'Sudah absen di sesi ini.', { person: brief, session: sess, at: a?.created_at, status: a?.status, method: a?.method });
   }
   res.json({ ok: true, person: brief, session: sess, at: ins.created_at });
+}));
+
+/* ---------- LO: cari sekolah lalu absenkan pesertanya ---------- */
+// LO hanya melihat peserta venue-nya + peserta tanpa venue
+r.get('/schools', ah(async (req, res) => {
+  const term = String(req.query.q || '').trim();
+  if (term.length < 2) return res.json([]);
+  const v = req.user.role === 'lo' ? req.user.venue : null;
+  const { rows } = await q(
+    `SELECT * FROM (
+       SELECT DISTINCT ON (s.npsn) s.npsn, s.school, p.kab_kota
+       FROM people p,
+            LATERAL unnest(string_to_array(p.npsn, '; '), string_to_array(p.institution, '; ')) AS s(npsn, school)
+       WHERE p.role='peserta' AND p.npsn IS NOT NULL AND s.npsn IS NOT NULL
+         AND ($2::int IS NULL OR p.venue_id IS NULL OR p.venue_id=$2)
+         AND (s.school ILIKE '%'||$1||'%' OR s.npsn LIKE $1||'%' OR p.name ILIKE '%'||$1||'%')
+       ORDER BY s.npsn, (p.position ILIKE 'bendahara') DESC
+     ) x ORDER BY school LIMIT 20`,
+    [term, v]);
+  res.json(rows);
+}));
+
+r.get('/school/:npsn', ah(async (req, res) => {
+  const npsn = String(req.params.npsn || '').replace(/\D/g, '');
+  const lo = req.user.role === 'lo';
+  const { rows: people } = await q(
+    `SELECT p.id, p.code, p.name, p.position, p.npsn, p.institution, p.kab_kota, p.ruangan, p.venue_id, v.name AS venue_name
+     FROM people p LEFT JOIN venues v ON v.id=p.venue_id
+     WHERE p.role='peserta' AND $1 = ANY(string_to_array(replace(COALESCE(p.npsn,''), ' ', ''), ';'))
+     ORDER BY CASE WHEN p.position ILIKE 'kepala%' THEN 0 WHEN p.position ILIKE 'bendahara' THEN 1
+                   WHEN p.position ILIKE 'pengawas' THEN 2 ELSE 3 END, p.name`, [npsn]);
+  if (!people.length) throw new HttpError(404, 'Sekolah tidak ditemukan');
+  const { rows: [session] } = await q(
+    `SELECT * FROM sessions WHERE role IN ('peserta','semua') AND now() BETWEEN starts_at AND ends_at
+     ORDER BY starts_at LIMIT 1`);
+  const att = new Map();
+  if (session) {
+    const { rows } = await q(
+      'SELECT person_id, created_at, status, method FROM attendance WHERE session_id=$1 AND person_id = ANY($2::int[])',
+      [session.id, people.map((p) => p.id)]);
+    rows.forEach((a) => att.set(a.person_id, a));
+  }
+  const own = people.find((p) => p.npsn === npsn) || people[0];
+  const idx = String(own.npsn || '').split('; ').indexOf(npsn);
+  res.json({
+    npsn,
+    school: (idx >= 0 && String(own.institution || '').split('; ')[idx]) || own.institution,
+    kab_kota: own.kab_kota,
+    session: session ? { name: session.name, type: session.type } : null,
+    people: people.map(({ id, npsn: _n, institution: _i, kab_kota: _k, ...p }) => ({
+      ...p,
+      other_venue: lo && p.venue_id != null && p.venue_id !== req.user.venue,
+      attended: att.get(id) ? { at: att.get(id).created_at, status: att.get(id).status, method: att.get(id).method } : null,
+    })),
+  });
 }));
 
 /* ---------- Absensi ---------- */
@@ -551,7 +608,7 @@ r.get('/export', ah(async (req, res) => {
     x.code, x.name, x.role, x.institution, x.position, x.npsn, x.region, x.ruangan, x.provinsi,
     x.kab_kota, x.ptn, x.assigned_venue || 'Semua',
     x.status && x.status !== 'ditolak' ? 'Hadir' : 'Tidak hadir', x.status || '',
-    x.method === 'qr' ? 'Scan QR' : x.method ? 'Selfie + GPS' : '',
+    ({ qr: 'Scan QR (LO)', manual: 'Diabsenkan LO', selfie: 'Selfie + GPS' })[x.method] || '',
     fmt(x.created_at), x.venue || '', x.lat ?? '', x.lng ?? '',
     x.distance_m != null ? Math.round(x.distance_m) : '', x.accuracy_m != null ? Math.round(x.accuracy_m) : '',
     (x.flags || []).map((f) => f.detail).join('; '),

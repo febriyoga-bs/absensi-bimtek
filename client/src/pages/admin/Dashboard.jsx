@@ -4,10 +4,13 @@ import { api, adminUrl } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
 import { useVisiblePolling } from '../../lib/poll.js';
 import { fmtDT } from './shared.js';
+import { Skel, SkelCards } from '../../components/Skeleton.jsx';
 
 export default function Dashboard() {
   const { user, lo } = useOutletContext() || {};
-  const [sessions, setSessions] = useState([]);
+  const [data, setSessions] = useState(null);
+  const sessions = data || [];
+  const loading = !data;
   const [venues, setVenues] = useState(null);
   const [venueId, setVenueId] = useState(''); // filter venue (admin utama)
 
@@ -43,15 +46,16 @@ export default function Dashboard() {
       )}
 
       <div className="kpis">
-        <div className="kpi"><span className="kpi__icon"><Icon name="calendar" /></span><span><b>{open.length}</b><small>Sesi sedang dibuka</small></span></div>
-        <div className="kpi"><span className="kpi__icon"><Icon name="check" /></span><span><b>{sum('valid') + sum('review')}</b><small>Hadir di sesi aktif</small></span></div>
-        <div className="kpi"><span className="kpi__icon"><Icon name="alert" /></span><span><b>{sum('review')}</b><small>Perlu dicek</small></span></div>
+        <div className="kpi"><span className="kpi__icon"><Icon name="calendar" /></span><span><b>{loading ? <Skel w={40} h={26} /> : open.length}</b><small>Sesi sedang dibuka</small></span></div>
+        <div className="kpi"><span className="kpi__icon"><Icon name="check" /></span><span><b>{loading ? <Skel w={56} h={26} /> : sum('valid') + sum('review')}</b><small>Hadir di sesi aktif</small></span></div>
+        <div className="kpi"><span className="kpi__icon"><Icon name="alert" /></span><span><b>{loading ? <Skel w={40} h={26} /> : sum('review')}</b><small>Perlu dicek</small></span></div>
         {lo
           ? <div className="kpi"><span className="kpi__icon"><Icon name="pin" /></span><span><b style={{ fontSize: 16 }}>{user?.venue?.name}</b><small>Venue Anda</small></span></div>
-          : <div className="kpi"><span className="kpi__icon"><Icon name="pin" /></span><span><b>{activeVenues}</b><small>Venue aktif</small></span></div>}
+          : <div className="kpi"><span className="kpi__icon"><Icon name="pin" /></span><span><b>{!venues ? <Skel w={30} h={26} /> : activeVenues}</b><small>Venue aktif</small></span></div>}
       </div>
 
-      {!sessions.length && <p className="muted">Belum ada sesi{!lo && <> — <Link to="/admin/sesi">buat sesi</Link></>}.</p>}
+      {loading && <div className="stats"><SkelCards n={3} h={170} /></div>}
+      {!loading && !sessions.length && <p className="muted">Belum ada sesi{!lo && <> — <Link to="/admin/sesi">buat sesi</Link></>}.</p>}
       <div className="stats">
         {sessions.map((s) => {
           const hadir = s.valid + s.review;

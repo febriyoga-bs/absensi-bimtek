@@ -4,6 +4,7 @@ import jsQR from 'jsqr';
 import { api } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
 import { fmtDT } from './shared.js';
+import { Skel, Spinner } from '../../components/Skeleton.jsx';
 
 /** Bunyi singkat: nada tinggi = berhasil, nada rendah = gagal */
 function beep(ok) {
@@ -37,6 +38,15 @@ export default function Scan() {
   const [venues, setVenues] = useState([]);
   const [venueId, setVenueId] = useState('');
   const [manual, setManual] = useState('');
+  const [tab, setTab] = useState('qr'); // 'qr' | 'sekolah'
+  const [schoolQ, setSchoolQ] = useState('');
+  const [schoolOpts, setSchoolOpts] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [schoolLoading, setSchoolLoading] = useState(false);
+  const [openList, setOpenList] = useState(false);
+  const [school, setSchool] = useState(null);
+  const [schoolErr, setSchoolErr] = useState(null);
+  const [pending, setPending] = useState(null); // kode yang sedang diabsenkan
   const venueRef = useRef('');
   venueRef.current = venueId;
 
@@ -56,13 +66,40 @@ export default function Scan() {
     beep(r.kind === 'ok');
     setResult(r);
     setHistory((h) => [r, ...h].slice(0, 30));
+    return r;
     // jeda sebentar agar LO sempat membaca hasilnya
     setTimeout(() => { busyRef.current = false; }, 1200);
   }
 
-  // Kamera belakang + pemindaian QR (± 6 kali per detik)
+  // Autocomplete sekolah (nama sekolah / NPSN / nama peserta)
   useEffect(() => {
-    if (!running) return undefined;
+    if (tab !== 'sekolah' || schoolQ.trim().length < 2) { setSchoolOpts([]); return undefined; }
+    setSearching(true);
+    const t = setTimeout(() => {
+      api(`/admin/schools?q=${encodeURIComponent(schoolQ.trim())}`, { admin: true }).then(setSchoolOpts).catch(() => setSchoolOpts([]))
+        .finally(() => setSearching(false));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [schoolQ, tab]);
+
+  async function openSchool(npsn) {
+    setOpenList(false); setSchoolErr(null); setSchoolLoading(true);
+    try { setSchool(await api(`/admin/school/${npsn}`, { admin: true })); }
+    catch (e) { setSchoolErr(e.message); setSchool(null); }
+    finally { setSchoolLoading(false); }
+  }
+
+  async function absenkan(p) {
+    setPending(p.code);
+    await submit({ code: p.code });
+    busyRef.current = false;
+    await openSchool(school.npsn);
+    setPending(null);
+  }
+
+  // Kamera belakang + pemindaian QR (± 6 kali per detik); mati saat tab "Cari sekolah"
+  useEffect(() => {
+    if (!running || tab !== 'qr') return undefined;
     let stream; let timer; let stopped = false;
     (async () => {
       try {
@@ -99,24 +136,88 @@ export default function Scan() {
       }
     })();
     return () => { stopped = true; clearTimeout(timer); stream?.getTracks().forEach((t) => t.stop()); };
-  }, [running]);
+  }, [running, tab]);
 
   const K = result && KIND[result.kind];
 
   return (
     <>
       <div className="page-head">
-        <div><h2>Scan QR Peserta</h2>
+        <div><h2>Absenkan Peserta</h2>
           <p className="muted">
-            Arahkan kamera ke QR peserta. Absen otomatis tercatat di sesi yang sedang dibuka
+            Scan QR peserta atau cari sekolahnya. Absen langsung tercatat di sesi yang sedang dibuka
             {lo && user?.venue ? <> untuk venue <b>{user.venue.name}</b></> : ''}.
           </p></div>
-        <button className="btn" onClick={() => setRunning((x) => !x)}>
-          <Icon name={running ? 'x' : 'camera'} size={18} />{running ? 'Matikan kamera' : 'Nyalakan kamera'}
-        </button>
+        {tab === 'qr' && (
+          <button className="btn" onClick={() => setRunning((x) => !x)}>
+            <Icon name={running ? 'x' : 'camera'} size={18} />{running ? 'Matikan kamera' : 'Nyalakan kamera'}
+          </button>
+        )}
+      </div>
+      <div className="tabs">
+        <button className={tab === 'qr' ? 'on' : ''} onClick={() => setTab('qr')}><Icon name="qr" size={16} /> Scan QR</button>
+        <button className={tab === 'sekolah' ? 'on' : ''} onClick={() => setTab('sekolah')}><Icon name="school" size={16} /> Cari sekolah</button>
       </div>
 
       <div className="scan">
+        {tab === 'sekolah' && (
+          <div className="scan__cam card form">
+            <label className="ac">
+              <span>Sekolah</span>
+              <span className="input-icon">
+                <Icon name="school" />
+                <input value={schoolQ} autoFocus placeholder="Ketik nama sekolah, NPSN, atau nama peserta"
+                  onChange={(e) => { setSchoolQ(e.target.value); setOpenList(true); }}
+                  onFocus={() => setOpenList(true)} onBlur={() => setTimeout(() => setOpenList(false), 150)} />
+              </span>
+              {openList && schoolQ.trim().length >= 2 && (
+                <ul className="ac__list" role="listbox">
+                  {schoolOpts.map((o) => (
+                    <li key={o.npsn}><button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setSchoolQ(o.school); openSchool(o.npsn); }}>
+                      <b>{o.school}</b><small>NPSN {o.npsn}{o.kab_kota ? ` · ${o.kab_kota.split('; ')[0]}` : ''}</small>
+                    </button></li>
+                  ))}
+                  {searching && !schoolOpts.length && <li className="ac__empty"><Spinner size={14} /> Mencari…</li>}
+                  {!searching && !schoolOpts.length && <li className="ac__empty">Tidak ada sekolah yang cocok{lo ? ' di venue ini' : ''}.</li>}
+                </ul>
+              )}
+            </label>
+            {schoolErr && <div className="alert alert--err"><Icon name="alert" size={18} /><span>{schoolErr}</span></div>}
+            {schoolLoading && !school && (
+              <div className="school"><Skel h={56} r={10} /><Skel h={64} r={10} /><Skel h={64} r={10} /><Skel h={64} r={10} /></div>
+            )}
+            {school && (
+              <div className="school" style={schoolLoading && !pending ? { opacity: 0.55 } : undefined}>
+                <div className="npsn-pick__school"><Icon name="school" size={18} />
+                  <span><b>{school.school}</b><small>NPSN {school.npsn}{school.kab_kota ? ` · ${school.kab_kota.split('; ')[0]}` : ''}</small></span></div>
+                {!school.session && <div className="alert alert--warn"><Icon name="clock" size={18} /><span>Belum ada sesi peserta yang dibuka saat ini.</span></div>}
+                {school.session && <p className="muted small" style={{ margin: 0 }}>Sesi: <b>{school.session.type || school.session.name}</b></p>}
+                <ul className="school__people">
+                  {school.people.map((p) => (
+                    <li key={p.code}>
+                      <span className="school__who">
+                        <small>{p.position || 'Peserta'}</small>
+                        <b>{p.name}</b>
+                        <small className="muted">{p.code}{p.ruangan ? ` · ${p.ruangan}` : ''}{p.other_venue ? ` · venue: ${p.venue_name}` : ''}</small>
+                      </span>
+                      {p.attended ? (
+                        <span className="st st--valid" title={p.attended.method}>✓ {fmtDT(p.attended.at).split(', ').pop()}</span>
+                      ) : p.other_venue ? (
+                        <span className="muted small">Venue lain</span>
+                      ) : (
+                        <button className="btn btn--sm btn--primary" disabled={!school.session || pending === p.code} onClick={() => absenkan(p)}>
+                          {pending === p.code ? <><Spinner size={13} /> Menyimpan…</> : 'Absenkan'}
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === 'qr' && (
         <div className="scan__cam card">
           {!lo && (
             <label className="form" style={{ marginBottom: 12 }}>
@@ -140,6 +241,7 @@ export default function Scan() {
             <button className="btn btn--primary" disabled={!manual.trim()}>Catat</button>
           </form>
         </div>
+        )}
 
         <div className="scan__side">
           {result ? (

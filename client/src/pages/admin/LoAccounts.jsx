@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
 import { fmtDT } from './shared.js';
+import { Skel, SkelRows, SkelLines, Spinner } from '../../components/Skeleton.jsx';
 
 const blank = { id: null, name: '', username: '', password: '', venue_id: '', active: true };
 
@@ -16,12 +17,13 @@ function randomPassword() {
 
 export default function LoAccounts() {
   const [list, setList] = useState([]);
+  const [loaded, setLoaded] = useState(false);
   const [venues, setVenues] = useState([]);
   const [form, setForm] = useState(blank);
   const [msg, setMsg] = useState(null);
   const [shown, setShown] = useState(null); // kredensial yang baru dibuat → ditampilkan sekali
 
-  const load = () => api('/admin/lo', { admin: true }).then(setList);
+  const load = () => api('/admin/lo', { admin: true }).then(setList).finally(() => setLoaded(true));
   useEffect(() => { load(); api('/admin/venues', { admin: true }).then(setVenues); }, []);
   const f = (k) => (e) => setForm({ ...form, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value });
 
@@ -122,7 +124,8 @@ export default function LoAccounts() {
               </div></td>
             </tr>
           ))}
-          {!list.length && <tr><td colSpan={6} className="muted">Belum ada akun LO.</td></tr>}
+          {!loaded && <SkelRows rows={5} cols={6} />}
+          {loaded && !list.length && <tr><td colSpan={6} className="muted">Belum ada akun LO.</td></tr>}
         </tbody>
       </table>
       <p className="muted small">Link login LO: <code>{loginUrl}</code> → pilih tab <b>LO Venue</b>.</p>

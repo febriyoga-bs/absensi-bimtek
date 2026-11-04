@@ -7,7 +7,7 @@ import BrandMark from '../../components/BrandMark.jsx';
 // lo: true → menu juga tampil untuk LO venue
 const NAV = [
   { to: '/admin', end: true, icon: 'chart', label: 'Rekap', lo: true },
-  { to: '/admin/scan', icon: 'qr', label: 'Scan QR Peserta', lo: true },
+  { to: '/admin/scan', icon: 'qr', label: 'Absenkan Peserta', lo: true },
   { to: '/admin/absensi', icon: 'list', label: 'Verifikasi Absensi', lo: true },
   { to: '/admin/sesi', icon: 'calendar', label: 'Sesi & Jadwal' },
   { to: '/admin/orang', icon: 'users', label: 'Peserta & Panitia' },

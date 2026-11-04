@@ -5,6 +5,7 @@ import './styles.css';
 import Home from './pages/Home.jsx';
 import Absen from './pages/Absen.jsx';
 import Riwayat from './pages/Riwayat.jsx';
+import { TopLoader, Loading } from './components/Skeleton.jsx';
 // halaman QR memuat pustaka QR (± 160 kB) → dimuat terpisah agar halaman absen tetap ringan
 const QrCard = lazy(() => import('./pages/QrCard.jsx'));
 import AdminLayout from './pages/admin/AdminLayout.jsx';
@@ -22,7 +23,8 @@ const Scan = lazy(() => import('./pages/admin/Scan.jsx'));
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
-      <Suspense fallback={<p className="muted" style={{ padding: 24 }}>Memuat…</p>}>
+      <TopLoader />
+      <Suspense fallback={<p style={{ padding: 24 }}><Loading /></p>}>
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/absen/peserta" element={<Absen key="peserta" role="peserta" />} />

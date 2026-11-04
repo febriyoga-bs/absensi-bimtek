@@ -2,17 +2,19 @@ import { useEffect, useState } from 'react';
 import { api } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
 import { MapEmbed, MapModal, validCoord } from '../../components/MapEmbed.jsx';
+import { Skel, SkelRows, SkelLines, Spinner } from '../../components/Skeleton.jsx';
 
 const blank = { id: null, name: '', address: '', lat: '', lng: '', radius_m: 150, active: true };
 
 export default function Venues() {
   const [list, setList] = useState([]);
+  const [loaded, setLoaded] = useState(false);
   const [form, setForm] = useState(blank);
   const [msg, setMsg] = useState(null);
   const [locating, setLocating] = useState(false);
   const [mapPoint, setMapPoint] = useState(null);
 
-  const load = () => api('/admin/venues', { admin: true }).then(setList);
+  const load = () => api('/admin/venues', { admin: true }).then(setList).finally(() => setLoaded(true));
   useEffect(() => { load(); }, []);
   const f = (k) => (e) => setForm({ ...form, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value });
 
@@ -118,7 +120,8 @@ export default function Venues() {
               </div></td>
             </tr>
           ))}
-          {!list.length && <tr><td colSpan={7} className="muted">Belum ada venue.</td></tr>}
+          {!loaded && <SkelRows rows={4} cols={7} />}
+          {loaded && !list.length && <tr><td colSpan={7} className="muted">Belum ada venue.</td></tr>}
         </tbody>
       </table>
       <MapModal point={mapPoint} onClose={() => setMapPoint(null)} />

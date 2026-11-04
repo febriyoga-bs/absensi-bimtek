@@ -5,6 +5,7 @@ import { getDeviceId } from '../lib/device.js';
 import { fmtClock, fmtDate } from '../lib/time.js';
 import Icon from '../components/Icon.jsx';
 import BrandMark from '../components/BrandMark.jsx';
+import { Skel, SkelCards, Spinner } from '../components/Skeleton.jsx';
 
 const STATUS = {
   valid: { label: 'Tercatat', icon: 'check', cls: 'ok' },
@@ -48,7 +49,7 @@ export default function Riwayat() {
         <nav className="topbar">
           <Link to="/" className="topbar__back"><Icon name="left" size={18} /> Beranda</Link>
           <button className="topbar__link" onClick={load} disabled={loading} style={{ border: 0, font: 'inherit', cursor: 'pointer' }}>
-            <Icon name="refresh" size={16} /> {loading ? 'Memuat…' : 'Muat ulang'}
+            {loading ? <><Spinner size={14} /> Memuat…</> : <><Icon name="refresh" size={16} /> Muat ulang</>}
           </button>
         </nav>
         <div className="hero__body hero__body--compact">
@@ -70,7 +71,7 @@ export default function Riwayat() {
           )}
 
           {error && <div className="alert alert--err"><Icon name="alert" size={18} /><span>{error}</span></div>}
-          {!rows && !error && <p className="muted" style={{ textAlign: 'center' }}>Memuat riwayat…</p>}
+          {!rows && !error && <div style={{ display: 'grid', gap: 12 }}><Skel w="35%" h={14} /><SkelCards n={3} h={90} /></div>}
 
           {rows && rows.length === 0 && !error && (
             <div className="empty">

@@ -4,6 +4,7 @@ import QRCode from 'qrcode';
 import { api } from '../api.js';
 import Icon from '../components/Icon.jsx';
 import BrandMark from '../components/BrandMark.jsx';
+import { Skel } from '../components/Skeleton.jsx';
 
 /**
  * Kartu QR pribadi (link dikirim lewat WhatsApp). Peserta cukup menunjukkan
@@ -63,7 +64,7 @@ export default function QrCard() {
           {error && <div className="alert alert--err"><Icon name="alert" size={18} /><span>{error}</span></div>}
           {!error && (
             <>
-              <div className="qr-card__img">{img ? <img src={img} alt="QR absensi" /> : <span className="muted">Membuat QR…</span>}</div>
+              <div className="qr-card__img">{img ? <img src={img} alt="QR absensi" /> : <Skel w="100%" h="100%" r={10} />}</div>
               {p ? (
                 <div className="qr-card__info">
                   <b>{p.name}</b>
@@ -73,7 +74,7 @@ export default function QrCard() {
                     <span className="tag tag--venue"><Icon name="pin" size={13} /> {[p.venue, p.ruangan].filter(Boolean).join(' – ')}</span>
                   )}
                 </div>
-              ) : <p className="muted">Memuat data…</p>}
+              ) : <div className="qr-card__info" style={{ width: '70%' }}><Skel w="80%" h={20} /><Skel w="55%" /><Skel w="65%" h={12} /></div>}
               <ul className="checklist">
                 <li><Icon name="qr" size={18} /><span>Saat absen, <b>tunjukkan QR ini</b> ke LO / panitia untuk dipindai.</span></li>
                 <li><Icon name="info" size={18} /><span>QR ini <b>khusus untuk Anda</b>. Jangan dibagikan ke orang lain.</span></li>

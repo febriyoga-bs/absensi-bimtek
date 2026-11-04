@@ -23,7 +23,18 @@ export class ApiError extends Error {
   }
 }
 
-export async function api(path, { method = 'GET', body, admin = false } = {}) {
+// Jumlah permintaan API yang sedang berjalan → dipakai garis progres di atas layar
+let pending = 0;
+const listeners = new Set();
+const setPending = (d) => { pending += d; listeners.forEach((fn) => fn(pending)); };
+export const onPendingChange = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
+
+export async function api(path, opts = {}) {
+  setPending(1);
+  try { return await request(path, opts); } finally { setPending(-1); }
+}
+
+async function request(path, { method = 'GET', body, admin = false } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (admin) headers.Authorization = `Bearer ${adminToken.get()}`;
   let res;
