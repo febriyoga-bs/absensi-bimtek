@@ -5,7 +5,8 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 're
  * foto hanya bisa diambil langsung dari kamera saat itu juga, lalu diberi
  * watermark (nama, waktu, koordinat, kode unik) yang dibakar ke gambar.
  */
-const CameraCapture = forwardRef(function CameraCapture({ onReady }, ref) {
+const CameraCapture = forwardRef(function CameraCapture({ onReady, facing = 'user' }, ref) {
+  const mirror = facing === 'user';
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const [error, setError] = useState(null);
@@ -20,7 +21,7 @@ const CameraCapture = forwardRef(function CameraCapture({ onReady }, ref) {
       }
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 853 } },
+          video: { facingMode: { ideal: facing }, width: { ideal: 640 }, height: { ideal: 853 } },
           audio: false,
         });
         if (cancelled) return stream.getTracks().forEach((t) => t.stop());
@@ -43,7 +44,7 @@ const CameraCapture = forwardRef(function CameraCapture({ onReady }, ref) {
       cancelled = true;
       streamRef.current?.getTracks().forEach((t) => t.stop());
     };
-  }, []);
+  }, [facing]);
 
   useImperativeHandle(ref, () => ({
     /** @param {string[]} lines baris teks watermark */
@@ -56,9 +57,8 @@ const CameraCapture = forwardRef(function CameraCapture({ onReady }, ref) {
       c.width = w;
       c.height = h;
       const ctx = c.getContext('2d');
-      // cermin seperti tampilan selfie
-      ctx.translate(w, 0);
-      ctx.scale(-1, 1);
+      // cermin seperti tampilan selfie (kamera depan saja)
+      if (mirror) { ctx.translate(w, 0); ctx.scale(-1, 1); }
       ctx.drawImage(v, 0, 0, w, h);
       ctx.setTransform(1, 0, 0, 1, 0, 0);
 
@@ -90,7 +90,7 @@ const CameraCapture = forwardRef(function CameraCapture({ onReady }, ref) {
 
   if (error) return <div className="camera camera--error">{error}</div>;
   return (
-    <div className="camera">
+    <div className={`camera ${mirror ? '' : 'camera--rear'}`}>
       <video ref={videoRef} playsInline muted autoPlay />
       {!ready && <div className="camera__loading">Membuka kamera…</div>}
       <div className="camera__guide" />

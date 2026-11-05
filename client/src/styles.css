@@ -545,3 +545,16 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 @media (prefers-reduced-motion: reduce) { .skel, .spinner, .top-loader span { animation-duration: 3s; } }
 .session-box--skel { display: flex; gap: 12px; align-items: center; }
 .field-err { color: var(--err); font-weight: 600; font-size: 12.5px; }
+
+.camera--rear video { transform: none; }
+/* ===== LO: foto peserta saat diabsenkan ===== */
+.lo-shot { position: fixed; inset: 0; z-index: 1000; background: rgba(8,15,30,.72); display: grid; place-items: center; padding: 16px; }
+.lo-shot__card { width: min(100%, 440px); max-height: 100%; overflow: auto; background: var(--surface); border-radius: var(--radius); padding: 16px; display: grid; gap: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+.lo-shot__head { display: flex; gap: 10px; align-items: flex-start; }
+.lo-shot__head > span { flex: 1; display: grid; min-width: 0; }
+.lo-shot__head small { color: var(--muted); }
+.lo-shot .camera, .lo-shot .preview { max-height: 56vh; max-height: 56svh; }
+.lo-shot .preview { object-fit: contain; background: #0b1220; }
+.lo-shot__flip { position: absolute; top: 12px; right: 12px; z-index: 4; border: 0; border-radius: 99px; padding: 6px 10px; font: inherit; font-size: 12px; font-weight: 700;
+  color: #fff; background: rgba(0,0,0,.5); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.rec__by { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: var(--accent); background: var(--accent-soft); padding: 2px 8px; border-radius: 99px; width: fit-content; }

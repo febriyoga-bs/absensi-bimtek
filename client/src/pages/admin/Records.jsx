@@ -99,13 +99,14 @@ export default function Records() {
           {rows.map((r) => (
             <div key={r.id} className={`rec rec--${r.status}`}>
               <div>
-                {r.method && r.method !== 'selfie'
+                {!r.has_photo
                   ? <div className="rec__qr"><Icon name={r.method === 'qr' ? 'qr' : 'users'} size={40} />
                     <b>{r.method === 'qr' ? 'Scan QR' : 'Diabsenkan LO'}</b><small>{r.scanned_by || 'LO / panitia'}</small></div>
                   : <img src={r.photo_url || adminUrl(`/photo/${r.id}`)} alt={r.name} loading="lazy" title="Klik untuk memperbesar"
                     onClick={() => setZoom(r.photo_url || adminUrl(`/photo/${r.id}`))} />}
               </div>
               <div className="rec__body">
+                {r.method === 'manual' && r.has_photo && <span className="rec__by"><Icon name="users" size={13} /> Diabsenkan {r.scanned_by || 'LO'}</span>}
                 <div className="rec__name">{r.name} <span className={`tag tag--${r.role}`}>{r.role}</span></div>
                 <div className="muted small">{r.code} · {r.institution || '-'}</div>
                 {r.venue_name && <div><span className="tag tag--venue">{r.venue_name}</span></div>}

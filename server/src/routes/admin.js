@@ -7,7 +7,7 @@ import { ah, HttpError, venueCode, clientIp } from '../util.js';
 import {
   requireAdmin, requireSuper, signAdmin, checkAdminPassword, hashPassword, verifyPassword,
 } from '../auth.js';
-import { photoUrl } from '../storage.js';
+import { photoUrl, savePhoto } from '../storage.js';
 import { parsePeople, EXTRA_FIELDS } from '../peopleImport.js';
 
 const r = Router();
@@ -399,6 +399,8 @@ r.delete('/sessions/:id', requireSuper, ah(async (req, res) => {
 }));
 
 /* ---------- Scan QR peserta oleh LO / admin ---------- */
+// Absenkan lewat scan QR dinonaktifkan sementara (absen manual + foto tetap jalan). Ubah ke true untuk mengaktifkan lagi.
+const QR_SCAN_ENABLED = false;
 /**
  * Body: { qr } (isi QR: link /qr/<token> atau token saja) atau { code } (ketik manual),
  * opsional venue_id (admin utama). LO selalu tercatat di venue-nya sendiri.
@@ -408,6 +410,7 @@ r.post('/scan', ah(async (req, res) => {
   const code = String(req.body?.code || '').trim();
   const token = (raw.match(/([a-f0-9]{32})\s*$/i) || [])[1];
   if (!token && !code) throw new HttpError(400, 'QR tidak dikenali. Pastikan memindai QR absen peserta.');
+  if (token && !QR_SCAN_ENABLED) throw new HttpError(400, 'Absen lewat scan QR sedang dinonaktifkan. Gunakan Cari sekolah.');
   const { rows: [person] } = token
     ? await q('SELECT * FROM people WHERE qr_token=$1', [token.toLowerCase()])
     : await q('SELECT * FROM people WHERE lower(code)=lower($1)', [code]);
@@ -442,14 +445,29 @@ r.post('/scan', ah(async (req, res) => {
   }
 
   const method = token ? 'qr' : 'manual';
+  // Absen manual oleh LO (pilih sekolah / ketik kode) wajib menyertakan foto peserta dari kamera
+  let photoPath = null;
+  if (method === 'manual') {
+    const m = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(String(req.body?.photo || ''));
+    const buf = m && Buffer.from(m[1], 'base64');
+    if (!buf || buf.length < 4_000 || buf.length > 1_500_000 || buf[0] !== 0xff || buf[1] !== 0xd8) {
+      throw new HttpError(400, 'Foto peserta wajib diambil dari kamera.', { person: brief });
+    }
+    const { rows: [dup] } = await q('SELECT 1 FROM attendance WHERE person_id=$1 AND session_id=$2', [person.id, session.id]);
+    if (!dup) {
+      photoPath = await savePhoto(
+        `sesi-${session.id}/venue-${venueId || 0}/lo-${person.code.replace(/[^\w-]+/g, '_')}-${person.id}-${Date.now()}-${crypto.randomBytes(3).toString('hex')}.jpg`,
+        buf);
+    }
+  }
   const { rows: [ins] } = await q(
-    `INSERT INTO attendance (person_id, session_id, venue_id, status, risk_score, flags, method, scanned_by, ip, user_agent)
-     VALUES ($1,$2,$3,'valid',0,$4,$8,$5,$6,$7)
+    `INSERT INTO attendance (person_id, session_id, venue_id, status, risk_score, flags, method, scanned_by, ip, user_agent, photo_path)
+     VALUES ($1,$2,$3,'valid',0,$4,$8,$5,$6,$7,$9)
      ON CONFLICT (person_id, session_id) DO NOTHING
      RETURNING created_at`,
     [person.id, session.id, venueId,
       JSON.stringify([{ code: 'qr_lo', detail: `${method === 'qr' ? 'Dipindai' : 'Diabsenkan'} oleh ${scannedBy}` }]),
-      scannedBy, clientIp(req), String(req.get('user-agent') || '').slice(0, 300), method]
+      scannedBy, clientIp(req), String(req.get('user-agent') || '').slice(0, 300), method, photoPath]
   );
   const sess = { name: session.name, type: session.type };
   if (!ins) {
@@ -544,7 +562,7 @@ r.get('/attendance', ah(async (req, res) => {
     ),
   ]);
   // Signed URL R2 hanya untuk foto di halaman ini (bukan semua foto sesi)
-  const out = await Promise.all(rows.map(async ({ photo_path, ...x }) => ({ ...x, photo_url: photo_path ? await photoUrl(photo_path) : null })));
+  const out = await Promise.all(rows.map(async ({ photo_path, ...x }) => ({ ...x, photo_url: photo_path ? await photoUrl(photo_path) : null, has_photo: !!photo_path })));
   res.json({
     rows: out,
     total: status ? c[status] : c.total,

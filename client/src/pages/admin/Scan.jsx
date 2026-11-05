@@ -5,6 +5,11 @@ import { api } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
 import { fmtDT } from './shared.js';
 import { Skel, Spinner } from '../../components/Skeleton.jsx';
+import CameraCapture from '../../components/CameraCapture.jsx';
+
+// Absenkan lewat scan QR dinonaktifkan sementara. Ubah ke true untuk memunculkan lagi tab "Scan QR"
+// (server juga perlu QR_SCAN_ENABLED = true di server/src/routes/admin.js).
+const QR_SCAN_ENABLED = false;
 
 /** Bunyi singkat: nada tinggi = berhasil, nada rendah = gagal */
 function beep(ok) {
@@ -38,7 +43,7 @@ export default function Scan() {
   const [venues, setVenues] = useState([]);
   const [venueId, setVenueId] = useState('');
   const [manual, setManual] = useState('');
-  const [tab, setTab] = useState('qr'); // 'qr' | 'sekolah'
+  const [tab, setTab] = useState(QR_SCAN_ENABLED ? 'qr' : 'sekolah'); // 'qr' | 'sekolah'
   const [schoolQ, setSchoolQ] = useState('');
   const [schoolOpts, setSchoolOpts] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -47,6 +52,7 @@ export default function Scan() {
   const [school, setSchool] = useState(null);
   const [schoolErr, setSchoolErr] = useState(null);
   const [pending, setPending] = useState(null); // kode yang sedang diabsenkan
+  const [shot, setShot] = useState(null); // peserta yang sedang difoto sebelum diabsenkan
   const venueRef = useRef('');
   venueRef.current = venueId;
 
@@ -89,12 +95,21 @@ export default function Scan() {
     finally { setSchoolLoading(false); }
   }
 
-  async function absenkan(p) {
-    setPending(p.code);
-    await submit({ code: p.code });
+  // Pilih peserta → buka kamera → foto peserta → baru tercatat
+  function absenkan(p) {
+    setShot({ code: p.code, name: p.name, position: p.position, school: school?.school, fromSchool: true });
+  }
+
+  async function sendShot(photo) {
+    const target = shot;
+    setPending(target.code);
+    const r = await submit({ code: target.code, photo });
     busyRef.current = false;
-    await openSchool(school.npsn);
     setPending(null);
+    if (r.kind === 'err' && /foto/i.test(r.msg || '')) return r; // biarkan kamera terbuka untuk foto ulang
+    setShot(null);
+    if (target.fromSchool && school) openSchool(school.npsn);
+    return r;
   }
 
   // Kamera belakang + pemindaian QR (± 6 kali per detik); mati saat tab "Cari sekolah"
@@ -145,7 +160,7 @@ export default function Scan() {
       <div className="page-head">
         <div><h2>Absenkan Peserta</h2>
           <p className="muted">
-            Scan QR peserta atau cari sekolahnya. Absen langsung tercatat di sesi yang sedang dibuka
+            {QR_SCAN_ENABLED ? 'Scan QR peserta atau cari sekolahnya.' : 'Cari sekolah, pilih peserta, lalu foto pesertanya.'} Absen langsung tercatat di sesi yang sedang dibuka
             {lo && user?.venue ? <> untuk venue <b>{user.venue.name}</b></> : ''}.
           </p></div>
         {tab === 'qr' && (
@@ -154,10 +169,10 @@ export default function Scan() {
           </button>
         )}
       </div>
-      <div className="tabs">
+      {QR_SCAN_ENABLED && <div className="tabs">
         <button className={tab === 'qr' ? 'on' : ''} onClick={() => setTab('qr')}><Icon name="qr" size={16} /> Scan QR</button>
         <button className={tab === 'sekolah' ? 'on' : ''} onClick={() => setTab('sekolah')}><Icon name="school" size={16} /> Cari sekolah</button>
-      </div>
+      </div>}
 
       <div className="scan">
         {tab === 'sekolah' && (
@@ -217,7 +232,7 @@ export default function Scan() {
           </div>
         )}
 
-        {tab === 'qr' && (
+        {QR_SCAN_ENABLED && tab === 'qr' && (
         <div className="scan__cam card">
           {!lo && (
             <label className="form" style={{ marginBottom: 12 }}>
@@ -236,7 +251,7 @@ export default function Scan() {
             )}
           </div>
           <canvas ref={canvasRef} hidden />
-          <form className="row scan__manual" onSubmit={(e) => { e.preventDefault(); if (manual.trim()) { submit({ code: manual.trim() }); setManual(''); } }}>
+          <form className="row scan__manual" onSubmit={(e) => { e.preventDefault(); if (manual.trim()) { setShot({ code: manual.trim(), name: manual.trim() }); setManual(''); } }}>
             <input value={manual} onChange={(e) => setManual(e.target.value)} placeholder="Ketik kode manual (mis. B-20100001)" />
             <button className="btn btn--primary" disabled={!manual.trim()}>Catat</button>
           </form>
@@ -263,11 +278,11 @@ export default function Scan() {
               </div>
             </div>
           ) : (
-            <div className="card scan__result"><span className="muted">Belum ada QR yang dipindai.</span></div>
+            <div className="card scan__result"><span className="muted">Belum ada peserta yang diabsenkan.</span></div>
           )}
 
           <div className="card">
-            <h3 style={{ marginTop: 0 }}>Riwayat scan perangkat ini</h3>
+            <h3 style={{ marginTop: 0 }}>Riwayat absen dari perangkat ini</h3>
             {!history.length && <p className="muted small">Kosong.</p>}
             <ul className="scan__hist">
               {history.map((h) => (
@@ -281,6 +296,68 @@ export default function Scan() {
           </div>
         </div>
       </div>
+      {shot && <LoShot target={shot} lo={lo} user={user} busy={pending === shot.code} onSend={sendShot} onClose={() => setShot(null)} />}
     </>
+  );
+}
+
+/** Kamera untuk memotret peserta yang diabsenkan LO (default kamera belakang, bisa dibalik). */
+function LoShot({ target, user, busy, onSend, onClose }) {
+  const camRef = useRef(null);
+  const [facing, setFacing] = useState('environment');
+  const [photo, setPhoto] = useState(null);
+  const [err, setErr] = useState(null);
+
+  function capture() {
+    const lines = [
+      `${target.name}${target.position ? ` (${target.position})` : ''}`,
+      target.school || target.code,
+      `${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })} WIB${user?.venue ? ' • ' + user.venue.name : ''}`,
+      `Diabsenkan oleh ${user?.name || 'LO'}`,
+    ];
+    const img = camRef.current?.capture(lines);
+    if (!img) return setErr('Kamera belum siap.');
+    setErr(null); setPhoto(img);
+  }
+
+  async function send() {
+    const r = await onSend(photo);
+    if (r?.kind === 'err') { setErr(r.msg); setPhoto(null); }
+  }
+
+  return (
+    <div className="lo-shot" role="dialog" aria-modal="true" aria-label="Foto peserta">
+      <div className="lo-shot__card">
+        <div className="lo-shot__head">
+          <Icon name="camera" size={22} />
+          <span><b>Foto {target.name}</b><small>{[target.position, target.school].filter(Boolean).join(' · ') || 'Arahkan kamera ke wajah peserta'}</small></span>
+          <button type="button" className="btn btn--sm" onClick={onClose} disabled={busy} aria-label="Tutup"><Icon name="x" size={16} /></button>
+        </div>
+        <div className="viewfinder">
+          {photo ? <img src={photo} alt="Foto peserta" className="preview" /> : <CameraCapture key={facing} ref={camRef} facing={facing} />}
+          {!photo && (
+            <button type="button" className="lo-shot__flip" onClick={() => setFacing((f) => (f === 'user' ? 'environment' : 'user'))}>
+              <Icon name="refresh" size={14} /> {facing === 'user' ? 'Kamera belakang' : 'Kamera depan'}
+            </button>
+          )}
+          <div className={`viewfinder__actions ${photo ? 'viewfinder__actions--below' : ''}`}>
+            {!photo ? (
+              <>
+                <span className="vf-note">Pastikan wajah peserta terlihat jelas</span>
+                <button type="button" className="shutter" onClick={capture} aria-label="Ambil foto"><Icon name="camera" size={30} /></button>
+              </>
+            ) : (
+              <div className="vf-buttons">
+                <button className="btn" onClick={() => setPhoto(null)} disabled={busy}><Icon name="refresh" size={18} /> Ulangi</button>
+                <button className="btn btn--primary" onClick={send} disabled={busy}>
+                  {busy ? <><Spinner /> Menyimpan…</> : <><Icon name="check" size={18} /> Absenkan</>}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+        {err && <div className="alert alert--err"><Icon name="alert" size={18} /><span>{err}</span></div>}
+      </div>
+    </div>
   );
 }
