@@ -47,7 +47,9 @@ async function request(path, { method = 'GET', body, admin = false } = {}) {
   if (!res.ok) {
     if (admin && res.status === 401) {
       adminToken.clear();
-      window.location.href = '/admin/login';
+      const next = window.location.pathname + window.location.search;
+      window.location.href = next.startsWith('/admin/absensi/foto/')
+        ? `/admin/login?next=${encodeURIComponent(next)}` : '/admin/login';
     }
     throw new ApiError(res.status, data);
   }

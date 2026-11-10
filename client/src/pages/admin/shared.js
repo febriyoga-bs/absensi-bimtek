@@ -1,6 +1,19 @@
 export const fmtDT = (d) =>
   new Date(d).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' });
 
+export const checkInDayLabel = (day) => `${day.label} · ${day.shortDate} ${day.date.slice(0, 4)}`;
+
+export function sessionTitle(session) {
+  if (session?.check_in_day) return checkInDayLabel(session.check_in_day);
+  return session?.name || session?.type || '—';
+}
+
+export function arrivalBadge(status) {
+  if (status === 'sedang_antre') return ['Sedang antre', 'tag--venue'];
+  if (status === 'selesai' || status === 'sudah_tiba') return ['Sudah tiba', 'tag--arrival'];
+  return ['Belum terdata', 'tag--off'];
+}
+
 export const FLAG_LABEL = {
   qr_lo: 'Diabsenkan LO / panitia',
   akurasi_rendah: 'Akurasi GPS rendah — cek manual',

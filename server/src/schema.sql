@@ -77,6 +77,12 @@ CREATE TABLE IF NOT EXISTS attempt_logs (
 -- ===== Multi venue (migrasi aman dijalankan berulang) =====
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS organizer   TEXT NOT NULL DEFAULT '';
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS event_dates TEXT NOT NULL DEFAULT '';
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS one_official_session_per_day BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS is_test BOOLEAN;
+UPDATE sessions SET is_test = concat_ws(' ', name, type) ~* '(^|[^[:alnum:]])(test|tes|uji[[:space:]]+coba)([^[:alnum:]]|$)'
+WHERE is_test IS NULL;
+ALTER TABLE sessions ALTER COLUMN is_test SET DEFAULT FALSE, ALTER COLUMN is_test SET NOT NULL;
 
 CREATE TABLE IF NOT EXISTS venues (
   id          SERIAL PRIMARY KEY,

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { api, adminToken, adminUser } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
 import BrandMark from '../../components/BrandMark.jsx';
@@ -11,6 +11,7 @@ export default function Login() {
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   const nav = useNavigate();
+  const { state, search } = useLocation();
 
   async function submit(e) {
     e.preventDefault();
@@ -21,7 +22,8 @@ export default function Login() {
       const { token, user } = await api('/admin/login', { method: 'POST', body });
       adminToken.set(token);
       adminUser.set(user);
-      nav('/admin');
+      const next = state?.next ?? new URLSearchParams(search).get('next');
+      nav(typeof next === 'string' && /^\/admin(?:\/|\?|$)/.test(next) ? next : '/admin', { replace: true });
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   }
 
@@ -30,7 +32,7 @@ export default function Login() {
   return (
     <div className="login">
       <form className="card form" onSubmit={submit}>
-        <span className="brand"><BrandMark size={44} /><span className="brand__text">Dashboard BIMTEK<small>Kemendikdasmen</small></span></span>
+        <span className="brand"><BrandMark size={44} /><span className="brand__text">Dashboard LO<small>BIMTEK Revitalisasi SD</small></span></span>
         <div className="seg" role="tablist">
           <button type="button" role="tab" className={mode === 'lo' ? 'on' : ''} onClick={() => switchMode('lo')}>
             <Icon name="pin" size={16} />LO Venue
@@ -45,7 +47,7 @@ export default function Login() {
               autoFocus autoCapitalize="none" autoComplete="username" placeholder="mis. LO1.Febriyoga" /></span>
           </label>
         )}
-        <label>Password
+        <label>Kata sandi
           <span className="input-icon"><Icon name="key" /><input type="password" value={pw} onChange={(e) => setPw(e.target.value)}
             autoFocus={mode === 'admin'} autoComplete="current-password" /></span>
         </label>
@@ -54,7 +56,7 @@ export default function Login() {
           {busy ? 'Masuk…' : 'Masuk'}
         </button>
         <p className="muted small" style={{ margin: 0, textAlign: 'center' }}>
-          {mode === 'lo' ? 'Masuk untuk mengelola absensi di venue yang ditugaskan.' : 'Kelola absensi, venue, akun LO, dan rekap pendampingan.'}
+          {mode === 'lo' ? 'Masuk untuk melihat binaan, memantau pelaporan, dan mencatat kehadiran di venue Anda.' : 'Masuk untuk mengelola kegiatan, akun LO, dan rekap lintas venue.'}
         </p>
         <Link to="/" className="link">← Kembali ke beranda</Link>
       </form>

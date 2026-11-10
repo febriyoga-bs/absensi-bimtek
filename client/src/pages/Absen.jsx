@@ -9,6 +9,7 @@ import CameraCapture from '../components/CameraCapture.jsx';
 import Icon from '../components/Icon.jsx';
 import BrandMark from '../components/BrandMark.jsx';
 import { Skel, Spinner } from '../components/Skeleton.jsx';
+import { sessionTitle } from './admin/shared.js';
 
 const ROLE = {
   peserta: { label: 'Peserta', icon: 'cap', placeholder: 'contoh: B-20100001 / P-20100001', field: 'Kode / Nomor Peserta' },
@@ -266,7 +267,7 @@ export function CaptureStep({ role, info, ch, onDone, onRestart, selfLo = false 
 
   function capture() {
     const lines = [
-      `${info?.event_name || 'BIMTEK'} • ${ch.session.name}`,
+      `${info?.event_name || 'BIMTEK'} • ${sessionTitle(ch.session)}`,
       `${ch.person.name} (${role})`,
       `${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })} WIB${area?.inside ? ' • ' + area.venue : ''}`,
       `${last.lat.toFixed(6)}, ${last.lng.toFixed(6)} ±${Math.round(last.accuracy)} m • #${ch.nonce}`,
@@ -317,7 +318,7 @@ export function CaptureStep({ role, info, ch, onDone, onRestart, selfLo = false 
           <small>{[ch.person.position, ch.person.institution].filter(Boolean).join(' · ') || ch.person.code}</small>
           {ch.person.ruangan && <small>Ruangan: <b>{formatRoom(ch.person.ruangan)}</b></small>}
         </span>
-        <span className="tag tag--type">{ch.session.type}</span>
+        <span className="tag tag--type">{sessionTitle(ch.session)}</span>
       </div>
 
       <div className="viewfinder">
@@ -416,12 +417,12 @@ export function Done({ result, role, onClose }) {
         <Icon name={ok ? 'check' : 'alert'} size={44} stroke={2.6} />
       </div>
       <h2>{ok ? 'Absensi berhasil!' : 'Absensi diterima'}</h2>
-      <p className="muted">{ok ? 'Terima kasih, kehadiran Anda sudah tercatat.' : 'Data Anda perlu diverifikasi panitia.'}</p>
+      <p className="muted">{ok ? 'Absensi Anda sudah tercatat.' : 'Absensi Anda perlu diperiksa oleh panitia.'}</p>
 
       <dl className="receipt">
         <div><dt>Nama</dt><dd>{result.name}</dd></div>
         <div><dt>Peran</dt><dd className="cap">{role}</dd></div>
-        <div><dt>Sesi</dt><dd>{result.session} <span className="tag tag--type">{result.session_type}</span></dd></div>
+        <div><dt>Sesi</dt><dd>{sessionTitle({ name: result.session, type: result.session_type, check_in_day: result.check_in_day })}</dd></div>
         <div><dt>Venue</dt><dd>{result.venue} <span className="muted small">· {result.distance_m} m</span></dd></div>
         <div><dt>Waktu</dt><dd>{fmtFull(result.at)}</dd></div>
         <div><dt>Status</dt><dd><span className={`status-tag status-tag--${result.status}`}>{ok ? 'Valid' : 'Menunggu verifikasi'}</span></dd></div>
@@ -434,7 +435,8 @@ export function Done({ result, role, onClose }) {
       )}
       <p className="muted small">Simpan bukti ini dengan screenshot bila diperlukan.</p>
       <div className="row">
-        <Link to="/riwayat" className="btn"><Icon name="clock" size={18} />Riwayat</Link>
+        {role === 'LO' ? <Link to="/admin" className="btn"><Icon name="chart" size={18} />Rekap Absensi</Link>
+          : <Link to="/riwayat" className="btn"><Icon name="clock" size={18} />Riwayat</Link>}
         <button className="btn btn--primary" onClick={onClose}>Selesai</button>
       </div>
     </div>

@@ -32,27 +32,27 @@ export default function ChangePassword() {
   return (
     <>
       <div className="page-head">
-        <div><h2>Ganti Password</h2>
+        <div><h2>Ganti Kata Sandi</h2>
           <p className="muted">Akun <b>{user?.name}</b>{user?.venue ? ` — ${user.venue.name}` : ''}</p></div>
       </div>
       <form className="card form" style={{ maxWidth: 480 }} onSubmit={submit}>
-        <label>Password lama
+        <label>Kata sandi lama
           <input type={type} value={f.old_password} onChange={set('old_password')} required autoComplete="current-password" />
         </label>
-        <label>Password baru
+        <label>Kata sandi baru
           <input type={type} value={f.new_password} onChange={set('new_password')} required minLength={8} autoComplete="new-password" />
           {tooShort && <small className="field-err">Minimal 8 karakter.</small>}
         </label>
-        <label>Ulangi password baru
+        <label>Ulangi kata sandi baru
           <input type={type} value={f.confirm} onChange={set('confirm')} required autoComplete="new-password" />
-          {mismatch && <small className="field-err">Tidak sama dengan password baru.</small>}
+          {mismatch && <small className="field-err">Kata sandi baru tidak cocok.</small>}
         </label>
         <label className="chip-check" style={{ width: 'fit-content' }}>
-          <input type="checkbox" checked={show} onChange={(e) => setShow(e.target.checked)} /> Tampilkan password
+          <input type="checkbox" checked={show} onChange={(e) => setShow(e.target.checked)} /> Tampilkan kata sandi
         </label>
         {msg && <div className={`alert ${msg.ok ? 'alert--ok' : 'alert--err'}`}><Icon name={msg.ok ? 'check' : 'alert'} size={18} /><span>{msg.text}</span></div>}
         <button className="btn btn--primary" disabled={busy || mismatch || tooShort || !f.old_password || !f.confirm}>
-          {busy ? <><Spinner /> Menyimpan…</> : <><Icon name="key" size={18} /> Simpan password baru</>}
+          {busy ? <><Spinner /> Menyimpan…</> : <><Icon name="key" size={18} /> Simpan kata sandi baru</>}
         </button>
       </form>
     </>

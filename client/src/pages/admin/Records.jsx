@@ -3,7 +3,7 @@ import { useOutletContext, useSearchParams } from 'react-router-dom';
 import { api, adminUrl } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
 import { MapModal } from '../../components/MapEmbed.jsx';
-import { fmtDT, FLAG_LABEL } from './shared.js';
+import { fmtDT, FLAG_LABEL, sessionTitle } from './shared.js';
 import { SkelCards } from '../../components/Skeleton.jsx';
 
 const ST_LABEL = { valid: 'Valid', review: 'Perlu dicek', ditolak: 'Ditolak', berhalangan: 'Mundur/Berhalangan Hadir' };
@@ -72,7 +72,7 @@ export default function Records() {
         <p className="muted">Absen bertanda kuning terdeteksi mencurigakan. Periksa fotonya, lalu sahkan atau tolak.</p></div></div>
       <div className="toolbar">
         <select value={sid} onChange={(e) => setParam('sesi', e.target.value)}>
-          {sessions.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.role})</option>)}
+          {sessions.map((s) => <option key={s.id} value={s.id}>{sessionTitle(s)} ({s.is_test ? 'Uji coba · ' : ''}{s.role})</option>)}
         </select>
         {!lo && venues.length > 1 && (
           <select value={venue} onChange={(e) => setParam('venue', e.target.value)}>

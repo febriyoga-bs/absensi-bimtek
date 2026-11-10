@@ -3,24 +3,7 @@ import { NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-route
 import { api, adminToken, adminUser } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
 import BrandMark from '../../components/BrandMark.jsx';
-
-// lo: true → menu juga tampil untuk LO venue
-const NAV = [
-  { to: '/admin', end: true, icon: 'chart', label: 'Rekap Absensi', lo: true },
-  { to: '/admin/kehadiran', end: true, icon: 'list', label: 'Rekap Kehadiran', lo: true },
-  { to: '/admin/pendampingan', end: true, icon: 'chart', label: 'Rekap Pendampingan', lo: true },
-  { to: '/admin/pelaporan', end: true, icon: 'chart', label: 'Pantau Pelaporan', lo: true },
-  { to: '/admin/pendampingan/saya', end: true, icon: 'list', label: 'Daftar Pendampingan', lo: true, loOnly: true },
-  { to: '/admin/scan', icon: 'users', label: 'Absenkan Peserta', lo: true },
-  { to: '/admin/absen-saya', end: true, icon: 'idcard', label: 'Absen Saya', lo: true, loOnly: true },
-  { to: '/admin/absensi', icon: 'list', label: 'Verifikasi Absensi', lo: true },
-  { to: '/admin/sesi', icon: 'calendar', label: 'Sesi & Jadwal' },
-  { to: '/admin/orang', icon: 'users', label: 'Peserta & Panitia' },
-  { to: '/admin/venue', icon: 'pin', label: 'Venue' },
-  { to: '/admin/lo', icon: 'idcard', label: 'Akun LO' },
-  { to: '/admin/pengaturan', icon: 'settings', label: 'Pengaturan' },
-  { to: '/admin/password', icon: 'key', label: 'Ganti Password', lo: true, loOnly: true },
-];
+import { dashboardMenu } from '../../lib/dashboardMenu.js';
 
 export default function AdminLayout() {
   const nav = useNavigate();
@@ -36,10 +19,10 @@ export default function AdminLayout() {
   }, []);
   useEffect(() => { setMenuOpen(false); }, [loc.pathname]);
 
-  if (!adminToken.get()) return <Navigate to="/admin/login" replace />;
+  if (!adminToken.get()) return <Navigate to="/admin/login" state={{ next: loc.pathname + loc.search }} replace />;
 
   const lo = user?.role === 'lo';
-  const items = NAV.filter((n) => (lo ? n.lo : !n.loOnly));
+  const items = dashboardMenu.filter((n) => (lo ? n.lo : !n.loOnly));
   // LO yang membuka menu admin utama lewat URL → kembalikan ke Rekap
   if (lo && !items.some((n) => (n.end ? loc.pathname === n.to : loc.pathname.startsWith(n.to)))) {
     return <Navigate to="/admin" replace />;
@@ -73,7 +56,7 @@ export default function AdminLayout() {
           )}
           {items.map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end} onClick={() => setMenuOpen(false)}>
-              <Icon name={n.icon} size={18} />{n.label}
+              <Icon name={n.icon} size={18} />{(!lo && n.adminLabel) || n.label}
             </NavLink>
           ))}
           <button className="link" onClick={() => { adminToken.clear(); nav('/admin/login'); }}>

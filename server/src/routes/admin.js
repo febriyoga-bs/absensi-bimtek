@@ -5,14 +5,15 @@ import fs from 'fs';
 import { q, getSettings, pool } from '../db.js';
 import { ah, HttpError, clientIp } from '../util.js';
 import {
-  requireAdmin, requireSuper, signAdmin, checkAdminPassword, hashPassword, verifyPassword,
+  requireAdmin, requireLo, requireSuper, signAdmin, checkAdminPassword, hashPassword, verifyPassword,
 } from '../auth.js';
 import { deletePhoto, photoUrl, savePhoto } from '../storage.js';
 import { parsePeople, EXTRA_FIELDS } from '../peopleImport.js';
 import { applyParticipantPlan, getParticipantPlan } from '../participantSync.js';
 import { getVenueAttendance, getVenueAttendanceDetails } from '../venueAttendance.js';
-import { getAssignmentAttendance } from '../assignmentAttendance.js';
+import { getAssignmentAttendance, getReportingSchoolAttendance } from '../assignmentAttendance.js';
 import { getReporting, importReporting } from '../reporting.js';
+import { reportingDates, reportingDays, withReportingDay } from '../reportingDays.js';
 import { getArrivalRecap, importArrivalRecap } from '../arrivalRecap.js';
 
 const r = Router();
@@ -27,6 +28,11 @@ const scopeVenue = (req) => {
   const v = Number(req.query.venue_id);
   return Number.isInteger(v) && v > 0 ? v : null;
 };
+function scopeDay(req) {
+  if (req.query.day == null || req.query.day === '') return null;
+  if (!reportingDates.includes(req.query.day)) throw new HttpError(400, 'Hari absensi tidak valid.');
+  return req.query.day;
+}
 
 /* ---------- Login (admin utama & LO venue) ---------- */
 const loginLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 20, skipSuccessfulRequests: true,
@@ -58,6 +64,9 @@ r.use(requireAdmin);
 r.get('/reporting', ah(async (req, res) => {
   res.json(await getReporting(req.query.dataset, req.user));
 }));
+r.get('/reporting/school/:npsn', ah(async (req, res) => {
+  res.json(await getReportingSchoolAttendance(req.params.npsn, req.user));
+}));
 r.post('/reporting/import', requireSuper, ah(async (req, res) => {
   res.json(await importReporting(req.body?.csv));
 }));
@@ -73,13 +82,13 @@ const publicLoAssignment = ({ account_id, venue_id, ...lo }) => lo;
 r.get('/assignments/detail', ah(async (req, res) => {
   const { type, venue, lo } = req.query;
   if ([type, venue, lo].some((value) => typeof value !== 'string')) throw new HttpError(400, 'Filter rincian rekap wajib diisi.');
-  res.json(await getAssignmentAttendance(type, venue, lo));
+  res.json(await getAssignmentAttendance(type, venue, lo, null, req.user));
 }));
 
 r.get('/assignments', ah(async (_req, res) => {
   const { rows: [roster] } = await q("SELECT data - 'participants' - 'attendance_assignments' - 'organizations' AS data FROM assignment_roster WHERE id=1");
   if (!roster) return res.json(null);
-  res.json({ ...roster.data, lo: roster.data.lo.map(publicLoAssignment) });
+  res.json({ ...roster.data, lo: roster.data.lo.map(publicLoAssignment), check_in_days: reportingDays });
 }));
 
 r.get('/assignments/mine', ah(async (req, res) => {
@@ -128,17 +137,46 @@ r.post('/me/password', loginLimiter, ah(async (req, res) => {
 
 /* ---------- Pengaturan acara (admin utama) ---------- */
 const publicSettings = ({ venue_secret, venue_name, venue_lat, venue_lng, radius_m, require_venue_code, ...s }) => s;
+const wibDays = (start, end) => `daterange((${start} AT TIME ZONE 'Asia/Jakarta')::date, (${end} AT TIME ZONE 'Asia/Jakarta')::date, '[]')`;
+
+// Serialize session changes and changes to the rule using the settings row.
+async function changeSchedule(fn) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: [settings] } = await client.query('SELECT * FROM settings WHERE id=1 FOR UPDATE');
+    const result = await fn(client, settings);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally { client.release(); }
+}
 
 r.get('/settings', requireSuper, ah(async (req, res) => res.json(publicSettings(await getSettings()))));
 
 r.put('/settings', requireSuper, ah(async (req, res) => {
   const b = req.body || {};
-  await q(
-    `UPDATE settings SET event_name=$1, organizer=$2, event_dates=$3, max_accuracy_m=$4 WHERE id=1`,
-    [String(b.event_name || '').trim() || 'BIMTEK Revitalisasi SD', String(b.organizer || '').trim(),
-      String(b.event_dates || '').trim(), Math.max(5, Number(b.max_accuracy_m) || 100)]
-  );
-  res.json(publicSettings(await getSettings()));
+  const settings = await changeSchedule(async (db, current) => {
+    const enabled = typeof b.one_official_session_per_day === 'boolean' ? b.one_official_session_per_day : current.one_official_session_per_day;
+    if (enabled && !current.one_official_session_per_day) {
+      const { rows: [conflict] } = await db.query(`SELECT a.name AS first, b.name AS second
+        FROM sessions a JOIN sessions b ON a.id<b.id
+        AND ${wibDays('a.starts_at', 'a.ends_at')} && ${wibDays('b.starts_at', 'b.ends_at')}
+        WHERE NOT a.is_test AND NOT b.is_test
+          AND LEAST(a.ends_at,b.ends_at) >= date_trunc('day', now() AT TIME ZONE 'Asia/Jakarta') AT TIME ZONE 'Asia/Jakarta'
+        ORDER BY a.starts_at,b.starts_at LIMIT 1`);
+      if (conflict) throw new HttpError(409, `Rapikan jadwal terlebih dahulu. Sesi "${conflict.first}" dan "${conflict.second}" memakai tanggal WIB yang sama.`);
+    }
+    const { rows: [updated] } = await db.query(
+      `UPDATE settings SET event_name=$1, organizer=$2, event_dates=$3, max_accuracy_m=$4,
+        one_official_session_per_day=$5 WHERE id=1 RETURNING *`,
+      [String(b.event_name || '').trim() || 'BIMTEK Revitalisasi SD', String(b.organizer || '').trim(),
+        String(b.event_dates || '').trim(), Math.max(5, Number(b.max_accuracy_m) || 100), enabled]);
+    return updated;
+  });
+  res.json(publicSettings(settings));
 }));
 
 /* ---------- Venue ---------- */
@@ -401,7 +439,7 @@ const inRosterAt = (time) => `(p.roster_added_at IS NULL OR p.roster_added_at <=
   AND (p.archived_at IS NULL OR p.archived_at > ${time})`;
 
 r.get('/venue-attendance', ah(async (req, res) => {
-  res.json(await getVenueAttendance(scopeVenue(req)));
+  res.json(await getVenueAttendance(scopeVenue(req), scopeDay(req)));
 }));
 
 r.get('/venue-attendance/:venueId/:group', ah(async (req, res) => {
@@ -410,7 +448,7 @@ r.get('/venue-attendance/:venueId/:group', ah(async (req, res) => {
     throw new HttpError(400, 'Venue tidak valid.');
   }
   if (req.user.role === 'lo' && venueId !== req.user.venue) throw new HttpError(403, 'Bukan venue Anda.');
-  res.json(await getVenueAttendanceDetails(venueId, req.params.group));
+  res.json(await getVenueAttendanceDetails(venueId, req.params.group, scopeDay(req)));
 }));
 
 /**
@@ -437,11 +475,13 @@ r.get('/sessions', ah(async (req, res) => {
           WHERE a.session_id=s.id AND a.status IN ('valid','review') AND ($1::int IS NULL OR a.venue_id=$1) GROUP BY v.name) x) AS by_venue,
        now() BETWEEN s.starts_at AND s.ends_at AS is_open
      FROM sessions s
-     WHERE $1::int IS NULL OR cardinality(COALESCE(s.venue_ids,'{}'))=0 OR $1 = ANY(s.venue_ids)
+     WHERE ($1::int IS NULL OR cardinality(COALESCE(s.venue_ids,'{}'))=0 OR $1 = ANY(s.venue_ids))
+       AND (NOT $2::boolean OR NOT s.is_test)
+       AND ($3::date IS NULL OR (NOT s.is_test AND (s.starts_at AT TIME ZONE 'Asia/Jakarta')::date=$3))
      ORDER BY starts_at`,
-    [v]
+    [v, req.query.official === '1', scopeDay(req)]
   );
-  res.json(rows);
+  res.json(rows.map(withReportingDay));
 }));
 
 function cleanSession(b) {
@@ -451,6 +491,7 @@ function cleanSession(b) {
     role: b.role, type: String(b.type ?? '').trim().replace(/\s+/g, ' ').replace(/\s*-\s*$/, '') || 'Sesi Absensi',
     starts_at: new Date(b.starts_at), ends_at: new Date(b.ends_at),
     venue_ids: ids.length ? ids : null,
+    is_test: b.is_test === true || /\b(?:test|tes|uji\s+coba)\b/i.test(String(b.name || '') + ' ' + String(b.type || '')),
   };
   if (!s.name) throw new HttpError(400, 'Nama sesi wajib diisi');
   if (!['peserta', 'panitia', 'semua'].includes(s.role)) throw new HttpError(400, 'Peran sesi tidak valid');
@@ -461,20 +502,30 @@ function cleanSession(b) {
   return s;
 }
 
+async function saveSession(s, id) {
+  return changeSchedule(async (db, settings) => {
+    if (settings.one_official_session_per_day && !s.is_test) {
+      const { rows: [conflict] } = await db.query(`SELECT name FROM sessions
+        WHERE NOT is_test AND id IS DISTINCT FROM $3::int
+          AND ${wibDays('starts_at', 'ends_at')} && ${wibDays('$1::timestamptz', '$2::timestamptz')}
+        ORDER BY starts_at LIMIT 1`, [s.starts_at, s.ends_at, id]);
+      if (conflict) throw new HttpError(409, `Sudah ada sesi resmi "${conflict.name}" pada tanggal WIB tersebut. Ubah jadwal yang ada atau pilih tanggal lain.`);
+    }
+    const values = [s.name, s.role, s.type, s.starts_at, s.ends_at, s.venue_ids, s.is_test];
+    const { rows: [session] } = id == null
+      ? await db.query('INSERT INTO sessions (name, role, type, starts_at, ends_at, venue_ids, is_test) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *', values)
+      : await db.query('UPDATE sessions SET name=$1, role=$2, type=$3, starts_at=$4, ends_at=$5, venue_ids=$6, is_test=$7 WHERE id=$8 RETURNING *', [...values, id]);
+    if (!session) throw new HttpError(404, 'Sesi tidak ditemukan.');
+    return session;
+  });
+}
+
 r.post('/sessions', requireSuper, ah(async (req, res) => {
-  const s = cleanSession(req.body || {});
-  const { rows } = await q(
-    'INSERT INTO sessions (name, role, type, starts_at, ends_at, venue_ids) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
-    [s.name, s.role, s.type, s.starts_at, s.ends_at, s.venue_ids]);
-  res.json(rows[0]);
+  res.json(await saveSession(cleanSession(req.body || {}), null));
 }));
 
 r.put('/sessions/:id', requireSuper, ah(async (req, res) => {
-  const s = cleanSession(req.body || {});
-  const { rows } = await q(
-    'UPDATE sessions SET name=$1, role=$2, type=$3, starts_at=$4, ends_at=$5, venue_ids=$6 WHERE id=$7 RETURNING *',
-    [s.name, s.role, s.type, s.starts_at, s.ends_at, s.venue_ids, req.params.id]);
-  res.json(rows[0]);
+  res.json(await saveSession(cleanSession(req.body || {}), req.params.id));
 }));
 
 r.delete('/sessions/:id', requireSuper, ah(async (req, res) => {
@@ -529,7 +580,7 @@ r.get('/scan/participants', ah(async (req, res) => {
   const assignedOnly = req.user.role === 'lo' && req.query.scope !== 'all';
   const { rows: [list] } = await q(
     `WITH matching AS (
-      SELECT p.id, p.role, p.code, p.name, p.position, p.institution, p.npsn, p.ruangan, p.venue_id, v.name AS venue_name,
+      SELECT p.id, p.role, p.code, p.name, p.position, p.phone, p.institution, p.npsn, p.ruangan, p.venue_id, v.name AS venue_name,
         arrival.marks->>p.id::text AS arrival_status
       FROM people p LEFT JOIN venues v ON v.id=p.venue_id
       LEFT JOIN venue_arrival_recap arrival ON arrival.venue_id=p.venue_id
@@ -544,14 +595,14 @@ r.get('/scan/participants', ah(async (req, res) => {
     ), page_rows AS (
       SELECT * FROM filtered ORDER BY name,id LIMIT $3 OFFSET $4
     ), details AS (
-      SELECT p.id, p.code, p.name, p.position, p.institution, p.npsn, p.ruangan, p.venue_name, p.arrival_status,
+      SELECT p.id, p.code, p.name, p.position, p.phone, p.institution, p.npsn, p.ruangan, p.venue_name, p.arrival_status,
         ${canCheckInForLo('$5', '$6')} AS can_check_in,
-        CASE WHEN s.id IS NOT NULL THEN json_build_object('id',s.id,'name',s.name,'type',s.type) END AS session,
+        CASE WHEN s.id IS NOT NULL THEN json_build_object('id',s.id,'name',s.name,'type',s.type,'starts_at',s.starts_at) END AS session,
         CASE WHEN a.id IS NOT NULL THEN json_build_object('at',a.created_at,'status',a.status,'method',a.method) END AS recorded
       FROM page_rows p
       LEFT JOIN LATERAL (
-        SELECT s.id,s.name,s.type FROM sessions s
-        WHERE s.role IN ('peserta','semua') AND now() BETWEEN s.starts_at AND s.ends_at
+        SELECT s.id,s.name,s.type,s.starts_at FROM sessions s
+        WHERE NOT s.is_test AND s.role IN ('peserta','semua') AND now() BETWEEN s.starts_at AND s.ends_at
           AND ${sessionApplies('p.venue_id')}
         ORDER BY s.starts_at,s.id LIMIT 1
       ) s ON true
@@ -569,9 +620,12 @@ r.get('/scan/participants', ah(async (req, res) => {
       ['present', 'arrived'].includes(req.query.arrival) ? req.query.arrival : '']);
   res.json({
     total: list.total, limit, venues: list.venues, arrival_summary: list.arrival_summary,
-    rows: list.rows.map(({ recorded, ...person }) => ({
+    rows: list.rows.map(({ recorded, phone, ...person }) => ({
       ...person,
+      session: withReportingDay(person.session),
       code: person.can_check_in ? person.code : undefined,
+      can_check_in: req.user.role === 'lo' && person.can_check_in,
+      phone: person.can_check_in && /^(bendahara|pengawas|fasil(?:itator)?(?:\s|$))/i.test(person.position || '') ? phone : undefined,
       unavailable: recorded?.status === 'berhalangan',
       attended: recorded?.status === 'berhalangan' ? null : recorded,
     })),
@@ -580,36 +634,28 @@ r.get('/scan/participants', ah(async (req, res) => {
 
 /**
  * Body: { qr } (isi QR: link /qr/<token> atau token saja) atau { code } (ketik manual),
- * opsional venue_id (admin utama). LO selalu tercatat di venue-nya sendiri.
+ * Absensi LO selalu tercatat di venue penugasannya.
  */
-r.post('/scan', ah(async (req, res) => {
+r.post('/scan', requireLo, ah(async (req, res) => {
   const raw = String(req.body?.qr || '').trim();
   const code = String(req.body?.code || '').trim();
   const token = (raw.match(/([a-f0-9]{32})\s*$/i) || [])[1];
   const unavailable = req.body?.unavailable === true;
   if (!token && !code) throw new HttpError(400, 'QR tidak dikenali. Pastikan memindai QR absen peserta.');
-  if (token && !QR_SCAN_ENABLED) throw new HttpError(400, 'Absen lewat scan QR sedang dinonaktifkan. Gunakan Cari sekolah.');
-  const lo = req.user.role === 'lo';
+  if (token && !QR_SCAN_ENABLED) throw new HttpError(400, 'Cari peserta melalui tabel Absenkan Peserta.');
   const { rows: [person] } = await q(
     `SELECT p.* FROM people p WHERE ${token ? 'p.qr_token=$1' : 'lower(p.code)=lower($1)'}
       AND p.archived_at IS NULL AND ${canCheckInForLo('$2', '$3')}`,
-    [token ? token.toLowerCase() : code, lo ? req.user.lo : null, lo ? req.user.venue : null]);
-  if (!person && lo) throw new HttpError(403, 'Peserta ini di luar cakupan absensi Anda.');
-  if (!person) throw new HttpError(404, token ? 'QR tidak terdaftar (mungkin QR lama/tidak valid).' : 'Kode tidak terdaftar.');
+    [token ? token.toLowerCase() : code, req.user.lo, req.user.venue]);
+  if (!person) throw new HttpError(403, 'Peserta ini di luar cakupan absensi Anda.');
   if (unavailable && (token || person.role !== 'peserta')) {
     throw new HttpError(400, 'Status berhalangan hanya bisa dicatat untuk peserta yang dipilih.');
   }
 
-  let scannedBy = 'Admin utama';
-  let venueId;
-  if (lo) {
-    const { rows: [acc] } = await q('SELECT name, active FROM lo_accounts WHERE id=$1', [req.user.lo]);
-    if (!acc?.active) throw new HttpError(401, 'Akun LO tidak aktif. Silakan login ulang.');
-    scannedBy = `LO ${acc.name}`;
-    venueId = req.user.venue;
-  } else {
-    venueId = Number(req.body?.venue_id) || person.venue_id || null;
-  }
+  const { rows: [acc] } = await q('SELECT name, active FROM lo_accounts WHERE id=$1', [req.user.lo]);
+  if (!acc?.active) throw new HttpError(401, 'Akun LO tidak aktif. Silakan login ulang.');
+  const scannedBy = `LO ${acc.name}`;
+  const venueId = req.user.venue;
   const brief = {
     name: person.name, code: person.code, role: person.role, position: person.position,
     institution: person.institution, ruangan: person.ruangan,
@@ -618,11 +664,12 @@ r.post('/scan', ah(async (req, res) => {
   if (requestedSession !== null && (!Number.isInteger(requestedSession) || requestedSession < 1 || requestedSession > 2147483647)) {
     throw new HttpError(400, 'Sesi tidak valid.');
   }
-  const { rows: [session] } = await q(
-    `SELECT id, name, type FROM sessions s WHERE role IN ($1,'semua') AND now() BETWEEN starts_at AND ends_at
+  const { rows: [sessionRow] } = await q(
+    `SELECT id, name, type, starts_at FROM sessions s WHERE NOT s.is_test AND role IN ($1,'semua') AND now() BETWEEN starts_at AND ends_at
      AND ${sessionApplies('$2::int')} AND ($3::int IS NULL OR id=$3)
      ORDER BY starts_at, id LIMIT 1`, [person.role, venueId, requestedSession]);
-  if (!session) throw new HttpError(400, 'Tidak ada sesi yang dibuka untuk peserta dan venue ini.', { person: brief });
+  if (!sessionRow) throw new HttpError(400, 'Tidak ada sesi yang dibuka untuk peserta dan venue ini.', { person: brief });
+  const session = withReportingDay(sessionRow);
 
   const method = token ? 'qr' : 'manual';
   const status = unavailable ? 'berhalangan' : 'valid';
@@ -661,7 +708,7 @@ r.post('/scan', ah(async (req, res) => {
   const { rows: [ins] } = await q(
     `INSERT INTO attendance (person_id, session_id, venue_id, status, flags, method, scanned_by, ip, user_agent, photo_path, participant_note)
      SELECT $1,s.id,$3,$4,$5,$6,$7,$8,$9,$10,$11 FROM sessions s
-     WHERE s.id=$2 AND now() BETWEEN s.starts_at AND s.ends_at AND ${sessionApplies('$3::int')}
+     WHERE s.id=$2 AND NOT s.is_test AND now() BETWEEN s.starts_at AND s.ends_at AND ${sessionApplies('$3::int')}
        AND EXISTS (SELECT 1 FROM people p WHERE p.id=$1 AND p.archived_at IS NULL AND ${canCheckInForLo('$12', '$3')})
      ON CONFLICT (person_id, session_id) DO UPDATE SET
        status=EXCLUDED.status, flags=EXCLUDED.flags, method=EXCLUDED.method, scanned_by=EXCLUDED.scanned_by,
@@ -672,7 +719,7 @@ r.post('/scan', ah(async (req, res) => {
      RETURNING created_at`,
     [person.id, session.id, venueId, status,
       JSON.stringify(unavailable ? [] : [{ code: 'qr_lo', detail: `${method === 'qr' ? 'Dipindai' : 'Diabsenkan'} oleh ${scannedBy}` }]),
-      method, scannedBy, clientIp(req), String(req.get('user-agent') || '').slice(0, 300), photoPath, note, lo ? req.user.lo : null]
+      method, scannedBy, clientIp(req), String(req.get('user-agent') || '').slice(0, 300), photoPath, note, req.user.lo]
   );
   if (!ins) {
     await deletePhoto(photoPath);
@@ -705,12 +752,12 @@ r.get('/schools', ah(async (req, res) => {
 async function scanPeople(req, condition, value) {
   const { rows: people } = await q(
     `SELECT p.code, p.name, p.position, p.npsn, p.institution, p.kab_kota, p.ruangan, p.venue_id, v.name AS venue_name,
-       CASE WHEN s.id IS NOT NULL THEN json_build_object('id',s.id,'name',s.name,'type',s.type) END AS session,
+       CASE WHEN s.id IS NOT NULL THEN json_build_object('id',s.id,'name',s.name,'type',s.type,'starts_at',s.starts_at) END AS session,
        CASE WHEN a.id IS NOT NULL THEN json_build_object('at',a.created_at,'status',a.status,'method',a.method) END AS recorded
      FROM people p LEFT JOIN venues v ON v.id=p.venue_id
      LEFT JOIN LATERAL (
-       SELECT s.id, s.name, s.type FROM sessions s
-       WHERE s.role IN ('peserta','semua') AND now() BETWEEN s.starts_at AND s.ends_at
+       SELECT s.id, s.name, s.type, s.starts_at FROM sessions s
+       WHERE NOT s.is_test AND s.role IN ('peserta','semua') AND now() BETWEEN s.starts_at AND s.ends_at
          AND ${sessionApplies('COALESCE($2::int,p.venue_id)')}
        ORDER BY s.starts_at, s.id LIMIT 1
      ) s ON true
@@ -725,6 +772,7 @@ async function scanPeople(req, condition, value) {
 function scanPersonResponse({ npsn, institution, kab_kota, recorded, ...person }) {
   return {
     ...person,
+    session: withReportingDay(person.session),
     unavailable: recorded?.status === 'berhalangan',
     attended: recorded?.status === 'berhalangan' ? null : recorded,
   };
@@ -840,6 +888,7 @@ r.get('/attempts', ah(async (req, res) => {
 }));
 
 r.get('/photo/:id', ah(async (req, res) => {
+  if (!/^\d{1,10}$/.test(req.params.id) || Number(req.params.id) > 2147483647) throw new HttpError(404, 'Foto tidak ditemukan.');
   await assertOwnAttendance(req, req.params.id);
   const { rows } = await q('SELECT photo_path FROM attendance WHERE id=$1', [req.params.id]);
   if (!rows[0]?.photo_path) return res.status(404).end();
@@ -851,7 +900,7 @@ r.get('/photo/:id', ah(async (req, res) => {
 }));
 
 /**
- * CSV bawaan berisi kehadiran valid dan perlu dicek.
+ * CSV bawaan berisi absensi valid dan perlu dicek.
  * include_all=true menambahkan peserta yang belum absen dan status lainnya.
  */
 r.get('/export', ah(async (req, res) => {
@@ -859,8 +908,9 @@ r.get('/export', ah(async (req, res) => {
   const { rows: [s] } = await q('SELECT * FROM sessions WHERE id=$1', [req.query.session_id]);
   if (!s) throw new HttpError(404, 'Sesi tidak ditemukan');
   const { rows } = await q(
-    `SELECT p.code, p.name, p.role, p.institution, p.position, pv.name AS assigned_venue,
+    `SELECT p.name, p.role, p.institution, p.position, pv.name AS assigned_venue,
             p.npsn, p.region, p.ruangan, p.provinsi, p.kab_kota, p.ptn,
+            a.id AS attendance_id, a.photo_path IS NOT NULL AS has_photo,
             a.status, a.created_at, av.name AS venue, a.lat, a.lng, a.distance_m, a.accuracy_m, a.flags, a.method, a.participant_note
      FROM people p
      LEFT JOIN venues pv ON pv.id=p.venue_id
@@ -878,20 +928,25 @@ r.get('/export', ah(async (req, res) => {
   const esc = (x) => `"${String(x ?? '').replace(/"/g, '""')}"`;
   const safeNote = (note) => note && /^(?:\s*[=+@-]|[\t\r\n])/.test(note) ? "'" + note : note;
   const fmt = (d) => d ? new Date(d).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) : '';
-  const header = ['Kode', 'Nama', 'Peran', 'Instansi / Sekolah', 'Jabatan', 'NPSN', 'Region', 'Ruangan', 'Provinsi',
-    'Kab/Kota', 'PTN', 'Venue Ditetapkan', 'Kehadiran', 'Status Verifikasi', 'Metode',
-    'Waktu (WIB)', 'Venue Absen', 'Latitude', 'Longitude', 'Jarak (m)', 'Akurasi (m)', 'Catatan', 'Catatan peserta'];
+  const header = ['Nama', 'Peran', 'Instansi / Sekolah', 'Jabatan', 'NPSN', 'Region', 'Ruangan', 'Provinsi',
+    'Kab/Kota', 'PTN', 'Venue Ditetapkan', 'Status Absensi', 'Status Verifikasi', 'Metode',
+    'Waktu (WIB)', 'Venue Absen', 'Latitude', 'Longitude', 'Jarak (m)', 'Akurasi (m)', 'Catatan', 'Catatan peserta', 'URL Foto'];
+  const host = req.get('host');
+  const origin = /^(?:[\w.-]+|\[[0-9a-f:]+\])(?::\d+)?$/i.test(host || '') ? `${req.secure ? 'https' : 'http'}://${host}` : '';
   const lines = rows.map((x) => [
-    x.code, x.name, x.role, x.institution, x.position, x.npsn, x.region, x.ruangan, x.provinsi,
+    x.name, x.role, x.institution, x.position, x.npsn, x.region, x.ruangan, x.provinsi,
     x.kab_kota, x.ptn, x.assigned_venue || 'Semua',
-    ['valid', 'review'].includes(x.status) ? 'Hadir' : x.status === 'berhalangan' ? 'Mundur/Berhalangan hadir' : 'Tidak hadir', x.status || '',
+    ({ valid: 'Sudah absen', review: 'Sudah absen', berhalangan: 'Mundur/Berhalangan Hadir', ditolak: 'Absensi ditolak' })[x.status] || 'Belum absen', x.status || '',
     ({ qr: 'Scan QR (LO)', manual: 'Diabsenkan LO', selfie: 'Selfie + GPS' })[x.method] || '',
     fmt(x.created_at), x.venue || '', x.lat ?? '', x.lng ?? '',
     x.distance_m != null ? Math.round(x.distance_m) : '', x.accuracy_m != null ? Math.round(x.accuracy_m) : '',
     (x.flags || []).map((f) => f.detail).join('; '),
     safeNote(x.participant_note),
+    x.has_photo && origin ? `${origin}/admin/absensi/foto/${x.attendance_id}` : '',
   ].map(esc).join(','));
-  const name = `absensi-${s.name}${venueName ? '-' + venueName : ''}`.replace(/[^\w-]+/g, '_') + '.csv';
+  const day = withReportingDay(s).check_in_day;
+  const title = day ? `${day.label} ${day.date}` : `absensi-${s.name}`;
+  const name = `${title}${venueName ? '-' + venueName : ''}`.replace(/[^\w-]+/g, '_') + '.csv';
   res.set('Content-Type', 'text/csv; charset=utf-8');
   res.set('Content-Disposition', `attachment; filename="${name}"`);
   res.send('﻿' + [header.map(esc).join(','), ...lines].join('\r\n'));

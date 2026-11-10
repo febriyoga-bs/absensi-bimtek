@@ -39,10 +39,10 @@ export default function QrCard() {
     g.font = '26px sans-serif'; g.fillStyle = '#5d6b82';
     g.fillText([p.position, p.code].filter(Boolean).join(' · ').slice(0, 50), W / 2, W + pad + 44);
     if (p.ruangan || p.venue) g.fillText([p.venue, formatRoom(p.ruangan)].filter(Boolean).join(' – ').slice(0, 55), W / 2, W + pad + 84);
-    g.font = '22px sans-serif'; g.fillText(p.event_name || 'Absensi', W / 2, W + pad + 130);
+    g.font = '22px sans-serif'; g.fillText(p.event_name || 'BIMTEK Revitalisasi SD', W / 2, W + pad + 130);
     const a = document.createElement('a');
     a.href = c.toDataURL('image/png');
-    a.download = `QR-absen-${p.code}.png`;
+    a.download = `QR-identitas-${p.code}.png`;
     a.click();
   }
 
@@ -55,8 +55,8 @@ export default function QrCard() {
         </nav>
         <div className="hero__body hero__body--compact">
           <BrandMark size={48} className="hero__logo" />
-          <h1>QR Absensi</h1>
-          <p className="hero__sub">{p?.event_name || 'Tunjukkan QR ini ke LO / panitia'}</p>
+          <h1>QR Identitas BIMTEK</h1>
+          <p className="hero__sub">{p?.event_name || 'BIMTEK Revitalisasi SD'}</p>
         </div>
       </header>
 
@@ -65,7 +65,7 @@ export default function QrCard() {
           {error && <div className="alert alert--err"><Icon name="alert" size={18} /><span>{error}</span></div>}
           {!error && (
             <>
-              <div className="qr-card__img">{img ? <img src={img} alt="QR absensi" /> : <Skel w="100%" h="100%" r={10} />}</div>
+              <div className="qr-card__img">{img ? <img src={img} alt="QR identitas BIMTEK" /> : <Skel w="100%" h="100%" r={10} />}</div>
               {p ? (
                 <div className="qr-card__info">
                   <b>{p.name}</b>
@@ -77,7 +77,7 @@ export default function QrCard() {
                 </div>
               ) : <div className="qr-card__info" style={{ width: '70%' }}><Skel w="80%" h={20} /><Skel w="55%" /><Skel w="65%" h={12} /></div>}
               <ul className="checklist">
-                <li><Icon name="qr" size={18} /><span>Saat absen, <b>tunjukkan QR ini</b> ke LO / panitia untuk dipindai.</span></li>
+                <li><Icon name="qr" size={18} /><span>Temui LO di venue dan tunjukkan <b>nama atau kode peserta</b> untuk pencatatan absensi.</span></li>
                 <li><Icon name="info" size={18} /><span>QR ini <b>khusus untuk Anda</b>. Jangan dibagikan ke orang lain.</span></li>
                 <li><Icon name="download" size={18} /><span>Simpan gambarnya agar tetap bisa ditunjukkan meski sinyal lemah.</span></li>
               </ul>

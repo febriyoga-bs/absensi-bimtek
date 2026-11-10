@@ -42,13 +42,13 @@ export default function ArrivalRecap() {
     <>
       <div className="page-head">
         <div><h2>Rekap Kehadiran</h2><p className="muted">Kedatangan peserta berdasarkan Excel yang diimpor.</p></div>
-        <Link className="btn" to="/admin/scan">Absenkan Peserta</Link>
+        <Link className="btn" to="/admin/scan">{user?.role === 'lo' ? 'Absenkan Peserta' : 'Daftar Peserta'}</Link>
       </div>
       {user?.role === 'admin' && <details className="card arrival-import">
         <summary>Impor Rekap Kehadiran (.xlsx)</summary>
         <form className="form" onSubmit={save}>
           <p className="muted small">Unggah file Excel yang memuat sheet <b>Detail Peserta</b>. Impor mengganti penanda kedatangan pada venue yang tercantum dalam file.</p>
-          <p className="muted small">Status Selesai dan Sudah Tiba ditandai sebagai Sudah hadir. Status Sedang Antri ditampilkan sebagai Sedang antre.</p>
+          <p className="muted small">Status Selesai dan Sudah Tiba ditampilkan sebagai Sudah tiba. Status Sedang Antri ditampilkan sebagai Sedang antre.</p>
           <input type="file" accept=".xlsx" aria-label="File Excel rekap kehadiran" onChange={(e) => { setFile(e.target.files[0]); setFeedback(null); }} disabled={busy} />
           <button type="submit" className="btn btn--primary" disabled={!file || busy}>{busy ? 'Menyimpan…' : 'Impor kehadiran'}</button>
           {feedback?.error && <p className="alert alert--err" role="alert">{feedback.error}</p>}
@@ -65,7 +65,7 @@ export default function ArrivalRecap() {
           <article key={venue.id} className="venue-attendance">
             <h3>{venue.name}</h3>
             {venue.imported_at ? <>
-              <p><b>{number.format(venue.arrived)}</b> sudah hadir · <b>{number.format(venue.queued)}</b> sedang antre</p>
+              <p><b>{number.format(venue.arrived)}</b> sudah tiba · <b>{number.format(venue.queued)}</b> sedang antre</p>
               <small className="muted">Terakhir diimpor {fmtFull(venue.imported_at)}</small>
             </> : <p className="muted">Belum ada impor kehadiran.</p>}
           </article>

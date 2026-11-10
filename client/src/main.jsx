@@ -3,8 +3,6 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import './styles.css';
 import Home from './pages/Home.jsx';
-import Absen from './pages/Absen.jsx';
-import Riwayat from './pages/Riwayat.jsx';
 import { TopLoader, Loading } from './components/Skeleton.jsx';
 // halaman QR memuat pustaka QR (± 160 kB) → dimuat terpisah agar halaman absen tetap ringan
 const QrCard = lazy(() => import('./pages/QrCard.jsx'));
@@ -23,6 +21,7 @@ const Scan = lazy(() => import('./pages/admin/Scan.jsx'));
 const LoSelfAttendance = lazy(() => import('./pages/admin/LoSelfAttendance.jsx'));
 const Reporting = lazy(() => import('./pages/admin/Reporting.jsx'));
 const ArrivalRecap = lazy(() => import('./pages/admin/ArrivalRecap.jsx'));
+const AttendancePhoto = lazy(() => import('./pages/admin/AttendancePhoto.jsx'));
 const ChangePassword = lazy(() => import('./pages/admin/ChangePassword.jsx'));
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -32,15 +31,13 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <Suspense fallback={<p style={{ padding: 24 }}><Loading /></p>}>
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route path="/absen/peserta" element={<Absen key="peserta" role="peserta" />} />
-        <Route path="/absen/panitia" element={<Absen key="panitia" role="panitia" />} />
-        <Route path="/riwayat" element={<Riwayat />} />
         <Route path="/qr/:token" element={<QrCard />} />
         <Route path="/admin/login" element={<Login />} />
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<Dashboard />} />
           <Route path="kehadiran" element={<ArrivalRecap />} />
           <Route path="absensi" element={<Records />} />
+          <Route path="absensi/foto/:id" element={<AttendancePhoto />} />
           <Route path="scan" element={<Scan />} />
           <Route path="absen-saya" element={<LoSelfAttendance />} />
           <Route path="password" element={<ChangePassword />} />

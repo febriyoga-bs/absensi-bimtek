@@ -5,6 +5,8 @@ import { formatRoom } from '../../lib/room.js';
 import { fmtFull } from '../../lib/time.js';
 import { readMonitoringCsv } from '../../lib/reportingFiles.js';
 import { SkelCards } from '../../components/Skeleton.jsx';
+import AttendanceDetailDialog from './AttendanceDetailDialog.jsx';
+import WhatsAppLink from '../../components/WhatsAppLink.jsx';
 import './Reporting.css';
 
 const labels = {
@@ -18,10 +20,13 @@ const reportStatuses = ['belum_kirim', 'menunggu_reviu', 'ditolak', 'diterima', 
 const datasetNames = { current: 'BIMTEK TAHAP 3', k3: 'BIMTEK TAHAP 2' };
 const views = { schools: 'Sekolah', facilitators: 'Fasilitator', ranking: 'Peringkat LO', regions: 'Wilayah' };
 const PAGE_SIZE = 10;
+const UNASSIGNED = 'binaan-tidak-terpetakan';
 const nf = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 });
+const shortDate = new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeZone: 'Asia/Jakarta' });
 const percent = (numerator, total) => total ? numerator * 100 / total : 0;
 const submitted = (school) => school.status !== 'belum_kirim' && school.status !== 'belum_ada_data';
 const ownerKey = ({ name, venue }) => JSON.stringify([venue, name]);
+const nameKey = (name) => String(name || '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 const matches = (row, query) => row.some((value) => String(value ?? '').toLowerCase().includes(query));
 const reportTag = (status) => <span className="reporting-tag" data-status={status}>{labels[status]}</span>;
 
@@ -35,7 +40,7 @@ function grouped(rows, keyOf) {
   return groups;
 }
 
-function ReportingTable({ headers, rows }) {
+function ReportingTable({ headers, rows, fullWidthColumn }) {
   const [page, setPage] = useState(1);
   const pages = Math.ceil(rows.length / PAGE_SIZE);
   const active = Math.min(page, pages || 1);
@@ -53,7 +58,10 @@ function ReportingTable({ headers, rows }) {
         <table className="table stack-table" role="table" aria-label="Rincian pelaporan">
           <thead role="rowgroup"><tr role="row">{headers.map((heading) => <th key={heading} scope="col" role="columnheader">{heading}</th>)}</tr></thead>
           <tbody role="rowgroup">{rows.slice((active - 1) * PAGE_SIZE, active * PAGE_SIZE).map(({ key, cells }) => (
-            <tr key={key} role="row">{cells.map((value, i) => <td key={headers[i]} role="cell" data-label={i ? headers[i] : undefined}>{value ?? '—'}</td>)}</tr>
+            <tr key={key} role="row">{cells.map((value, i) => (
+              <td key={headers[i]} role="cell" className={headers[i] === fullWidthColumn ? 'stack-full' : undefined}
+                data-label={i ? headers[i] : undefined}>{value ?? '—'}</td>
+            ))}</tr>
           ))}</tbody>
         </table>
       </div> : <p className="card muted">Tidak ada data untuk filter ini.</p>}
@@ -71,10 +79,10 @@ function ImportReporting({ onSaved }) {
     setBusy(true);
     setFeedback(null);
     try {
-      const { updated, skipped } = await api('/admin/reporting/import', {
+      const { updated, skipped, contacts_updated: contacts } = await api('/admin/reporting/import', {
         admin: true, method: 'POST', body: { csv: await readMonitoringCsv(file) },
       });
-      setFeedback({ message: `${nf.format(updated)} status sekolah disimpan.${skipped ? ` ${nf.format(skipped)} NPSN di luar pemetaan Tahap 3 dilewati.` : ''}` });
+      setFeedback({ message: `${nf.format(updated)} status sekolah disimpan.${skipped ? ` ${nf.format(skipped)} NPSN di luar pemetaan Tahap 3 dilewati.` : ''}${contacts ? ` ${nf.format(contacts)} kontak dilengkapi.` : ''}` });
       onSaved();
     } catch (e) {
       setFeedback({ error: true, message: e.message });
@@ -86,7 +94,7 @@ function ImportReporting({ onSaved }) {
     <details className="card reporting-import">
       <summary>Impor status BIMTEK TAHAP 3</summary>
       <form className="form" onSubmit={save}>
-        <p className="muted small">Unggah CSV Monitoring Laporan 50% untuk memperbarui status reviu, tanggal kirim, dan capaian fisik sekolah Tahap 3 berdasarkan NPSN.</p>
+        <p className="muted small">Unggah CSV Monitoring Laporan 50% untuk memperbarui status reviu, tanggal kirim, dan capaian fisik berdasarkan NPSN. Nomor fasilitator dan pengawas ditambahkan jika identitasnya cocok dan profil belum memiliki nomor.</p>
         <p className="muted small">Format ringkas dengan kolom <code>npsn</code>, <code>status</code>, <code>tanggal_kirim</code> dan <code>progres_fisik</code> juga bisa dipakai.</p>
         <input type="file" accept=".csv,text/csv" aria-label="File CSV monitoring" disabled={busy} onChange={(e) => setFile(e.target.files[0])} />
         <button className="btn btn--primary" disabled={!file || busy}>{busy ? 'Menyimpan…' : 'Simpan status dari CSV'}</button>
@@ -96,31 +104,40 @@ function ImportReporting({ onSaved }) {
   );
 }
 
-function ReportingView({ data, dataset, canImport, refresh }) {
+function ReportingView({ data, dataset, account, canImport, refresh }) {
+  const archiveMatches = dataset === 'k3' && account ? data.lo.filter((row) => nameKey(row.name) === nameKey(account.name)) : [];
+  const own = data.own || (archiveMatches.length === 1 ? archiveMatches[0] : null);
+  const accountVenue = data.venues.includes(account?.venue?.name) ? account.venue.name : '';
   const [view, setView] = useState('schools');
-  const [venue, setVenue] = useState(data.own?.venue || '');
-  const [lo, setLo] = useState(data.own ? ownerKey(data.own) : '');
+  const [venue, setVenue] = useState(own?.venue || accountVenue);
+  const [lo, setLo] = useState(own ? ownerKey(own) : account ? UNASSIGNED : '');
   const [status, setStatus] = useState('');
   const [attendance, setAttendance] = useState('');
-  const [absence, setAbsence] = useState('');
+  const [checkInFilters, setCheckInFilters] = useState({});
   const [term, setTerm] = useState('');
   const [threshold, setThreshold] = useState(2);
-  const [baseline, setBaseline] = useState(data.baseline || '');
+  const [customBaseline, setCustomBaseline] = useState('');
+  const baseline = customBaseline || data.baseline || '';
+  const movementLabel = customBaseline && customBaseline !== data.baseline
+    ? `Kirim sejak ${shortDate.format(new Date(customBaseline))}`
+    : `Kirim sejak ${datasetNames[dataset]} dimulai`;
   const [movement, setMovement] = useState(false);
   const [selectedFacilitator, setSelectedFacilitator] = useState(null);
+  const [schoolDetails, setSchoolDetails] = useState(null);
   const query = term.trim().toLowerCase();
   const venueMatch = (row) => !venue || venue === row.venue;
   const scope = (row) => venueMatch(row) && (!lo || lo === ownerKey({ venue: row.venue, name: row.lo }));
   const schools = data.schools.filter(scope);
   const byFacilitator = grouped(schools, (row) => row.facilitator_id);
   const byLo = grouped(data.schools, (row) => ownerKey({ name: row.lo, venue: row.venue }));
-  const facilitatorNames = new Map(data.facilitators.map((f) => [f.id, f.name]));
+  const facilitators = new Map(data.facilitators.map((f) => [f.id, f]));
   const current = dataset === 'current';
+  const checkInDays = current ? data.check_in_days || [] : [];
+  const checkInStatus = (school, day) => school.check_in_dates?.includes(day.date) ? 'sudah_absen' : 'belum_absen';
   const venueStatus = (school) => current ? school.venue_attendance || 'tidak_terdata' : school.attendance;
   const attendanceOptions = current ? ['sudah_tiba', 'sedang_antre', 'tidak_terdata']
     : ['sudah_tiba', 'sedang_antre', 'bersedia_hadir', 'belum_konfirmasi', 'berhalangan', 'tidak_terdata'];
   const present = schools.filter((s) => ['sudah_tiba', 'sedang_antre'].includes(venueStatus(s))).length;
-  const checkedIn = current ? schools.filter((s) => s.attendance === 'sudah_absen').length : null;
   const waiting = schools.filter((s) => s.status === 'menunggu_reviu');
   const overdue = (rows) => rows.filter((s) => s.status === 'menunggu_reviu' && s.wait_days > threshold).length;
   const counts = new Map([...grouped(schools, (s) => s.status)].map(([key, group]) => [key, group.length]));
@@ -128,20 +145,27 @@ function ReportingView({ data, dataset, canImport, refresh }) {
   const nextView = (key) => { setView(key); setTerm(''); setSelectedFacilitator(null); };
 
   const schoolRows = (list, search = '') => list
-    .filter((s) => matches([s.name, s.npsn, s.city, s.province, facilitatorNames.get(s.facilitator_id)], search))
+    .filter((s) => matches([s.name, s.npsn, s.city, s.province, facilitators.get(s.facilitator_id)?.name], search))
     .sort((a, b) => (b.wait_days ?? -1) - (a.wait_days ?? -1) || (a.rank || Infinity) - (b.rank || Infinity) || a.name.localeCompare(b.name, 'id'))
     .map((s) => ({ key: s.npsn, cells: [
-      <><b>{s.name}</b><div className="muted small">NPSN {s.npsn} · {s.city || s.province || '—'}</div></>,
+      <>{current ? <button type="button" className="reporting-school-link" aria-haspopup="dialog" onClick={() => setSchoolDetails({
+        label: 'Bendahara dan Pengawas', subtitle: s.venue, path: `/admin/reporting/school/${s.npsn}`, checkInDays,
+      })}>{s.name}</button> : <b>{s.name}</b>}
+        <div className="muted small">NPSN {s.npsn} · {s.city || s.province || '—'}</div></>,
       <>{s.venue}<div className="muted small">{formatRoom(s.room)}{s.lo && ` · ${s.lo}`}</div></>,
-      facilitatorNames.get(s.facilitator_id), <>{reportTag(s.status)}{s.wait_days != null && <div className="muted small">{nf.format(s.wait_days)} hari</div>}</>,
+      facilitators.has(s.facilitator_id) ? <>{facilitators.get(s.facilitator_id).name}
+        <WhatsAppLink name={facilitators.get(s.facilitator_id).name} phone={facilitators.get(s.facilitator_id).phone} /></> : null,
+      <>{reportTag(s.status)}{s.wait_days != null && <div className="muted small">{nf.format(s.wait_days)} hari</div>}</>,
       s.progress == null ? '—' : `${nf.format(s.progress)}%`, reportTag(venueStatus(s)),
-      reportTag(current ? s.attendance : 'tidak_terdata'),
+      ...(current ? checkInDays.map((day) => reportTag(checkInStatus(s, day))) : [reportTag('tidak_terdata')]),
     ] }));
-  const schoolHeaders = ['Sekolah', 'Venue / LO', 'Fasilitator', 'Laporan 50%', 'Progres fisik', 'Kehadiran di venue', 'Absensi'];
+  const schoolHeaders = ['Sekolah', 'Venue / LO', 'Fasilitator', 'Laporan 50%', 'Progres fisik', 'Kehadiran di venue',
+    ...(current ? checkInDays.map((day) => `${day.label} · ${day.shortDate}`) : ['Absensi'])];
   let headers = schoolHeaders;
   let rows = [];
   if (view === 'schools') rows = schoolRows(schools.filter((s) => (!status || s.status === status)
-    && (!attendance || venueStatus(s) === attendance) && (!current || !absence || s.attendance === absence)), query);
+    && (!attendance || venueStatus(s) === attendance)
+    && checkInDays.every((day) => !checkInFilters[day.date] || checkInStatus(s, day) === checkInFilters[day.date])), query);
   if (view === 'facilitators') {
     headers = ['Fasilitator', 'Venue / LO', 'Sekolah', 'Belum kirim', 'Menunggu reviu', `Lewat ${threshold} hari`];
     rows = data.facilitators.filter((f) => scope(f) && matches([f.name, f.institution, f.coordinator, f.lo], query))
@@ -151,7 +175,7 @@ function ReportingView({ data, dataset, canImport, refresh }) {
         const pending = group.filter((s) => s.status === 'menunggu_reviu').length;
         const unsent = group.filter((s) => s.status === 'belum_kirim').length;
         return { key: f.id, late, pending, name: f.name, cells: [
-          <><b>{f.name}</b><div className="muted small">{[f.institution, f.coordinator].filter(Boolean).join(' · ')}</div></>,
+          <><b>{f.name}</b><WhatsAppLink name={f.name} phone={f.phone} /><div className="muted small">{[f.institution, f.coordinator].filter(Boolean).join(' · ')}</div></>,
           <>{f.venue}<div className="muted small">{[formatRoom(f.room), f.lo].filter(Boolean).join(' · ')}</div></>,
           <button className="btn btn--sm" onClick={() => setSelectedFacilitator(f)} aria-label={`Lihat sekolah ${f.name}`}>{group.length}</button>,
           unsent, pending, late,
@@ -159,7 +183,7 @@ function ReportingView({ data, dataset, canImport, refresh }) {
       }).sort((a, b) => b.late - a.late || b.pending - a.pending || a.name.localeCompare(b.name, 'id'));
   }
   if (view === 'ranking') {
-    headers = ['Peringkat', 'Nama LO', 'Venue', 'Sudah kirim', 'Cakupan data', 'Capaian', 'Kirim sejak tanggal'];
+    headers = ['Peringkat', 'Nama LO', 'Venue', 'Sudah kirim', 'Cakupan data', 'Capaian', movementLabel];
     if (hasReports) rows = data.lo.filter(venueMatch).map((owner) => {
       const group = byLo.get(ownerKey(owner)) || [];
       const sent = group.filter(submitted).length;
@@ -168,7 +192,7 @@ function ReportingView({ data, dataset, canImport, refresh }) {
       return { ...owner, total: group.length, sent, known, change, ratio: percent(sent, group.length) };
     }).filter((r) => r.known > 0).sort((a, b) =>
       (movement && baseline ? b.change - a.change : 0) || b.ratio - a.ratio || b.sent - a.sent || a.name.localeCompare(b.name, 'id'))
-      .map((r, i) => ({ key: ownerKey(r), cells: [i + 1, <><b>{r.name}</b>{data.own && ownerKey(data.own) === ownerKey(r) && <span className="reporting-own">Anda</span>}</>,
+      .map((r, i) => ({ key: ownerKey(r), cells: [i + 1, <><b>{r.name}</b>{own && ownerKey(own) === ownerKey(r) && <span className="reporting-own">Anda</span>}</>,
         r.venue, r.sent, `${r.known} / ${r.total}`,
         <div className="reporting-progress"><b>{nf.format(r.ratio)}%</b><progress aria-label={`Capaian ${r.name}`} value={r.ratio} max={100} /></div>,
         baseline ? r.change : '—'] }))
@@ -184,13 +208,13 @@ function ReportingView({ data, dataset, canImport, refresh }) {
   const detail = selectedFacilitator && byFacilitator.get(selectedFacilitator.id);
   const selectedOwner = data.lo.find((owner) => ownerKey(owner) === lo);
   const noData = counts.get('belum_ada_data') || 0;
-  const scopeTitle = selectedOwner?.name || venue || 'Semua venue';
+  const scopeTitle = selectedOwner?.name || (lo === UNASSIGNED ? account.name : venue || 'Semua venue');
   const sourceNote = dataset === 'k3'
     ? `Laporan 50% per ${data.stamp} · Kehadiran per ${data.attendance_stamp} · Arsip hanya memuat data kedatangan`
     : [
       data.stamp ? `Impor monitoring ${fmtFull(data.stamp)}` : 'Monitoring belum diimpor',
       data.arrival_stamp ? `Impor kehadiran terbaru ${fmtFull(data.arrival_stamp)}` : 'Rekap kehadiran belum diimpor',
-      'Absensi Bendahara dari seluruh sesi di aplikasi',
+      'Absensi Bendahara dari sesi resmi berdasarkan tanggal WIB',
     ].join(' · ');
 
   return (
@@ -211,12 +235,17 @@ function ReportingView({ data, dataset, canImport, refresh }) {
           <div><b>{nf.format(waiting.length)}</b><span>Menunggu reviu fasilitator</span>
             <small>{nf.format(overdue(waiting))} melewati {threshold} hari</small></div>
         </div>
-        <div className={`reporting-highlights${current ? ' reporting-highlights--current' : ''}`}>
+        <div className="reporting-highlights">
           <div><b>{nf.format(schools.filter(submitted).length)}</b><small>Sudah kirim</small></div>
           <div><b>{nf.format(present)}</b><small>Sudah tiba atau sedang antre</small></div>
-          {current && <div><b>{nf.format(checkedIn)}</b><small>Sudah absen</small></div>}
           <div><b>{nf.format(counts.get('diterima') || 0)}</b><small>Laporan diterima</small></div>
         </div>
+        {checkInDays.length > 0 && <div className="reporting-day-summary">
+          {checkInDays.map((day) => <div key={day.date}>
+            <small>{day.label} · {day.shortDate}</small>
+            <b>{nf.format(schools.filter((s) => checkInStatus(s, day) === 'sudah_absen').length)}</b> sudah absen
+          </div>)}
+        </div>}
         <div className="reporting-source">{sourceNote}</div>
       </section>
       {canImport && <ImportReporting onSaved={refresh} />}
@@ -227,14 +256,16 @@ function ReportingView({ data, dataset, canImport, refresh }) {
         </select>
         {view !== 'ranking' && <select aria-label="Filter LO pelaporan" value={lo} onChange={(e) => { setLo(e.target.value); setSelectedFacilitator(null); }}>
           <option value="">Semua LO</option>
+          {account && !own && <option value={UNASSIGNED}>Binaan saya</option>}
           {data.lo.filter(venueMatch).map((owner) => <option key={ownerKey(owner)} value={ownerKey(owner)}>{owner.name}{!venue && ` · ${owner.venue}`}</option>)}
         </select>}
       </div>
+      {lo === UNASSIGNED && <p className="alert alert--warn">Akun ini belum punya pemetaan LO yang cocok pada {datasetNames[dataset]}. Pilih Semua LO untuk melihat daftar lengkap.</p>}
       <h3 className="reporting-section-heading">Alur Laporan 50%</h3>
       <div className="reporting-summary" aria-label="Filter alur laporan 50%">
         {reportStatuses.filter((code) => dataset === 'current' || code !== 'belum_ada_data').map((code) => (
           <button key={code} type="button" data-status={code} aria-pressed={view === 'schools' && status === code}
-            onClick={() => { nextView('schools'); setStatus(view === 'schools' && status === code ? '' : code); setAttendance(''); setAbsence(''); }}>
+            onClick={() => { nextView('schools'); setStatus(view === 'schools' && status === code ? '' : code); setAttendance(''); setCheckInFilters({}); }}>
             <span>{labels[code]}</span><b>{nf.format(counts.get(code) || 0)}</b>
           </button>
         ))}
@@ -254,10 +285,11 @@ function ReportingView({ data, dataset, canImport, refresh }) {
             <option value="">Semua kehadiran di venue</option>
             {attendanceOptions.map((code) => <option key={code} value={code}>{labels[code]}</option>)}
           </select>
-          {current && <select aria-label="Status absensi" value={absence} onChange={(e) => setAbsence(e.target.value)}>
-            <option value="">Semua status absensi</option>
+          {checkInDays.map((day) => <select key={day.date} aria-label={`Status ${day.label}`}
+            value={checkInFilters[day.date] || ''} onChange={(e) => setCheckInFilters({ ...checkInFilters, [day.date]: e.target.value })}>
+            <option value="">{day.label} · Semua status</option>
             {['sudah_absen', 'belum_absen'].map((code) => <option key={code} value={code}>{labels[code]}</option>)}
-          </select>}
+          </select>)}
         </>}
         {view === 'facilitators' && <select aria-label="Ambang tunggakan" value={threshold} onChange={(e) => setThreshold(Number(e.target.value))}>
           {[1, 2, 3, 7].map((day) => <option key={day} value={day}>Lewat {day} hari</option>)}
@@ -266,16 +298,19 @@ function ReportingView({ data, dataset, canImport, refresh }) {
           <select aria-label="Urutan peringkat" value={movement ? 'movement' : 'progress'} onChange={(e) => setMovement(e.target.value === 'movement')}>
             <option value="progress">Capaian</option><option value="movement">Pergerakan</option>
           </select>
-          {movement && <input type="date" aria-label="Hitung kiriman sejak tanggal" value={baseline} onChange={(e) => setBaseline(e.target.value)} />}
+          {movement && <input type="date" aria-label="Tanggal acuan pergerakan kiriman" value={baseline} onChange={(e) => setCustomBaseline(e.target.value)} />}
         </>}
       </div>
       {view === 'ranking' && <p className="muted small">Capaian dihitung dari laporan yang sudah dikirim dibanding seluruh sekolah binaan. LO tanpa data monitoring belum masuk peringkat.</p>}
-      <ReportingTable key={JSON.stringify([view, venue, lo, status, attendance, absence, term, threshold, baseline, movement])} headers={headers} rows={rows} />
+      <ReportingTable key={JSON.stringify([view, venue, lo, status, attendance, checkInFilters, term, threshold, baseline, movement])}
+        headers={headers} rows={rows} fullWidthColumn={current && view === 'schools' ? 'Kehadiran di venue' : undefined} />
       {detail && <section className="card reporting-detail">
         <div className="page-head"><h3>Sekolah binaan {selectedFacilitator.name}</h3>
           <button className="btn btn--sm" onClick={() => setSelectedFacilitator(null)}>Tutup rincian</button></div>
-        <ReportingTable key={selectedFacilitator.id} headers={schoolHeaders} rows={schoolRows(detail)} />
+        <ReportingTable key={selectedFacilitator.id} headers={schoolHeaders} rows={schoolRows(detail)}
+          fullWidthColumn={current ? 'Kehadiran di venue' : undefined} />
       </section>}
+      <AttendanceDetailDialog details={schoolDetails} onClose={() => setSchoolDetails(null)} />
     </>
   );
 }
@@ -303,7 +338,7 @@ export default function Reporting() {
       </div>
       {error && <p className="alert alert--err" role="alert">{error} <button className="btn btn--sm" onClick={refresh}>Coba lagi</button></p>}
       {!data && !error && <div className="kpis"><SkelCards n={3} h={76} /></div>}
-      {data && <ReportingView key={dataset} data={data} dataset={dataset} refresh={refresh}
+      {data && <ReportingView key={`${dataset}:${lo ? 'lo' : 'admin'}`} data={data} dataset={dataset} refresh={refresh} account={lo ? user : null}
         canImport={dataset === 'current' && user?.role === 'admin' && !lo} />}
     </div>
   );

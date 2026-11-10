@@ -32,7 +32,7 @@ export default function LoSelfAttendance() {
       <div className="page-head">
         <div>
           <h2>Absen Saya</h2>
-          <p className="muted">Catat kehadiran Anda menggunakan foto dan lokasi di venue penugasan.</p>
+          <p className="muted">Kirim absensi Anda menggunakan foto dan lokasi di venue penugasan.</p>
         </div>
       </div>
       <div className="lo-self-attendance">

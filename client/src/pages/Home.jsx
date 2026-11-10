@@ -1,148 +1,91 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../api.js';
+import { adminToken, api } from '../api.js';
 import Icon from '../components/Icon.jsx';
 import BrandMark from '../components/BrandMark.jsx';
+import { dashboardMenu } from '../lib/dashboardMenu.js';
 import { useVisiblePolling } from '../lib/poll.js';
-import { useNow, fmtClock, fmtDate, fmtHM, fmtRemaining, dayLabel } from '../lib/time.js';
-import { Skel, SkelCards } from '../components/Skeleton.jsx';
+import { useNow, fmtClock, fmtDate } from '../lib/time.js';
+import { checkInDayLabel } from './admin/shared.js';
 
-const ROLES = [
-  { key: 'peserta', title: 'Absen Peserta', desc: 'Kepala sekolah, guru, dan peserta BIMTEK', icon: 'cap' },
-  { key: 'panitia', title: 'Absen Panitia', desc: 'Panitia, narasumber, dan fasilitator', icon: 'idcard' },
+const workflows = [
+  ['Daftar Pendampingan', 'Cek sekolah dan fasilitator binaan serta ruangan penugasan.'],
+  ['Absenkan Peserta', 'Pilih peserta yang Anda tangani, ambil foto, isi catatan, lalu kirim.'],
+  ['Absen Saya', 'Kirim absensi Anda dengan foto dan lokasi saat sesi resmi dibuka.'],
 ];
 
-function SessionStatus({ s, now, loading }) {
-  if (loading) return <Skel w={210} h={26} r={99} />;
-  if (s?.open) {
-    return (
-      <span className="pill pill--live">
-        <span className="live-dot" />
-        <span>Dibuka · {s.open.name} · tutup {fmtHM(s.open.ends_at)}
-          <small> ({fmtRemaining(new Date(s.open.ends_at) - now)} lagi)</small></span>
-      </span>
-    );
-  }
-  if (s?.next) {
-    return (
-      <span className="pill">
-        <Icon name="clock" size={14} /> Berikutnya: {s.next.name} · {dayLabel(s.next.starts_at)} {fmtHM(s.next.starts_at)}
-      </span>
-    );
-  }
-  return <span className="pill pill--muted">Belum ada jadwal sesi</span>;
+function MenuGuide({ items }) {
+  return <ul className="home-menu">
+    {items.map(({ to, icon, label, description }) => <li key={to}>
+      <span className="home-menu__icon"><Icon name={icon} size={19} /></span>
+      <div><b>{label}</b><small>{description}</small></div>
+    </li>)}
+  </ul>;
 }
 
 export default function Home() {
   const [info, setInfo] = useState(null);
   const now = useNow();
+  const signedIn = !!adminToken.get();
+  const dashboardPath = signedIn ? '/admin' : '/admin/login';
+  const dashboardLabel = signedIn ? 'Buka Dashboard' : 'Masuk Dashboard';
 
-  // status sesi diperbarui tiap 60 detik, hanya saat halaman sedang dilihat
   useVisiblePolling(() => api('/info').then(setInfo).catch(() => {}), 60_000);
 
   return (
     <div className="home">
       <header className="hero hero--home">
         <div className="hero__deco" aria-hidden="true" />
-        <nav className="topbar">
-          <span className="brand">
-            <BrandMark size={40} />
-            <span className="brand__text">Absensi BIMTEK<small>Kemendikdasmen</small></span>
-          </span>
-          <span className="topbar__actions">
-            <Link to="/riwayat" className="topbar__link"><Icon name="clock" size={16} />Riwayat</Link>
-            <Link to="/admin" className="topbar__link topbar__link--admin">Admin</Link>
-          </span>
+        <nav className="topbar" aria-label="Navigasi beranda">
+          <span className="brand"><BrandMark size={40} /><span className="brand__text">Dashboard LO<small>Kemendikdasmen</small></span></span>
+          <a href="#panduan-menu" className="topbar__link">Panduan menu</a>
         </nav>
-
         <div className="hero__body">
-          {info?.organizer && <div className="eyebrow">{info.organizer}</div>}
-          <h1>{info?.event_name || 'BIMTEK Revitalisasi SD'}</h1>
+          <div className="eyebrow">{info?.organizer || 'Pendampingan Bimtek'}</div>
+          <h1>Dashboard LO <span>BIMTEK REVITALISASI SD</span></h1>
+          <p className="home__intro">Kelola pendampingan sekolah, pantau Laporan 50%, dan catat absensi peserta di venue penugasan.</p>
+          <Link to={dashboardPath} className="btn btn--lg home__cta">{dashboardLabel}<Icon name="right" size={19} /></Link>
           <div className="hero__meta">
             {info?.event_dates && <span className="chip-inv"><Icon name="calendar" size={15} />{info.event_dates}</span>}
-            {info?.venues?.length > 0 && (
-              <span className="chip-inv"><Icon name="pin" size={15} />{info.venues.length} lokasi venue</span>
-            )}
-          </div>
-          <div className="clock">
-            <div className="clock__time">{fmtClock(now)} <small>WIB</small></div>
-            <div className="clock__date">{fmtDate(now)}</div>
+            {!!info?.venues?.length && <span className="chip-inv"><Icon name="pin" size={15} />{info.venues.length} venue aktif</span>}
+            <span className="chip-inv"><Icon name="clock" size={15} />{fmtDate(now)} · {fmtClock(now)} WIB</span>
           </div>
         </div>
       </header>
 
       <main className="home__main">
-        <section className="roles">
-          {ROLES.map((r) => (
-            <Link key={r.key} to={`/absen/${r.key}`} className={`role role--${r.key}`}>
-              <span className="role__icon"><Icon name={r.icon} size={30} /></span>
-              <span className="role__text">
-                <b>{r.title}</b>
-                <small>{r.desc}</small>
-                <SessionStatus s={info?.sessions?.[r.key]} now={now} loading={!info} />
-              </span>
-              <span className="role__go"><Icon name="right" size={22} /></span>
-            </Link>
-          ))}
-        </section>
-
-        <Link to="/riwayat" className="history-link">
-          <span className="history-link__icon"><Icon name="clock" size={22} /></span>
-          <span><b>Cek riwayat absensi di perangkat ini</b><small>Lihat absen yang sudah dikirim dan status verifikasinya</small></span>
-          <Icon name="right" size={20} />
-        </Link>
-
-        <section className="panel">
-          <h2 className="panel__title">Cara absen</h2>
+        <section className="panel" aria-labelledby="langkah-lo">
+          <h2 id="langkah-lo" className="panel__title">Mulai bekerja sebagai LO</h2>
+          <p className="muted">Masuk dengan akun LO Anda. Peserta yang akan absen dapat menemui LO di venue kegiatan.</p>
           <ol className="steps">
-            <li>
-              <span className="steps__icon"><Icon name="key" /></span>
-              <b>Masukkan NPSN / kode</b>
-              <small>Peserta: NPSN sekolah lalu pilih jabatan. Panitia: kode panitia.</small>
-            </li>
-            <li>
-              <span className="steps__icon"><Icon name="camera" /></span>
-              <b>Foto & lokasi</b>
-              <small>Foto wajah langsung dari kamera, GPS dicek otomatis.</small>
-            </li>
-            <li>
-              <span className="steps__icon"><Icon name="check" /></span>
-              <b>Selesai</b>
-              <small>Bukti absen tampil dan tercatat di panitia.</small>
-            </li>
+            {workflows.map(([label, description]) => <li key={label}><b>{label}</b><small>{description}</small></li>)}
           </ol>
+          {!!info?.check_in_days?.length && <div className="home-schedule">
+            <b>Jadwal BIMTEK TAHAP 3</b>
+            {info.check_in_days.map((day) => <span key={day.date} className="tag tag--type">{checkInDayLabel(day)}</span>)}
+          </div>}
         </section>
 
-        {!info && (
-          <section className="panel"><Skel w={140} h={18} /><div className="venues" style={{ marginTop: 14 }}><SkelCards n={2} h={90} /></div></section>
-        )}
-        {info?.venues?.length > 0 && (
-          <section className="panel">
-            <h2 className="panel__title">Lokasi venue</h2>
-            <div className="venues">
-              {info.venues.map((v) => (
-                <div key={v.name} className="venue-card">
-                  <span className="venue-card__icon"><Icon name="building" /></span>
-                  <span>
-                    <b>{v.name}</b>
-                    {v.address && <small>{v.address}</small>}
-                    <span className="tag">Radius {v.radius_m} m</span>
-                  </span>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        <section className="trust">
-          <div><Icon name="shield" size={22} /><span><b>Anti Fake GPS</b><small>Lokasi palsu terdeteksi otomatis</small></span></div>
-          <div><Icon name="camera" size={22} /><span><b>Kamera realtime</b><small>Tidak bisa unggah dari galeri</small></span></div>
-          <div><Icon name="crosshair" size={22} /><span><b>Geotagging</b><small>Hanya di dalam area venue</small></span></div>
+        <section className="panel" id="panduan-menu" aria-labelledby="judul-panduan">
+          <h2 id="judul-panduan" className="panel__title">Panduan menu dashboard</h2>
+          <MenuGuide items={dashboardMenu.filter((item) => item.lo)} />
+          <details className="home-admin-guide">
+            <summary>Menu tambahan Admin Utama</summary>
+            <MenuGuide items={dashboardMenu.filter((item) => !item.lo || item.adminLabel).map((item) => item.adminLabel
+              ? { ...item, label: item.adminLabel, description: 'Lihat daftar peserta serta status kedatangan dan absensi per venue.' } : item)} />
+          </details>
         </section>
 
-        <footer className="footer">
-          {info?.event_name || 'BIMTEK Revitalisasi SD'}{info?.organizer ? ` · ${info.organizer}` : ''}
-        </footer>
+        {!!info?.venues?.length && <section className="panel" aria-labelledby="lokasi-venue">
+          <h2 id="lokasi-venue" className="panel__title">Venue kegiatan</h2>
+          <div className="venues">
+            {info.venues.map((venue) => <div key={venue.name} className="venue-card">
+              <span className="venue-card__icon"><Icon name="building" /></span>
+              <span><b>{venue.name}</b>{venue.address && <small>{venue.address}</small>}</span>
+            </div>)}
+          </div>
+        </section>}
+        <footer className="footer">Dashboard LO · BIMTEK Revitalisasi SD{info?.organizer ? ` · ${info.organizer}` : ''}</footer>
       </main>
     </div>
   );

@@ -3,9 +3,10 @@ import { Link, useOutletContext } from 'react-router-dom';
 import jsQR from 'jsqr';
 import { api } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
-import { fmtDT } from './shared.js';
+import { arrivalBadge, fmtDT, sessionTitle } from './shared.js';
 import { SkelRows, Spinner } from '../../components/Skeleton.jsx';
 import CameraCapture from '../../components/CameraCapture.jsx';
+import WhatsAppLink from '../../components/WhatsAppLink.jsx';
 import { formatRoom } from '../../lib/room.js';
 
 // Absenkan lewat scan QR dinonaktifkan sementara. Ubah ke true untuk memunculkan lagi tab "Scan QR"
@@ -39,8 +40,7 @@ const categories = {
   bpmp: { label: 'BB/BPMP', icon: 'building', placeholder: 'Cari nama atau kode BB/BPMP' },
 };
 const number = new Intl.NumberFormat('id-ID');
-const arrivalLabels = { selesai: 'Sudah tiba', sudah_tiba: 'Sudah tiba', sedang_antre: 'Sedang antre' };
-const directoryHeaders = ['Peserta', 'Sekolah / Instansi', 'Venue', 'Sesi', 'Kehadiran di venue', 'Status absensi', 'Tindakan'];
+const directoryHeaders = ['Peserta', 'Sekolah / Instansi', 'Venue', 'Sesi', 'Kehadiran di venue', 'Status absensi'];
 
 function attendanceStatus(person) {
   if (person.unavailable) return ['Mundur/Berhalangan Hadir', 'tag--off'];
@@ -60,10 +60,8 @@ export default function Scan() {
   const [running, setRunning] = useState(true);
   const [result, setResult] = useState(null);
   const [history, setHistory] = useState([]);
-  const [venues, setVenues] = useState([]);
-  const [venueId, setVenueId] = useState('');
   const [manual, setManual] = useState('');
-  const [tab, setTab] = useState(QR_SCAN_ENABLED ? 'qr' : 'sekolah');
+  const [tab, setTab] = useState(QR_SCAN_ENABLED && lo ? 'qr' : 'sekolah');
   const [search, setSearch] = useState('');
   const [filterVenue, setFilterVenue] = useState('');
   const [filterArrival, setFilterArrival] = useState('');
@@ -75,18 +73,12 @@ export default function Scan() {
   const [revision, setRevision] = useState(0);
   const [pending, setPending] = useState(null);
   const [shot, setShot] = useState(null);
-  const venueRef = useRef('');
-  venueRef.current = venueId;
-
-  useEffect(() => {
-    if (QR_SCAN_ENABLED && !lo) api('/admin/venues', { admin: true }).then(setVenues).catch(() => {});
-  }, [lo]);
 
   async function submit(body) {
     busyRef.current = true;
     let r;
     try {
-      const d = await api('/admin/scan', { method: 'POST', admin: true, body: { ...body, venue_id: venueRef.current || undefined } });
+      const d = await api('/admin/scan', { method: 'POST', admin: true, body });
       r = { kind: d.status === 'berhalangan' ? 'unavailable' : 'ok', person: d.person, session: d.session, at: d.at };
     } catch (e) {
       const d = e.data || {};
@@ -143,7 +135,7 @@ export default function Scan() {
   }
 
   async function markUnavailable(p) {
-    const sessionName = p.session.type || p.session.name;
+    const sessionName = sessionTitle(p.session);
     if (!window.confirm(`Tandai ${p.name} mundur/berhalangan hadir untuk sesi "${sessionName}"?`)) return;
     setPending(p.code);
     const r = await submit({ code: p.code, session_id: p.session.id, unavailable: true });
@@ -195,14 +187,15 @@ export default function Scan() {
   const K = result && KIND[result.kind];
   const pages = list ? Math.ceil(list.total / list.limit) : 0;
   const organizationTab = tab === 'dinas' || tab === 'bpmp';
+  const headers = lo ? [...directoryHeaders, 'Tindakan'] : directoryHeaders;
 
   return (
     <>
       <div className="page-head">
-        <div><h2>Absenkan Peserta</h2>
+        <div><h2>{lo ? 'Absenkan Peserta' : 'Daftar Peserta'}</h2>
           <p className="muted">
-            {lo ? 'Anda bisa mengabsenkan binaan Anda serta peserta Dinas Pendidikan dan BB/BPMP di venue Anda.' : 'Pilih jenis peserta, lalu cari nama sekolah, fasilitator, atau instansi.'} Catatan masuk ke sesi yang sedang dibuka
-            {lo && user?.venue ? <> untuk venue <b>{user.venue.name}</b></> : ''}.
+            {lo ? <>Catat absensi binaan serta peserta Dinas Pendidikan dan BB/BPMP di venue penugasan. Catatan masuk ke sesi resmi yang sedang dibuka{user?.venue && <> di <b>{user.venue.name}</b></>}.</>
+              : 'Lihat daftar peserta, status kedatangan, dan absensi per venue. Pencatatan dilakukan oleh LO.'}
           </p></div>
         {tab === 'qr' && (
           <button className="btn" onClick={() => setRunning((x) => !x)}>
@@ -211,7 +204,7 @@ export default function Scan() {
         )}
       </div>
       <div className="tabs" role="group" aria-label="Jenis peserta">
-        {QR_SCAN_ENABLED && <button className={tab === 'qr' ? 'on' : ''} onClick={() => changeTab('qr')} disabled={!!pending}><Icon name="qr" size={16} /> Scan QR</button>}
+        {QR_SCAN_ENABLED && lo && <button className={tab === 'qr' ? 'on' : ''} onClick={() => changeTab('qr')} disabled={!!pending}><Icon name="qr" size={16} /> Scan QR</button>}
         {Object.entries(categories).map(([key, category]) => (
           <button key={key} className={tab === key ? 'on' : ''} aria-pressed={tab === key} onClick={() => changeTab(key)} disabled={!!pending}>
             <Icon name={category.icon} size={16} /> {category.label}
@@ -251,10 +244,12 @@ export default function Scan() {
             {!loading && !listError && list?.arrival_summary && (
               <div className="scan__arrival-recap">
                 <b>Rekap Kehadiran</b>
-                <span className="tag tag--open">{number.format(list.arrival_summary.arrived)} sudah tiba</span>
+                <span className="tag tag--arrival">{number.format(list.arrival_summary.arrived)} sudah tiba</span>
                 <span className="tag tag--venue">{number.format(list.arrival_summary.queued)} sedang antre</span>
                 <span className="tag tag--off">{number.format(list.arrival_summary.unrecorded)} belum terdata</span>
                 <Link className="btn btn--sm" to="/admin/kehadiran">Buka rekap</Link>
+                {list.arrival_summary.unrecorded > 0 && !list.arrival_summary.arrived && !list.arrival_summary.queued &&
+                  <span className="scan__arrival-note muted small">Belum ada data kedatangan dari rekap Excel yang cocok dengan daftar ini.</span>}
               </div>
             )}
             <p className="muted small" aria-live="polite">
@@ -263,23 +258,24 @@ export default function Scan() {
             <div className="assignment-table">
               <table className="table stack-table" role="table" aria-label={`Daftar ${categories[tab].label}`} aria-busy={loading}>
                 <thead role="rowgroup"><tr role="row">
-                  {directoryHeaders.map((name) => (
+                  {headers.map((name) => (
                     <th key={name} scope="col" role="columnheader">{name}</th>
                   ))}
                 </tr></thead>
                 <tbody role="rowgroup">
-                  {loading && <SkelRows rows={4} cols={directoryHeaders.length} />}
-                  {!loading && !listError && !list?.rows.length && <tr role="row"><td role="cell" colSpan={directoryHeaders.length}>
+                  {loading && <SkelRows rows={4} cols={headers.length} />}
+                  {!loading && !listError && !list?.rows.length && <tr role="row"><td role="cell" colSpan={headers.length}>
                     {lo && !showAll && !search.trim() && !filterArrival
                       ? `Tidak ada ${organizationTab ? 'peserta kategori ini di venue Anda' : 'binaan di kategori ini'}. Pilih Semua peserta untuk melihat daftar lengkap.`
                       : 'Tidak ada peserta yang cocok.'}
                   </td></tr>}
                   {!loading && !listError && list?.rows.map((p) => {
                     const [status, style] = attendanceStatus(p);
-                    const arrival = arrivalLabels[p.arrival_status];
+                    const [arrival, arrivalStyle] = arrivalBadge(p.arrival_status);
                     return (
                       <tr key={p.id} role="row">
-                        <td role="cell"><b>{p.name}</b><div className="muted small">{[p.position, p.code].filter(Boolean).join(' · ')}</div></td>
+                        <td role="cell"><b>{p.name}</b><WhatsAppLink name={p.name} phone={p.phone} />
+                          <div className="muted small">{[p.position, p.code].filter(Boolean).join(' · ')}</div></td>
                         <td role="cell" data-label="Sekolah / Instansi" className="cell-clamp">{p.institution || '—'}
                           {p.npsn && <div className="muted small">NPSN {p.npsn}</div>}
                         </td>
@@ -287,23 +283,23 @@ export default function Scan() {
                           {p.venue_name ? <span className="tag tag--venue">{p.venue_name}</span> : '—'}
                           {p.ruangan && <div className="muted small">{formatRoom(p.ruangan)}</div>}
                         </td>
-                        <td role="cell" data-label="Sesi" className="small">{p.session?.type || p.session?.name || '—'}</td>
+                        <td role="cell" data-label="Sesi" className="small">{sessionTitle(p.session)}</td>
                         <td role="cell" data-label="Kehadiran di venue">
-                          <span className={`tag ${p.arrival_status === 'sedang_antre' ? 'tag--venue' : arrival ? 'tag--open' : 'tag--off'}`}>
-                            {arrival || 'Belum terdata'}
+                          <span className={`tag ${arrivalStyle}`}>
+                            {arrival}
                           </span>
                         </td>
                         <td role="cell" data-label="Status absensi"><span className={`tag ${style}`}>{status}</span></td>
-                        <td role="cell" className="stack-full">
+                        {lo && <td role="cell" className="stack-full">
                           {p.can_check_in && !p.attended ? (
                             <div className="row scan__row-actions">
                               <button className="btn btn--sm btn--primary" disabled={!p.session || !!pending}
                                 onClick={() => absenkan(p)}>{pending === p.code ? <Spinner size={13} /> : 'Absenkan'}</button>
-                              {!p.unavailable && <button className="btn btn--sm" disabled={!p.session || !!pending}
+                              {!p.unavailable && <button className="btn btn--sm btn--danger scan__unavailable" disabled={!p.session || !!pending}
                                 onClick={() => markUnavailable(p)}>Mundur/Berhalangan Hadir</button>}
                             </div>
                           ) : <span className="muted small">{p.can_check_in ? '—' : organizationTab ? 'Di luar venue' : 'Di luar binaan'}</span>}
-                        </td>
+                        </td>}
                       </tr>
                     );
                   })}
@@ -320,15 +316,6 @@ export default function Scan() {
 
         {QR_SCAN_ENABLED && tab === 'qr' && (
         <div className="scan__cam card">
-          {!lo && (
-            <label className="form" style={{ marginBottom: 12 }}>
-              <span className="small">Venue pencatatan</span>
-              <select value={venueId} onChange={(e) => setVenueId(e.target.value)}>
-                <option value="">Sesuai venue peserta</option>
-                {venues.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-              </select>
-            </label>
-          )}
           <div className="scan__view">
             {running && !camErr && <video ref={videoRef} playsInline muted />}
             {running && !camErr && <span className="scan__frame" aria-hidden="true" />}
@@ -344,7 +331,7 @@ export default function Scan() {
         </div>
         )}
 
-        <div className="scan__side">
+        {lo && <div className="scan__side">
           {result ? (
             <div key={result.id} className={`card scan__result scan__result--${K.cls}`} role="status">
               <span className="scan__badge"><Icon name={K.icon} size={26} /></span>
@@ -358,7 +345,7 @@ export default function Scan() {
                     {result.person.ruangan && <div className="small">Ruangan: <b>{formatRoom(result.person.ruangan)}</b></div>}
                   </>
                 )}
-                {result.session && <div className="small">{result.session.type || result.session.name}</div>}
+                {result.session && <div className="small">{sessionTitle(result.session)}</div>}
                 {result.at && <div className="small">{result.kind === 'dup' ? 'Tercatat sebelumnya: ' : ''}{fmtDT(result.at)} WIB</div>}
                 {result.msg && <div className="small scan__msg">{result.msg}</div>}
               </div>
@@ -374,13 +361,15 @@ export default function Scan() {
               {history.map((h) => (
                 <li key={h.id} className={`scan__hist--${KIND[h.kind].cls}`}>
                   <Icon name={KIND[h.kind].icon} size={15} />
-                  <span><b>{h.person?.name || h.msg}</b>{h.person && h.kind !== 'ok' && <small> — {h.msg || KIND[h.kind].title}</small>}</span>
+                  <span><b>{h.person?.name || h.msg}</b>{h.person && h.kind !== 'ok' && <small> — {h.msg || KIND[h.kind].title}</small>}
+                    {h.session && <small className="muted"> · {sessionTitle(h.session)}</small>}
+                  </span>
                   <small className="muted">{new Date(h.id).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</small>
                 </li>
               ))}
             </ul>
           </div>
-        </div>
+        </div>}
       </div>
       {shot && <LoShot target={shot} user={user} busy={pending === shot.code} onSend={sendShot} onClose={() => setShot(null)} />}
     </>

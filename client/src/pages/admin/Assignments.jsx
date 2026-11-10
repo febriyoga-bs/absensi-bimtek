@@ -101,7 +101,7 @@ export default function Assignments({ personal = false }) {
     const type = detailLists[field];
     const entries = data[type]?.filter((entry) => entry.venue === row.venue && entry.lo === row.name);
     const query = new URLSearchParams({ type, venue: row.venue, lo: row.name });
-    setDetails({ label, subtitle: `${row.name} · ${row.venue}`, path: `/admin/assignments/detail?${query}`, entries });
+    setDetails({ label, subtitle: `${row.name} · ${row.venue}`, path: `/admin/assignments/detail?${query}`, entries, checkInDays: data.check_in_days });
   }
 
   function exportCsv() {

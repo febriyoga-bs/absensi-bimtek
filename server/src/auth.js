@@ -47,6 +47,11 @@ export function requireSuper(req, res, next) {
   next();
 }
 
+export function requireLo(req, res, next) {
+  if (req.user?.role !== 'lo') return res.status(403).json({ error: 'Pencatatan absensi ini hanya tersedia untuk akun LO.' });
+  next();
+}
+
 export function checkAdminPassword(pw) {
   const a = Buffer.from(String(pw || ''));
   const b = Buffer.from(String(process.env.ADMIN_PASSWORD || ''));

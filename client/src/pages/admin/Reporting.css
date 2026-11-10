@@ -47,13 +47,15 @@
 .reporting-duo, .reporting-highlights { display: grid; gap: 8px; }
 .reporting-duo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .reporting-highlights { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.reporting-highlights--current { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .reporting-duo > div, .reporting-highlights > div { min-width: 0; padding: 12px; border-radius: 16px; }
 .reporting-duo > div { background: #ffffff14; }
 .reporting-highlights > div { background: #e8edfb; color: var(--report-ink); }
 .reporting-highlights > div:nth-child(2) { background: #fdf1dd; }
 .reporting-highlights > div:nth-child(3) { background: #e5dcfa; }
-.reporting-highlights > div:nth-child(4) { background: #e3f1eb; }
+.reporting-day-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.reporting-day-summary > div { padding: 9px 12px; border: 1px solid #ffffff35; border-radius: 14px; font-size: 12px; }
+.reporting-day-summary small { display: block; color: #d1dcf3; font-size: 11px; }
+.reporting-day-summary b { font-size: 17px; font-variant-numeric: tabular-nums; }
 .reporting-duo b, .reporting-highlights b { display: block; font-variant-numeric: tabular-nums; line-height: 1.15; }
 .reporting-duo b { font-size: clamp(26px, 3vw, 38px); }
 .reporting-highlights b { font-size: 21px; }
@@ -84,12 +86,17 @@
 .reporting-summary button[aria-pressed="true"] { border-color: var(--report-navy); background: #e8edfb; }
 .reporting-page :is([data-status="menunggu_reviu"], [data-status="sedang_antre"]) { --report-status: #c88723; --report-status-bg: #fdf1dd; }
 .reporting-page [data-status="ditolak"] { --report-status: #b34e3c; --report-status-bg: #fbe9e5; }
-.reporting-page :is([data-status="diterima"], [data-status="sudah_absen"], [data-status="sudah_tiba"]) { --report-status: #1b3a7a; --report-status-bg: #e8edfb; }
+.reporting-page :is([data-status="diterima"], [data-status="sudah_tiba"]) { --report-status: #1b3a7a; --report-status-bg: #e8edfb; }
+.reporting-page [data-status="sudah_absen"] { --report-status-bg: var(--ok-soft); --report-status-text: var(--ok); }
 .reporting-tag, .reporting-own {
   display: inline-block; padding: 4px 8px; border-radius: 999px; background: var(--report-status-bg, #eef2f8);
-  color: var(--report-ink); font-size: 11px; font-weight: 800; line-height: 1.25;
+  color: var(--report-status-text, var(--report-ink)); font-size: 11px; font-weight: 800; line-height: 1.25;
 }
 .reporting-own { margin-inline-start: 6px; background: #e8edfb; }
+.reporting-school-link {
+  padding: 0; border: 0; background: none; color: var(--report-navy); font: inherit; font-weight: 800;
+  text-align: start; text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+}
 .reporting-progress { display: grid; gap: 4px; }
 .reporting-progress progress { width: 100%; min-width: 50px; height: 8px; accent-color: var(--report-navy); }
 .reporting-page .table th { color: var(--report-navy); background: #f1f4fa; }
@@ -99,7 +106,6 @@
   .reporting-datasets button { padding-inline: 8px; }
   .reporting-hero { border-radius: 20px; }
   .reporting-duo > div, .reporting-highlights > div { padding: 9px; }
-  .reporting-highlights--current { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .reporting-summary { grid-template-columns: minmax(0, 1fr); }
   .reporting-tabs button { flex: 1 1 40%; }
 }

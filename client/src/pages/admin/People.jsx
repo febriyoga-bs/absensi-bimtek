@@ -136,8 +136,8 @@ export default function People() {
     };
     const head = ['Kode', 'Nama', 'Jabatan', 'Instansi / Sekolah', 'Venue', 'Ruangan', 'Telepon', 'Link QR', 'Link WhatsApp'];
     const lines = shown.filter((p) => p.qr_token).map((p) => {
-      const msg = `Yth. ${p.name},\nBerikut QR absensi pribadi Anda untuk BIMTEK Revitalisasi SD:\n${qrLink(p)}\n\n`
-        + `Saat absen, tunjukkan QR tersebut kepada LO/panitia untuk dipindai.${p.ruangan ? ` Ruangan Anda: ${p.ruangan}.` : ''}`
+      const msg = `Yth. ${p.name},\nBerikut kartu identitas pribadi Anda untuk BIMTEK Revitalisasi SD:\n${qrLink(p)}\n\n`
+        + `Temui LO di venue dan tunjukkan nama atau kode peserta untuk pencatatan absensi.${p.ruangan ? ` Ruangan Anda: ${formatRoom(p.ruangan)}.` : ''}`
         + ' Mohon tidak dibagikan ke orang lain. Terima kasih.';
       const wa = waNum(p.phone);
       return [p.code, p.name, p.position, p.institution, p.venue_name || 'Semua', p.ruangan, p.phone, qrLink(p),

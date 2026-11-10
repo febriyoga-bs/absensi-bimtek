@@ -4,11 +4,18 @@ import crypto from 'crypto';
 import { savePhoto, deletePhoto } from '../storage.js';
 import { q, getSettings } from '../db.js';
 import { ah, HttpError, haversine, clientIp } from '../util.js';
-import { requireAdmin, signChallenge, verifyChallenge } from '../auth.js';
+import { requireAdmin, requireLo, signChallenge, verifyChallenge } from '../auth.js';
 import { sanitizeSamples, analyzeLocation, analyzeClientMeta, scoreOf, locate, compactSamples } from '../antifake.js';
+import { reportingDays, withReportingDay } from '../reportingDays.js';
 
 const r = Router();
 const ROLES = ['peserta', 'panitia'];
+const PUBLIC_SELF_CHECK_IN_ENABLED = false;
+
+if (!PUBLIC_SELF_CHECK_IN_ENABLED) {
+  r.post(['/npsn', '/challenge', '/precheck', '/attendance', '/riwayat'], (_req, res) =>
+    res.status(403).json({ error: 'Pencatatan kehadiran peserta dilakukan oleh LO di venue kegiatan.' }));
+}
 
 // Ratusan peserta memakai WiFi venue yang sama = satu IP publik (NAT),
 // jadi batas per-IP dibuat longgar (hanya menahan bot/brute force kasar).
@@ -22,7 +29,7 @@ const MAX_FAILED_PER_PERSON = 10; // percobaan ditolak per orang per 10 menit
 async function activeSession(role, venue) {
   const { rows } = await q(
     `SELECT * FROM sessions
-     WHERE role IN ($1,'semua') AND now() BETWEEN starts_at AND ends_at
+     WHERE NOT is_test AND role IN ($1,'semua') AND now() BETWEEN starts_at AND ends_at
        AND ($2::int IS NULL OR cardinality(COALESCE(venue_ids,'{}'))=0 OR $2=ANY(venue_ids))
      ORDER BY starts_at, id LIMIT 1`,
     [role, venue]
@@ -43,7 +50,7 @@ async function allowedVenues(person, session) {
   return rows;
 }
 
-const publicSession = (s) => s && ({ name: s.name, type: s.type, role: s.role, starts_at: s.starts_at, ends_at: s.ends_at });
+const publicSession = (s) => s && withReportingDay({ name: s.name, type: s.type, role: s.role, starts_at: s.starts_at, ends_at: s.ends_at });
 const alreadyRecorded = (status) => status === 'berhalangan'
   ? 'Anda tercatat mundur/berhalangan hadir untuk sesi ini. Hubungi panitia jika status perlu diubah.'
   : 'Anda sudah absen untuk sesi ini.';
@@ -54,7 +61,7 @@ r.get('/info', ah(async (req, res) => {
   const [{ rows: venues }, { rows: sessions }] = await Promise.all([
     q('SELECT id, name, address, radius_m FROM venues WHERE active ORDER BY name'),
     // sesi yang sedang dibuka + sesi berikutnya hari ini/besok (untuk ditampilkan di beranda)
-    q(`SELECT * FROM sessions WHERE ends_at > now() AND starts_at < now() + interval '36 hours'
+    q(`SELECT * FROM sessions WHERE NOT is_test AND ends_at > now() AND starts_at < now() + interval '36 hours'
        ORDER BY starts_at LIMIT 12`),
   ]);
   const now = Date.now();
@@ -70,6 +77,7 @@ r.get('/info', ah(async (req, res) => {
     event_dates: s.event_dates,
     venues: venues.map(({ id, ...v }) => v),
     sessions: { peserta: forRole('peserta'), panitia: forRole('panitia') },
+    check_in_days: reportingDays,
     server_time: new Date().toISOString(),
   });
 }));
@@ -142,11 +150,6 @@ r.post('/challenge', ipLimiter, ah(async (req, res) => {
 
   res.json(await buildChallenge(person));
 }));
-
-function requireLo(req, res, next) {
-  if (req.user.role !== 'lo') return next(new HttpError(403, 'Absen Saya hanya tersedia untuk akun LO.'));
-  next();
-}
 
 async function getLoProfile(user) {
   const { rows: [person] } = await q(
@@ -243,7 +246,7 @@ const precheck = ah(async (req, res) => {
   if (![lat, lng].every((x) => typeof x === 'number' && Number.isFinite(x))) throw new HttpError(400, 'Lokasi tidak valid');
   const [person, { rows: [session] }] = await Promise.all([
     challengePerson(req, ch),
-    q('SELECT * FROM sessions WHERE id=$1', [ch.s]),
+    q('SELECT * FROM sessions WHERE id=$1 AND NOT is_test', [ch.s]),
   ]);
   if (!person || !session) throw new HttpError(400, 'Data tidak ditemukan');
   const settings = await getSettings();
@@ -271,7 +274,7 @@ const recordAttendance = ah(async (req, res) => {
   const settings = await getSettings();
   const [person, { rows: [session] }] = await Promise.all([
     challengePerson(req, ch),
-    q('SELECT * FROM sessions WHERE id=$1', [ch.s]),
+    q('SELECT * FROM sessions WHERE id=$1 AND NOT is_test', [ch.s]),
   ]);
   if (!person || !session) throw new HttpError(400, 'Data tidak ditemukan');
   if (Date.now() > new Date(session.ends_at).getTime() + 60_000) {
@@ -353,7 +356,8 @@ const recordAttendance = ah(async (req, res) => {
   const ins = await q(
     `INSERT INTO attendance (person_id, session_id, venue_id, photo_path, lat, lng, accuracy_m, distance_m, status,
        risk_score, flags, samples, device_id, ip, user_agent, client_time)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+     SELECT $1,s.id,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16 FROM sessions s
+     WHERE s.id=$2 AND NOT s.is_test
      ON CONFLICT (person_id, session_id) DO NOTHING RETURNING id, created_at`,
     [person.id, session.id, loc.venue.id, file, loc.lat, loc.lng, loc.accuracy, loc.distance, status, score,
       JSON.stringify(flags), JSON.stringify(compactSamples(samples)), dev, ip, ua,
@@ -362,6 +366,7 @@ const recordAttendance = ah(async (req, res) => {
   if (!ins.rows[0]) {
     await deletePhoto(file);
     const { rows: [recorded] } = await q('SELECT status FROM attendance WHERE person_id=$1 AND session_id=$2', [person.id, session.id]);
+    if (!recorded) throw new HttpError(400, 'Sesi ini sudah tidak tersedia untuk absensi resmi.');
     throw new HttpError(409, alreadyRecorded(recorded?.status));
   }
 
@@ -372,6 +377,7 @@ const recordAttendance = ah(async (req, res) => {
     venue: loc.venue.name,
     session: session.name,
     session_type: session.type,
+    check_in_day: withReportingDay(session).check_in_day,
     name: person.name,
   });
 });

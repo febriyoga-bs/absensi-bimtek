@@ -30,7 +30,14 @@ export default function Settings() {
           <small className="muted">Akurasi lebih buruk dari ini <b>tidak diblokir</b>, tetapi masuk status <b>Perlu dicek</b> untuk diverifikasi
             manual oleh LO/panitia. Absen tetap ditolak bila jelas di luar area venue atau akurasi lebih buruk dari 1.000 m.</small>
         </label>
-        <span />
+        <div className="form">
+          <label className="chip-check">
+            <input type="checkbox" checked={!!s.one_official_session_per_day}
+              onChange={(e) => setS({ ...s, one_official_session_per_day: e.target.checked })} />
+            Maksimal satu sesi absensi resmi per hari
+          </label>
+          <small className="muted">Berlaku untuk seluruh venue berdasarkan tanggal WIB. Pilih peran Semua untuk satu sesi peserta dan panitia. Sesi uji coba dikecualikan.</small>
+        </div>
         {msg && <div className={`alert span2 ${msg.err ? 'alert--err' : 'alert--ok'}`}>{msg.text}</div>}
         <div className="row span2"><button className="btn btn--primary">Simpan</button></div>
       </form>

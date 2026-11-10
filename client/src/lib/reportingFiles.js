@@ -1,14 +1,15 @@
 const asText = (value) => String(value ?? '').trim();
 const normalized = (value) => asText(value).toLowerCase();
 
-function pickColumns(rows, required) {
+function pickColumns(rows, required, optional = []) {
   const [header, ...body] = rows;
   const keys = header?.map(normalized) || [];
   const columns = required.map((column) => keys.indexOf(column));
   if (columns.some((index) => index === -1)) {
     throw new Error(`Kolom wajib tidak ditemukan: ${required.filter((_, i) => columns[i] === -1).join(', ')}.`);
   }
-  return body.map((row) => columns.map((index) => asText(row[index]))).filter((row) => row.some(Boolean));
+  const indices = [...columns, ...optional.map((column) => keys.indexOf(column))];
+  return body.map((row) => indices.map((index) => asText(row[index]))).filter((row) => row.some(Boolean));
 }
 
 export async function readMonitoringCsv(file) {
@@ -19,7 +20,8 @@ export async function readMonitoringCsv(file) {
   if (errors.length) throw new Error('CSV tidak bisa dibaca. Periksa pemisah kolom dan tanda kutip.');
   if (!data[0]?.map(normalized).includes('status reviu')) return text;
   const columns = ['npsn', 'status reviu', 'tanggal kirim', 'capaian saat ini (%)'];
-  return Papa.unparse([columns, ...pickColumns(data, columns)]);
+  const contacts = ['fasilitator', 'no. hp fasilitator', 'pengawas', 'no. hp pengawas'];
+  return Papa.unparse([[...columns, ...contacts], ...pickColumns(data, columns, contacts)]);
 }
 
 export async function readArrivalWorkbook(file) {

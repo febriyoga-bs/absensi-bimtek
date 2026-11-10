@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
 import { formatRoom } from '../../lib/room.js';
+import { arrivalBadge } from './shared.js';
+import WhatsAppLink from '../../components/WhatsAppLink.jsx';
 
 const number = new Intl.NumberFormat('id-ID');
 
@@ -13,8 +15,20 @@ function attendanceLabel(person) {
   return 'Belum absen';
 }
 
+function AssignmentSchools({ entry }) {
+  const ids = entry.npsn?.split(';').map((value) => value.trim()) || [];
+  const names = entry.npsn ? (entry.institution || '').split(';').map((value) => value.trim()) : [entry.institution];
+  return <div className="muted small">
+    {Array.from({ length: Math.max(ids.length, names.length) }, (_, i) => (
+      <div key={i}>{[names[i], ids[i] && `NPSN ${ids[i]}`].filter(Boolean).join(' · ')}</div>
+    ))}
+    {entry.room && <div>Ruangan · {formatRoom(entry.room)}</div>}
+  </div>;
+}
+
 export default function AttendanceDetailDialog({ details, onClose }) {
   const [detailResult, setDetailResult] = useState(null);
+  const [showAll, setShowAll] = useState(false);
   const dialog = useRef(null);
 
   useEffect(() => {
@@ -22,6 +36,7 @@ export default function AttendanceDetailDialog({ details, onClose }) {
     if (!dialog.current.open) dialog.current.showModal();
     let current = true;
     setDetailResult(null);
+    setShowAll(false);
     api(details.path, { admin: true })
       .then((entries) => { if (current) setDetailResult({ entries }); })
       .catch(() => { if (current) setDetailResult({ error: true }); });
@@ -29,6 +44,9 @@ export default function AttendanceDetailDialog({ details, onClose }) {
   }, [details]);
 
   const detailEntries = detailResult?.entries ?? details?.entries;
+  const checkedIn = details?.filterByCheckIn ? detailEntries?.filter((entry) =>
+    entry.people?.some((person) => person.status === 'valid' || person.status === 'review')) : null;
+  const shownEntries = details?.filterByCheckIn && !showAll ? checkedIn : detailEntries;
   return (
       <dialog ref={dialog} className="assignment-dialog" aria-labelledby="assignment-detail-title"
         onClose={onClose}>
@@ -37,33 +55,57 @@ export default function AttendanceDetailDialog({ details, onClose }) {
             <div>
               <h3 id="assignment-detail-title">Daftar {details.label}</h3>
               <p className="muted small">{details.subtitle}</p>
-              {detailEntries && <span className="assignment-detail-count">{number.format(detailEntries.length)} hasil</span>}
+              {shownEntries && <span className="assignment-detail-count">{number.format(shownEntries.length)} hasil</span>}
             </div>
             <form method="dialog"><button className="btn btn--sm" autoFocus><Icon name="x" size={16} />Tutup</button></form>
           </header>
           {!detailResult && <p className="muted small" role="status">Memuat status absensi…</p>}
           {detailResult?.error && <p className="alert alert--warn" role="status">Status absensi gagal dimuat. Tutup dan buka kembali daftar untuk mencoba lagi.</p>}
-          {detailResult?.entries?.length > 0 && <p className="muted small">Status dari semua sesi di venue ini.</p>}
-          {detailEntries?.length > 0 && <ol>
-            {detailEntries.map((entry, index) => (
+          {details.filterByCheckIn && detailEntries && <div className="assignment-tabs attendance-detail-tabs" role="group" aria-label="Tampilan daftar absensi">
+            <button type="button" aria-pressed={!showAll} className={!showAll ? 'on' : ''} onClick={() => setShowAll(false)}>
+              Sudah absen <span>{number.format(checkedIn.length)}</span>
+            </button>
+            <button type="button" aria-pressed={showAll} className={showAll ? 'on' : ''} onClick={() => setShowAll(true)}>
+              Semua peserta <span>{number.format(detailEntries.length)}</span>
+            </button>
+          </div>}
+          {detailResult?.entries?.length > 0 && <p className="muted small">
+            {details.checkInDays?.length ? 'Absensi per hari mengikuti tanggal sesi resmi (WIB).'
+              : details.sessionDay ? `Status resmi ${details.sessionDay} di venue ini.` : 'Absensi dari sesi resmi di venue ini.'}
+          </p>}
+          {shownEntries?.length > 0 && <ol>
+            {shownEntries.map((entry, index) => (
               <li key={entry.npsn || index}>
                 <b>{entry.name}</b>
-                <div className="muted small">
-                  {[entry.npsn && `NPSN ${entry.npsn}`, entry.institution, formatRoom(entry.room)].filter(Boolean).join(' · ')}
-                </div>
-                {entry.people?.map((person) => (
-                  <div key={`${person.position || ""}:${person.name}`} className="assignment-person">
+                <AssignmentSchools entry={entry} />
+                {entry.people?.map((person) => {
+                  const [arrival, arrivalStyle] = arrivalBadge(person.arrival_status);
+                  return <div key={`${person.position || ''}:${person.name}`} className="assignment-person">
                     {person.position && <span className="small"><b>{person.position}</b> · {person.name}</span>}
-                    <span className={`tag ${person.status === 'valid' ? 'tag--open' : person.status === 'review' ? 'tag--venue' : 'tag--off'}`}>
+                    <WhatsAppLink name={person.name} phone={person.phone} />
+                    {Object.hasOwn(person, 'arrival_status') && <span className={`tag ${arrivalStyle}`}>Venue · {arrival}</span>}
+                    {details.checkInDays?.length ? <div className="assignment-person-days">
+                      {details.checkInDays.map((day) => {
+                        const checkedIn = person.check_in_dates?.includes(day.date);
+                        return <div key={day.date}>
+                          <div className="muted small">{day.label} · {day.shortDate}</div>
+                          <span className={`tag ${checkedIn ? 'tag--open' : 'tag--off'}`}>
+                            {checkedIn ? 'Sudah absen' : person.registered ? 'Belum absen' : 'Profil belum tersedia'}
+                          </span>
+                        </div>;
+                      })}
+                    </div> : <span className={`tag ${person.status === 'valid' ? 'tag--open' : person.status === 'review' ? 'tag--venue' : 'tag--off'}`}>
                       {attendanceLabel(person)}
-                    </span>
-                  </div>
-                ))}
+                    </span>}
+                  </div>;
+                })}
                 {entry.people?.length === 0 && <small className="muted">Nama peserta belum tersedia.</small>}
               </li>
             ))}
           </ol>}
-          {detailEntries?.length === 0 && <p className="muted">Tidak ada {details.label.toLowerCase()} untuk ditampilkan.</p>}
+          {shownEntries?.length === 0 && <p className="muted">{details.filterByCheckIn && !showAll
+            ? 'Belum ada yang absen pada cakupan ini.'
+            : `Tidak ada ${details.label.toLowerCase()} untuk ditampilkan.`}</p>}
         </>}
       </dialog>
   );

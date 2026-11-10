@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
-import { fmtDT, toLocalInput } from './shared.js';
+import { fmtDT, sessionTitle, toLocalInput } from './shared.js';
 import { Skel, SkelRows, SkelLines, Spinner } from '../../components/Skeleton.jsx';
 
 const blank = () => {
   const s = new Date(); s.setMinutes(0, 0, 0);
   const e = new Date(s); e.setHours(e.getHours() + 1);
-  return { id: null, name: '', role: 'peserta', type: '', starts_at: toLocalInput(s), ends_at: toLocalInput(e), venue_ids: [] };
+  return { id: null, name: '', role: 'peserta', type: '', starts_at: toLocalInput(s), ends_at: toLocalInput(e), venue_ids: [], is_test: false };
 };
 
 export default function Sessions() {
@@ -78,6 +78,13 @@ export default function Sessions() {
         </label>
         <label>Dibuka<input type="datetime-local" value={form.starts_at} onChange={f('starts_at')} required /></label>
         <label>Ditutup<input type="datetime-local" value={form.ends_at} onChange={f('ends_at')} required /></label>
+        <div className="span2 form">
+          <label className="chip-check">
+            <input type="checkbox" checked={!!form.is_test} onChange={(e) => setForm({ ...form, is_test: e.target.checked })} />
+            Tandai sebagai sesi uji coba
+          </label>
+          <small className="muted">Nama atau jenis sesi dengan kata Test, Tes, atau Uji Coba otomatis ditandai. Sesi uji coba hanya tampil di pengelolaan dan riwayat.</small>
+        </div>
         <div className="span2 form" style={{ gap: 8 }}>
           <b style={{ fontSize: 14 }}>Venue yang berlaku</b>
           <span className="muted small">Kosongkan = semua venue aktif. Centang bila sesi ini hanya untuk venue tertentu.</span>
@@ -98,15 +105,17 @@ export default function Sessions() {
         </div>
       </form>
       <table className="table stack-table" role="table" aria-label="Daftar sesi absensi">
-        <thead><tr><th>Sesi</th><th>Untuk</th><th>Waktu (WIB)</th><th>Venue</th><th>Hadir</th><th></th></tr></thead>
+        <thead><tr><th>Sesi</th><th>Untuk</th><th>Waktu (WIB)</th><th>Venue</th><th>Sudah absen</th><th></th></tr></thead>
         <tbody>
           {list.map((s) => (
             <tr key={s.id} role="row">
-              <td role="cell"><b>{s.name}</b> <span className="tag tag--type">{s.type}</span> {s.is_open && <span className="tag tag--open">● Dibuka</span>}</td>
+              <td role="cell"><b>{sessionTitle(s)}</b> <span className="tag tag--type">{s.type}</span> {s.is_test
+                ? <span className="tag tag--venue">Uji coba</span> : s.is_open && <span className="tag tag--open">● Dibuka</span>}
+                {s.check_in_day && s.name !== s.check_in_day.label && <div className="muted small">{s.name}</div>}</td>
               <td role="cell" data-label="Untuk"><span className={`tag tag--${s.role}`}>{s.role}</span></td>
               <td role="cell" data-label="Waktu (WIB)" className="small">{fmtDT(s.starts_at)} – {fmtDT(s.ends_at)}</td>
               <td role="cell" data-label="Venue" className="small">{s.venue_ids?.length ? s.venue_ids.map(venueName).join(', ') : <span className="muted">Semua venue</span>}</td>
-              <td role="cell" data-label="Hadir">{s.valid + s.review}/{s.expected}</td>
+              <td role="cell" data-label="Sudah absen">{s.valid + s.review}/{s.expected}</td>
               <td role="cell" className="stack-full"><div className="row">
                 <button className="btn btn--sm" onClick={() => setForm({ ...s, venue_ids: s.venue_ids || [], starts_at: toLocalInput(s.starts_at), ends_at: toLocalInput(s.ends_at) })}>Ubah</button>
                 <button className="btn btn--sm btn--danger" onClick={() => del(s)}>Hapus</button>
