@@ -19,6 +19,7 @@ import VenueCode from './pages/admin/VenueCode.jsx';
 import Venues from './pages/admin/Venues.jsx';
 import LoAccounts from './pages/admin/LoAccounts.jsx';
 const Assignments = lazy(() => import('./pages/admin/Assignments.jsx'));
+const ParticipantSync = lazy(() => import('./pages/admin/ParticipantSync.jsx'));
 const Scan = lazy(() => import('./pages/admin/Scan.jsx'));
 const ChangePassword = lazy(() => import('./pages/admin/ChangePassword.jsx'));
 
@@ -42,9 +43,11 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="password" element={<ChangePassword />} />
           <Route path="sesi" element={<Sessions />} />
           <Route path="orang" element={<People />} />
+          <Route path="orang/sinkronisasi" element={<ParticipantSync />} />
           <Route path="venue" element={<Venues />} />
           <Route path="lo" element={<LoAccounts />} />
           <Route path="pendampingan" element={<Assignments />} />
+          <Route path="pendampingan/saya" element={<Assignments key="mine" personal />} />
           <Route path="pengaturan" element={<Settings />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

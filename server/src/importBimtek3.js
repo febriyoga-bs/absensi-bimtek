@@ -150,6 +150,7 @@ try {
   const roster = JSON.parse(readFileSync(values.input, 'utf8'));
   if (roster.venues.length !== 7 || roster.lo.length !== 76 ||
       roster.facilitators.length !== 470 || roster.schools.length !== 1884 || roster.participants?.length !== 3360 ||
+      roster.coordinators?.length !== 107 || roster.supervisors?.length !== 1476 ||
       new Set(roster.lo.map(({ name }) => norm(name))).size !== roster.lo.length) {
     throw new Error('Jumlah atau identitas data tidak cocok dengan pemetaan revisi 8.');
   }

@@ -74,16 +74,29 @@ def extract(book):
     expected_counts = {fasil_key(row, "name"): row["school_count"] for row in facilitators}
     if len(expected_counts) != len(facilitators) or school_counts != expected_counts:
         raise ValueError("Pemetaan sekolah berbeda dari daftar fasilitator.")
-    participants = extract_participants(book, school_rows)
-    return dict(venues=venues, lo=lo, facilitators=facilitators, schools=schools, participants=participants)
+    bendahara, pengawas, koordinator = "1 Bendahara", "2 Pengawas", "4 Koor Pelaporan"
+    people = read_rows(book, "Peserta per Ruangan", {
+        "venue": "Hotel", "room": "Ruangan", "group": "Kelompok", "type": "Unsur",
+        "supervisor": "ID Pengawas", "name": "Nama", "npsn": "NPSN", "lo": "Nama LO",
+        "institution": "Asal/Instansi",
+    }, lambda row: len(row) > 3 and row[3] in (bendahara, pengawas, koordinator))
+    detail = {}
+    for key, kind, field in (
+        ("coordinators", koordinator, "coordinator_count"), ("supervisors", pengawas, "supervisor_count"),
+    ):
+        rows = [row for row in people if row["type"] == kind]
+        counts = Counter(lo_key(row, "lo") for row in rows)
+        if set(counts) - lo_keys or any(counts[lo_key(row, "name")] != row[field] for row in lo):
+            raise ValueError(f"Jumlah {kind} berbeda dari Rekap LO.")
+        detail[key] = [
+            {key: row[key] for key in ("venue", "room", "group", "lo", "name", "institution")}
+            for row in rows
+        ]
+    participants = extract_participants([row for row in people if row["type"] != koordinator], school_rows)
+    return dict(venues=venues, lo=lo, facilitators=facilitators, schools=schools, participants=participants, **detail)
 
 
-def extract_participants(book, schools):
-    bendahara, pengawas = "1 Bendahara", "2 Pengawas"
-    rows = read_rows(book, "Peserta per Ruangan", {
-        "venue": "Hotel", "room": "Ruangan", "type": "Unsur", "supervisor": "ID Pengawas",
-        "name": "Nama", "npsn": "NPSN",
-    }, lambda row: len(row) > 3 and row[3] in (bendahara, pengawas))
+def extract_participants(rows, schools):
     by_npsn = {str(s["npsn"]).strip(): s for s in schools}
     by_supervisor = defaultdict(list)
     for school in schools:
@@ -97,7 +110,7 @@ def extract_participants(book, schools):
     participants = []
     seen = set()
     for row in rows:
-        is_treasurer = row["type"] == bendahara
+        is_treasurer = row["type"] == "1 Bendahara"
         key = str(row["npsn"]).strip() if is_treasurer else row["supervisor"]
         group = [by_npsn[key]] if is_treasurer else by_supervisor[key]
         group = sorted(group, key=lambda s: str(s["npsn"]))

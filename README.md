@@ -12,10 +12,12 @@ Stack: React (Vite) + Node.js/Express + PostgreSQL.
 | `/absen/peserta` | Absensi peserta (tema biru) |
 | `/absen/panitia` | Absensi panitia (tema hijau) |
 | `/admin` | Rekap realtime per sesi, unduh CSV |
-| `/admin/pendampingan` | Rekap pembagian LO, fasilitator pelaporan, dan sekolah binaan untuk Admin Utama |
+| `/admin/pendampingan` | Rekap seluruh venue untuk Admin Utama dan LO. Unduhan CSV tersedia untuk Admin Utama |
+| `/admin/pendampingan/saya` | Daftar fasilitator, sekolah, dan ruangan untuk akun LO yang sedang masuk |
 | `/admin/absensi` | Verifikasi foto + tanda Fake GPS, sahkan/tolak, log percobaan yang diblokir |
 | `/admin/sesi` | Jadwal sesi (masuk/pulang, untuk peserta/panitia/semua) |
 | `/admin/orang` | Data peserta & panitia (bisa dikunci ke venue tertentu), impor CSV / tempel dari Excel |
+| `/admin/orang/sinkronisasi` | Pratinjau dan penerapan daftar absensi Bendahara dan Pengawas revisi 8 |
 | `/admin/venue` | **Banyak venue**: koordinat, radius, aktif/nonaktif, layar kode per venue |
 | `/admin/pengaturan` | Nama acara, penyelenggara, tanggal, akurasi GPS maks, wajib kode venue |
 | `/admin/kode-venue?venue=ID` | Layar kode 6 digit per venue yang berganti tiap 30 detik (tampilkan di proyektor/TV) |
@@ -40,11 +42,11 @@ Admin utama membuat akun LO di menu **Akun LO**, berisi nama, username, password
 - mengunduh **CSV** venue-nya,
 - membuka **layar kode venue** miliknya.
 
-Menu Peserta, Sesi, Venue, Akun LO, Rekap Pendampingan, dan Pengaturan hanya untuk Admin Utama. LO perlu login ulang setelah penempatan venuenya berubah.
+Menu Peserta, Sesi, Venue, Akun LO, dan Pengaturan hanya untuk Admin Utama. Menu Daftar Pendampingan menampilkan fasilitator, sekolah, dan ruangan yang ditugaskan ke akun LO tersebut. LO perlu login ulang setelah penempatan venuenya berubah.
 
 ## Impor pembagian Bimtek Pelaporan 3 revisi 8
 
-Pasang `openpyxl` di lingkungan Python. Dari folder proyek, ekstrak empat sheet pemetaan, jalankan migrasi, lalu simulasikan impor.
+Pasang `openpyxl` di lingkungan Python. Dari folder proyek, ekstrak pemetaan dan daftar peserta, jalankan migrasi, lalu simulasikan impor.
 
 ```bash
 python server/scripts/readBimtek3.py "lokasi/berkas.xlsx" data/bimtek3-pemetaan.local
@@ -62,7 +64,9 @@ Akun baru memakai username seperti `LO1.Febriyoga` dan mendapat kata sandi acak 
 
 Untuk mengganti login seluruh LO dalam rekap, set `BIMTEK_LO_PASSWORD` di lingkungan shell dan tambahkan `--reset-lo-logins` pada perintah impor. Gunakan nama berkas keluaran yang baru. Berkas keluaran mode ini berisi daftar username dan venue.
 
-**Rekap Pendampingan** menampilkan salinan pembagian dari Excel. Data peserta, sesi, dan catatan kehadiran dikelola lewat menu absensi.
+**Rekap Pendampingan** menampilkan salinan pembagian dari Excel untuk Admin Utama dan LO. Klik angka pada tab **LO** untuk membuka daftar fasilitator, sekolah, koordinator, atau pengawas di baris tersebut. Admin Utama dapat memilih tab dan filter, lalu memakai **Unduh CSV sesuai filter** untuk mengekspor seluruh hasil pencarian.
+
+Dari **Peserta & Panitia**, buka **Pratinjau Sinkronisasi Absensi** untuk memeriksa peserta baru, perubahan penempatan, dan usulan arsip. Sinkronisasi mencakup Bendahara dan Pengawas yang terhubung ke NPSN. Data dengan identitas yang meragukan masuk ke **Perlu diperiksa**. Jalankan **Terapkan Sinkronisasi** di luar sesi absensi peserta. Arsip dapat dilihat lewat filter **Status peserta** dan tetap terhubung dengan riwayat kehadiran.
 
 ## Data peserta (Bendahara & Pengawas)
 

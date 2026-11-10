@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
 import { Skel, SkelRows, SkelLines, Spinner } from '../../components/Skeleton.jsx';
@@ -21,6 +22,7 @@ const PAGE = 200;
 
 export default function People() {
   const [role, setRole] = useState('peserta');
+  const [archived, setArchived] = useState(false);
   const [search, setSearch] = useState('');
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -36,10 +38,25 @@ export default function People() {
   const [limit, setLimit] = useState(PAGE);
   const [busy, setBusy] = useState(false);
   const [sort, setSort] = useState({ key: 'code', dir: 1 });
+  const requestId = useRef(0);
 
   useEffect(() => { api('/admin/venues', { admin: true }).then(setVenues); }, []);
-  const load = () => { setLoading(true); return api(`/admin/people?role=${role}&q=${encodeURIComponent(search)}`, { admin: true }).then(setList).finally(() => setLoading(false)); };
-  useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [role, search]);
+  async function load() {
+    const id = ++requestId.current;
+    setLoading(true);
+    try {
+      const rows = await api(`/admin/people?role=${role}&q=${encodeURIComponent(search)}&archived=${archived}`, { admin: true });
+      if (requestId.current === id) setList(rows);
+    } catch (e) {
+      if (requestId.current === id) setMsg({ err: true, text: e.message });
+    } finally {
+      if (requestId.current === id) setLoading(false);
+    }
+  }
+  useEffect(() => {
+    const t = setTimeout(load, 250);
+    return () => { clearTimeout(t); requestId.current++; };
+  }, [role, search, archived]);
   const f = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
   async function save(e) {
@@ -72,7 +89,13 @@ export default function People() {
     load();
   }
 
-  const switchRole = (r) => { if (r !== role) setList([]); setRole(r); setForm({ ...blank, role: r }); resetFilters(); };
+  const switchRole = (r) => {
+    if (r !== role) {
+      setList([]); setLoading(true); setArchived(false); setRole(r);
+    }
+    setForm({ ...blank, role: r });
+    resetFilters();
+  };
   const resetFilters = () => { setFVenue(''); setFPos(''); setFRegion(''); setFRoom(''); setFProv(''); };
 
   // pilihan filter diambil dari data yang ada
@@ -136,7 +159,9 @@ export default function People() {
   return (
     <>
       <div className="page-head"><div><h2>Peserta & Panitia</h2>
-        <p className="muted">Kode dipakai untuk login absen. Venue boleh dikosongkan agar bisa absen di venue mana saja.</p></div></div>
+        <p className="muted">Kode dipakai untuk login absen. Venue boleh dikosongkan agar bisa absen di venue mana saja.</p></div>
+        <Link className="btn" to="/admin/orang/sinkronisasi">Pratinjau Sinkronisasi Absensi</Link>
+      </div>
       <div className="tabs">
         <button className={role === 'peserta' ? 'on' : ''} onClick={() => switchRole('peserta')}>Peserta</button>
         <button className={role === 'panitia' ? 'on' : ''} onClick={() => switchRole('panitia')}>Panitia</button>
@@ -199,6 +224,12 @@ export default function People() {
 
       <div className="toolbar filters">
         <input placeholder="Cari nama / kode / sekolah / NPSN / kab/kota" value={search} onChange={(e) => setSearch(e.target.value)} />
+        {role === 'peserta' && <select aria-label="Status peserta" value={archived ? 'archived' : 'active'} onChange={(e) => {
+          setArchived(e.target.value === 'archived'); setList([]); setLoading(true); resetFilters();
+        }}>
+          <option value="active">Peserta aktif</option>
+          <option value="archived">Arsip peserta</option>
+        </select>}
         <select value={fVenue} onChange={(e) => setFVenue(e.target.value)} aria-label="Filter venue">
           <option value="">Semua venue</option>
           <option value="none">— Tanpa venue (bebas)</option>
@@ -234,8 +265,8 @@ export default function People() {
         </select>
         {filtered && <button className="btn btn--sm" onClick={resetFilters}><Icon name="x" size={14} />Reset filter</button>}
         <span className="muted">{loading ? <><Spinner size={14} /> Memuat…</> : <>{filtered ? `${shown.length} dari ${list.length}` : list.length} orang</>}</span>
-        <button className="btn btn--sm" onClick={exportQrLinks} disabled={!shown.length} title="CSV berisi link QR pribadi & link WhatsApp untuk orang yang tampil">
-          <Icon name="share" size={14} />Ekspor link QR (WA)</button>
+        {!archived && <button className="btn btn--sm" onClick={exportQrLinks} disabled={!shown.length} title="CSV berisi link QR pribadi & link WhatsApp untuk orang yang tampil">
+          <Icon name="share" size={14} />Ekspor link QR (WA)</button>}
       </div>
       <table className="table">
         <thead><tr>
@@ -255,11 +286,11 @@ export default function People() {
                 {p.kab_kota}{p.provinsi && <div className="muted">{p.provinsi}</div>}</td>
               <td className="small">{p.ruangan}{p.region && <div className="muted">{p.region}</div>}</td>
               <td>{p.venue_name ? <span className="tag tag--venue">{p.venue_name}</span> : <span className="muted small">Semua</span>}</td>
-              <td><div className="row">
+              <td>{p.archived_at ? <span className="tag tag--off">Diarsipkan</span> : <div className="row">
                 {p.qr_token && <a className="btn btn--sm" href={qrLink(p)} target="_blank" rel="noreferrer" title="Buka kartu QR"><Icon name="qr" size={14} />QR</a>}
                 <button className="btn btn--sm" onClick={() => { setForm({ ...p, venue_id: p.venue_id ?? '' }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Ubah</button>
                 <button className="btn btn--sm btn--danger" onClick={() => del(p)}>Hapus</button>
-              </div></td>
+              </div>}</td>
             </tr>
           ))}
           {loading && !list.length && <SkelRows rows={8} cols={8} />}

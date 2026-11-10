@@ -53,7 +53,7 @@ r.use(requireAdmin);
 
 const publicLoAssignment = ({ account_id, venue_id, ...lo }) => lo;
 
-r.get('/assignments', requireSuper, ah(async (_req, res) => {
+r.get('/assignments', ah(async (_req, res) => {
   const { rows: [roster] } = await q("SELECT data - 'participants' AS data FROM assignment_roster WHERE id=1");
   if (!roster) return res.json(null);
   res.json({ ...roster.data, lo: roster.data.lo.map(publicLoAssignment) });
@@ -125,7 +125,7 @@ r.get('/venues', ah(async (req, res) => {
   const lo = req.user.role === 'lo' ? req.user.venue : null;
   const { rows } = await q(
     `SELECT v.*,
-       (SELECT count(*) FROM people p WHERE p.venue_id=v.id)::int AS people_count,
+       (SELECT count(*) FROM people p WHERE p.venue_id=v.id AND p.archived_at IS NULL)::int AS people_count,
        (SELECT count(*) FROM lo_accounts l WHERE l.venue_id=v.id AND l.active)::int AS lo_count
      FROM venues v WHERE ($1::int IS NULL OR v.id=$1) ORDER BY v.active DESC, v.name`, [lo]);
   res.json(rows.map(publicVenue));
@@ -248,8 +248,8 @@ r.delete('/lo/:id', requireSuper, ah(async (req, res) => {
 
 /* ---------- Peserta & Panitia (admin utama) ---------- */
 r.get('/people/sync', requireSuper, ah(async (_req, res) => {
-  const { summary, revision, items } = await getParticipantPlan(pool);
-  res.json({ summary, revision, items });
+  const { summary, revision, items, inactiveVenues } = await getParticipantPlan(pool);
+  res.json({ summary, revision, items, inactiveVenues });
 }));
 
 r.post('/people/sync', requireSuper, ah(async (req, res) => {

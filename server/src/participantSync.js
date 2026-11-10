@@ -47,12 +47,17 @@ export function planParticipantSync(source, people, venues) {
       from_room: existing?.ruangan ?? null, to_room: p.ruangan,
     };
     const next = Object.fromEntries(FIELDS.map((key) => [key, key === 'venue_id' ? venue.id : (p[key] ?? null)]));
-    const reason = candidates.length > 1 || (existing && references.get(existing.id) > 1)
-      ? 'NPSN bertaut ke beberapa data peserta.'
-      : owner && owner.id !== existing?.id ? 'Kode peserta sudah digunakan oleh data lain.'
-        : existing && identity(existing.name) !== identity(p.name) ? 'Nama berbeda pada NPSN yang sama.' : '';
+    let reason;
+    if (candidates.length > 1 || (existing && references.get(existing.id) > 1)) {
+      reason = 'NPSN bertaut ke beberapa data peserta.';
+    } else if (owner && owner.id !== existing?.id) {
+      reason = 'Kode peserta sudah digunakan oleh data lain.';
+    } else if (existing && identity(existing.name) !== identity(p.name)) {
+      reason = 'Nama berbeda pada NPSN yang sama.';
+    }
     if (reason) {
-      items.push({ ...row, action: 'review', reason, candidates: candidates.map(({ code, name }) => ({ code, name })) });
+      const records = owner && !candidates.includes(owner) ? [...candidates, owner] : candidates;
+      items.push({ ...row, action: 'review', reason, candidates: records.map(({ code, name }) => ({ code, name })) });
     } else if (!existing) {
       inserts.push({ ...next, code: p.code, name: p.name, position: p.position });
       items.push({ ...row, action: 'add' });
@@ -85,8 +90,10 @@ export async function getParticipantPlan(db) {
   if (!roster?.participants?.length) throw new HttpError(409, 'Pemetaan peserta belum diimpor ke database.');
   const { rows: people } = await db.query(
     `SELECT id, code, name, role, position, archived_at, ${FIELDS.join(', ')} FROM people ORDER BY id`);
-  const { rows: venues } = await db.query('SELECT id, name FROM venues ORDER BY id');
-  return planParticipantSync(roster.participants, people, venues);
+  const { rows: venues } = await db.query('SELECT id, name, active FROM venues ORDER BY id');
+  const targetVenues = new Set(roster.participants.map(({ venue }) => venue));
+  const inactiveVenues = venues.filter((v) => !v.active && targetVenues.has(v.name)).map(({ name }) => name);
+  return { ...planParticipantSync(roster.participants, people, venues), inactiveVenues };
 }
 
 export async function applyParticipantPlan(db, plan) {
