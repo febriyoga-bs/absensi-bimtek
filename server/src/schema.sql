@@ -159,3 +159,13 @@ ALTER TABLE attendance ALTER COLUMN accuracy_m DROP NOT NULL;
 ALTER TABLE attendance ALTER COLUMN distance_m DROP NOT NULL;
 ALTER TABLE attendance ADD COLUMN IF NOT EXISTS method     TEXT NOT NULL DEFAULT 'selfie';
 ALTER TABLE attendance ADD COLUMN IF NOT EXISTS scanned_by TEXT;
+
+-- Salinan pembagian tugas dari Excel, terpisah dari data absensi.
+CREATE TABLE IF NOT EXISTS assignment_roster (
+  id INT PRIMARY KEY CHECK (id = 1),
+  data JSONB NOT NULL
+);
+ALTER TABLE assignment_roster ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE people ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
+ALTER TABLE people ADD COLUMN IF NOT EXISTS roster_added_at TIMESTAMPTZ;

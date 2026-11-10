@@ -60,7 +60,7 @@ export default function LoAccounts() {
       <div className="page-head">
         <div>
           <h2>Akun LO Venue</h2>
-          <p className="muted">LO hanya bisa melihat rekap, memverifikasi absensi, mengunduh CSV, dan membuka layar kode untuk <b>venue-nya sendiri</b>.</p>
+          <p className="muted">Akun LO digunakan untuk mencatat dan memverifikasi absensi, melihat rekap kehadiran, mengunduh CSV, dan membuka layar kode di venue yang ditugaskan.</p>
         </div>
       </div>
 
@@ -89,7 +89,7 @@ export default function LoAccounts() {
           <option value="">Pilih venue…</option>
           {venues.map((v) => <option key={v.id} value={v.id}>{v.name}{!v.active ? ' (nonaktif)' : ''}</option>)}
         </select></label>
-        <label>Username<input value={form.username} onChange={f('username')} placeholder="andi.venue1" autoCapitalize="none" required /></label>
+        <label>Username<input value={form.username} onChange={f('username')} placeholder="LO1.Febriyoga" autoCapitalize="none" required /></label>
         <label>{form.id ? 'Password baru (kosongkan bila tidak diganti)' : 'Password'}
           <span className="row" style={{ flexWrap: 'nowrap' }}>
             <input value={form.password} onChange={f('password')} placeholder={form.id ? '••••••' : 'min. 6 karakter'} required={!form.id} autoComplete="new-password" />

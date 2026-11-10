@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import { q } from './db.js';
 
 const SECRET = () => {
   const s = process.env.JWT_SECRET;
@@ -15,18 +16,29 @@ const SECRET = () => {
 export const signAdmin = (payload = { role: 'admin' }) =>
   jwt.sign({ adm: true, ...payload }, SECRET(), { expiresIn: '12h' });
 
-export function requireAdmin(req, res, next) {
+export async function requireAdmin(req, res, next) {
   const header = req.headers.authorization || '';
   // ?t= dipakai untuk <img src> dan tautan unduh CSV
   const token = header.startsWith('Bearer ') ? header.slice(7) : req.query.t;
+  let p;
   try {
-    const p = jwt.verify(String(token || ''), SECRET());
+    p = jwt.verify(String(token || ''), SECRET());
     if (!p.adm) throw new Error();
-    req.user = { role: p.role === 'lo' ? 'lo' : 'admin', lo: p.lo ?? null, venue: p.venue ?? null };
-    next();
   } catch {
-    res.status(401).json({ error: 'Sesi login berakhir, silakan login ulang' });
+    return res.status(401).json({ error: 'Sesi login berakhir, silakan login ulang' });
   }
+  if (p.role === 'lo') {
+    try {
+      const { rows: [account] } = await q('SELECT active, venue_id FROM lo_accounts WHERE id=$1', [p.lo]);
+      if (!account?.active || account.venue_id !== p.venue) {
+        return res.status(401).json({ error: 'Akun atau penempatan venue berubah. Silakan login ulang.' });
+      }
+    } catch (e) {
+      return next(e);
+    }
+  }
+  req.user = { role: p.role === 'lo' ? 'lo' : 'admin', lo: p.lo ?? null, venue: p.venue ?? null };
+  next();
 }
 
 /** Hanya super admin (kelola peserta, sesi, venue, pengaturan, akun LO). */

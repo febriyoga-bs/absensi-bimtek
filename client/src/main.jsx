@@ -18,6 +18,7 @@ import Settings from './pages/admin/Settings.jsx';
 import VenueCode from './pages/admin/VenueCode.jsx';
 import Venues from './pages/admin/Venues.jsx';
 import LoAccounts from './pages/admin/LoAccounts.jsx';
+const Assignments = lazy(() => import('./pages/admin/Assignments.jsx'));
 const Scan = lazy(() => import('./pages/admin/Scan.jsx'));
 const ChangePassword = lazy(() => import('./pages/admin/ChangePassword.jsx'));
 
@@ -43,6 +44,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="orang" element={<People />} />
           <Route path="venue" element={<Venues />} />
           <Route path="lo" element={<LoAccounts />} />
+          <Route path="pendampingan" element={<Assignments />} />
           <Route path="pengaturan" element={<Settings />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

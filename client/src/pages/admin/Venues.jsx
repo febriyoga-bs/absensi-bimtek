@@ -62,7 +62,7 @@ export default function Venues() {
       <div className="page-head">
         <div>
           <h2>Venue</h2>
-          <p className="muted">Absen diterima bila peserta berada di dalam radius salah satu venue yang berlaku untuknya.
+          <p className="muted">Untuk absensi mandiri, peserta harus berada dalam radius venue aktif yang berlaku baginya.
             Venue bisa dibatasi per sesi (menu Sesi) atau per orang (menu Peserta & Panitia).</p>
         </div>
       </div>
@@ -79,7 +79,7 @@ export default function Venues() {
         <label>Radius absensi (meter)<input type="number" min="10" value={form.radius_m} onChange={f('radius_m')} /></label>
         <label className="check" style={{ alignSelf: 'end' }}>
           <input type="checkbox" checked={form.active} onChange={f('active')} />
-          <span><b>Aktif</b> — venue bisa dipakai untuk absen</span>
+          <span><b>Aktif untuk absensi mandiri</b></span>
         </label>
         <div className="row span2">
           <button type="button" className="btn" onClick={useMyLocation} disabled={locating}>

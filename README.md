@@ -12,6 +12,7 @@ Stack: React (Vite) + Node.js/Express + PostgreSQL.
 | `/absen/peserta` | Absensi peserta (tema biru) |
 | `/absen/panitia` | Absensi panitia (tema hijau) |
 | `/admin` | Rekap realtime per sesi, unduh CSV |
+| `/admin/pendampingan` | Rekap pembagian LO, fasilitator pelaporan, dan sekolah binaan untuk Admin Utama |
 | `/admin/absensi` | Verifikasi foto + tanda Fake GPS, sahkan/tolak, log percobaan yang diblokir |
 | `/admin/sesi` | Jadwal sesi (masuk/pulang, untuk peserta/panitia/semua) |
 | `/admin/orang` | Data peserta & panitia (bisa dikunci ke venue tertentu), impor CSV / tempel dari Excel |
@@ -39,7 +40,29 @@ Admin utama membuat akun LO di menu **Akun LO**, berisi nama, username, password
 - mengunduh **CSV** venue-nya,
 - membuka **layar kode venue** miliknya.
 
-Menu Peserta, Sesi, Venue, Akun LO, dan Pengaturan hanya untuk admin utama. Pembatasan ini dicek di server, jadi tidak bisa ditembus lewat URL. Akun yang dinonaktifkan langsung tidak bisa login.
+Menu Peserta, Sesi, Venue, Akun LO, Rekap Pendampingan, dan Pengaturan hanya untuk Admin Utama. LO perlu login ulang setelah penempatan venuenya berubah.
+
+## Impor pembagian Bimtek Pelaporan 3 revisi 8
+
+Pasang `openpyxl` di lingkungan Python. Dari folder proyek, ekstrak empat sheet pemetaan, jalankan migrasi, lalu simulasikan impor.
+
+```bash
+python server/scripts/readBimtek3.py "lokasi/berkas.xlsx" data/bimtek3-pemetaan.local
+npm run migrate
+npm --prefix server run import-bimtek3 -- --input ../data/bimtek3-pemetaan.local --dry-run
+```
+
+Terapkan impor ke database yang dikonfigurasi di `server/.env`.
+
+```bash
+npm --prefix server run import-bimtek3 -- --input ../data/bimtek3-pemetaan.local --credentials ../data/bimtek3-kredensial-lo.local
+```
+
+Akun baru memakai username seperti `LO1.Febriyoga` dan mendapat kata sandi acak masing-masing. Berkas kredensial diabaikan oleh Git. Bagikan tiap kata sandi hanya kepada pemilik akunnya. Impor biasa mempertahankan username dan kata sandi akun yang cocok. Periksa titik dan radius venue baru di menu **Venue** sebelum mengaktifkan absensi mandiri.
+
+Untuk mengganti login seluruh LO dalam rekap, set `BIMTEK_LO_PASSWORD` di lingkungan shell dan tambahkan `--reset-lo-logins` pada perintah impor. Gunakan nama berkas keluaran yang baru. Berkas keluaran mode ini berisi daftar username dan venue.
+
+**Rekap Pendampingan** menampilkan salinan pembagian dari Excel. Data peserta, sesi, dan catatan kehadiran dikelola lewat menu absensi.
 
 ## Data peserta (Bendahara & Pengawas)
 

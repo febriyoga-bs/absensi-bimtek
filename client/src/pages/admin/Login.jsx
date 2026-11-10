@@ -30,7 +30,7 @@ export default function Login() {
   return (
     <div className="login">
       <form className="card form" onSubmit={submit}>
-        <span className="brand"><BrandMark size={44} /><span className="brand__text">Dashboard Absensi BIMTEK<small>Kemendikdasmen</small></span></span>
+        <span className="brand"><BrandMark size={44} /><span className="brand__text">Dashboard BIMTEK<small>Kemendikdasmen</small></span></span>
         <div className="seg" role="tablist">
           <button type="button" role="tab" className={mode === 'lo' ? 'on' : ''} onClick={() => switchMode('lo')}>
             <Icon name="pin" size={16} />LO Venue
@@ -42,7 +42,7 @@ export default function Login() {
         {mode === 'lo' && (
           <label>Username LO
             <span className="input-icon"><Icon name="users" /><input value={username} onChange={(e) => setUsername(e.target.value)}
-              autoFocus autoCapitalize="none" autoComplete="username" placeholder="mis. andi.venue1" /></span>
+              autoFocus autoCapitalize="none" autoComplete="username" placeholder="mis. LO1.Febriyoga" /></span>
           </label>
         )}
         <label>Password
@@ -54,7 +54,7 @@ export default function Login() {
           {busy ? 'Masuk…' : 'Masuk'}
         </button>
         <p className="muted small" style={{ margin: 0, textAlign: 'center' }}>
-          {mode === 'lo' ? 'Akun LO dibuat oleh admin utama dan hanya bisa melihat data venue masing-masing.' : 'Akses penuh ke semua venue, peserta, sesi, dan pengaturan.'}
+          {mode === 'lo' ? 'Masuk untuk mengelola absensi di venue yang ditugaskan.' : 'Kelola absensi, venue, akun LO, dan rekap pendampingan.'}
         </p>
         <Link to="/" className="link">← Kembali ke beranda</Link>
       </form>

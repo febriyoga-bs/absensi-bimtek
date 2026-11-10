@@ -6,7 +6,8 @@ import BrandMark from '../../components/BrandMark.jsx';
 
 // lo: true → menu juga tampil untuk LO venue
 const NAV = [
-  { to: '/admin', end: true, icon: 'chart', label: 'Rekap', lo: true },
+  { to: '/admin', end: true, icon: 'chart', label: 'Rekap Kehadiran', lo: true },
+  { to: '/admin/pendampingan', icon: 'list', label: 'Rekap Pendampingan', lo: true, loLabel: 'Daftar Pendampingan' },
   { to: '/admin/scan', icon: 'users', label: 'Absenkan Peserta', lo: true },
   { to: '/admin/absensi', icon: 'list', label: 'Verifikasi Absensi', lo: true },
   { to: '/admin/sesi', icon: 'calendar', label: 'Sesi & Jadwal' },
@@ -42,7 +43,7 @@ export default function AdminLayout() {
       <aside className="admin__nav">
         <div className="admin__brand">
           <BrandMark size={38} />
-          <span>{lo ? 'Dashboard LO' : 'Admin Absensi'}<small>BIMTEK Revitalisasi SD</small></span>
+          <span>{lo ? 'Dashboard LO' : 'Admin BIMTEK'}<small>BIMTEK Revitalisasi SD</small></span>
         </div>
         {user && (
           <div className="admin__user">
@@ -61,7 +62,7 @@ export default function AdminLayout() {
           <Icon name="logout" size={18} /> Keluar
         </button>
       </aside>
-      <section className="admin__main"><Outlet context={{ user, lo }} /></section>
+      <section className="admin__main" key={user?.role}><Outlet context={{ user, lo }} /></section>
     </div>
   );
 }

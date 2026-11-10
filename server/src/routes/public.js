@@ -76,7 +76,7 @@ r.get('/qr/:token', ipLimiter, ah(async (req, res) => {
   if (!/^[a-f0-9]{32}$/.test(token)) throw new HttpError(404, 'QR tidak ditemukan');
   const { rows: [p] } = await q(
     `SELECT p.name, p.code, p.role, p.position, p.institution, p.ruangan, v.name AS venue
-     FROM people p LEFT JOIN venues v ON v.id=p.venue_id WHERE p.qr_token=$1`, [token]);
+     FROM people p LEFT JOIN venues v ON v.id=p.venue_id WHERE p.qr_token=$1 AND p.archived_at IS NULL`, [token]);
   if (!p) throw new HttpError(404, 'QR tidak ditemukan atau sudah tidak berlaku. Hubungi panitia.');
   const s = await getSettings();
   res.json({ ...p, event_name: s.event_name });
@@ -93,7 +93,8 @@ r.post('/npsn', ipLimiter, ah(async (req, res) => {
   if (!/^\d{8}$/.test(npsn)) throw new HttpError(400, 'NPSN terdiri dari 8 digit angka.');
   const { rows } = await q(
     `SELECT code, name, position, institution, npsn FROM people
-     WHERE role='peserta' AND $1 = ANY(string_to_array(replace(COALESCE(npsn,''), ' ', ''), ';'))
+     WHERE role='peserta' AND archived_at IS NULL
+       AND $1 = ANY(string_to_array(replace(COALESCE(npsn,''), ' ', ''), ';'))
      ORDER BY position, name`, [npsn]);
   if (!rows.length) throw new HttpError(404, 'NPSN tidak ditemukan di daftar peserta. Periksa kembali atau hubungi panitia.');
   // nama sekolah sesuai NPSN ini (pengawas menyimpan beberapa sekolah)
@@ -115,16 +116,17 @@ r.post('/challenge', ipLimiter, ah(async (req, res) => {
   const settings = await getSettings();
 
   const input = String(code || '').trim();
-  let { rows } = await q('SELECT * FROM people WHERE lower(code) = lower($1)', [input]);
+  let { rows } = await q('SELECT * FROM people WHERE lower(code) = lower($1) AND archived_at IS NULL', [input]);
   // Kode NPSN boleh diketik tanpa tanda hubung (B20100001). Pengawas membawahi beberapa
   // sekolah: P-<NPSN sekolah mana pun> juga diterima.
   const m = !rows[0] && input.match(/^([BPK])\s*-?\s*(\d{6,10})$/i);
   if (m) {
     const letter = m[1].toUpperCase();
-    ({ rows } = await q('SELECT * FROM people WHERE lower(code) = lower($1)', [`${letter}-${m[2]}`]));
+    ({ rows } = await q('SELECT * FROM people WHERE lower(code) = lower($1) AND archived_at IS NULL', [`${letter}-${m[2]}`]));
     if (!rows[0] && letter === 'P') {
       ({ rows } = await q(
-        `SELECT * FROM people WHERE position ILIKE 'pengawas' AND $1 = ANY(string_to_array(replace(npsn, ' ', ''), ';')) LIMIT 1`,
+        `SELECT * FROM people WHERE position ILIKE 'pengawas' AND archived_at IS NULL
+         AND $1 = ANY(string_to_array(replace(npsn, ' ', ''), ';')) LIMIT 1`,
         [m[2]]));
     }
   }
@@ -193,7 +195,7 @@ r.post('/precheck', ah(async (req, res) => {
   if (!ch) throw new HttpError(401, 'Waktu absen habis. Silakan ulangi dari awal.');
   if (![lat, lng].every((x) => typeof x === 'number' && Number.isFinite(x))) throw new HttpError(400, 'Lokasi tidak valid');
   const [{ rows: [person] }, { rows: [session] }] = await Promise.all([
-    q('SELECT * FROM people WHERE id=$1', [ch.p]),
+    q('SELECT * FROM people WHERE id=$1 AND archived_at IS NULL', [ch.p]),
     q('SELECT * FROM sessions WHERE id=$1', [ch.s]),
   ]);
   if (!person || !session) throw new HttpError(400, 'Data tidak ditemukan');
@@ -220,7 +222,7 @@ r.post('/attendance', ah(async (req, res) => {
 
   const settings = await getSettings();
   const [{ rows: [person] }, { rows: [session] }] = await Promise.all([
-    q('SELECT * FROM people WHERE id=$1', [ch.p]),
+    q('SELECT * FROM people WHERE id=$1 AND archived_at IS NULL', [ch.p]),
     q('SELECT * FROM sessions WHERE id=$1', [ch.s]),
   ]);
   if (!person || !session) throw new HttpError(400, 'Data tidak ditemukan');

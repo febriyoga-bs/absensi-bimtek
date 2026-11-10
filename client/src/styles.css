@@ -232,7 +232,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 
 /* ============ Admin ============ */
 .admin { display: grid; grid-template-columns: 248px 1fr; min-height: 100vh; }
-.admin__nav { background: #0c1a2e; color: #fff; padding: 18px 12px; display: flex; flex-direction: column; gap: 2px; position: sticky; top: 0; height: 100vh; }
+.admin__nav { background: #0c1a2e; color: #fff; padding: 18px 12px; display: flex; flex-direction: column; gap: 2px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
 .admin__brand { display: flex; align-items: center; gap: 10px; font-weight: 800; padding: 4px 8px 18px; }
 .admin__brand .brand__mark { background: #1d3a63; }
 .admin__brand small { display: block; font-weight: 500; opacity: .6; font-size: 12px; }
@@ -417,6 +417,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 /* Filter & urutan tabel */
 .filters select { min-width: 0; width: auto; max-width: 260px; }
 .filters input { min-width: 220px; }
+.assignment-table { overflow-x: auto; }
+.assignment-table .table { min-width: 730px; }
 .th-sort { cursor: pointer; user-select: none; white-space: nowrap; }
 .th-sort:hover { color: var(--text); }
 .th-sort__arrow { margin-left: 5px; font-size: 10px; opacity: .45; }

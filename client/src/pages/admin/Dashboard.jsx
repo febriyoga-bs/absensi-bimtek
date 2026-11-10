@@ -41,7 +41,7 @@ export default function Dashboard() {
       </div>
       {!lo && venues && activeVenues === 0 && (
         <div className="alert alert--warn" style={{ marginBottom: 16 }}><Icon name="alert" size={18} />
-          <span>Belum ada venue aktif — absensi tidak bisa dilakukan. <Link to="/admin/venue">Tambah venue</Link></span>
+          <span>Aktifkan venue sebelum membuka absensi mandiri. <Link to="/admin/venue">Kelola venue</Link></span>
         </div>
       )}
 
