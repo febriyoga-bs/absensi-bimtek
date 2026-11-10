@@ -56,6 +56,7 @@ export default function Assignments({ personal = false }) {
   const [venue, setVenue] = useState('');
   const [lo, setLo] = useState('');
   const [query, setQuery] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(pageSizeForViewport);
   const [details, setDetails] = useState(null);
@@ -151,7 +152,7 @@ export default function Assignments({ personal = false }) {
                 onClick={() => changeTab(key)}>{label} <span>{number.format(data[key].length)}</span></button>
             ))}
           </div>
-          <div className="toolbar assignment-filters">
+          <div id="assignment-filters" className={`toolbar assignment-filters${filtersOpen ? ' is-open' : ''}`}>
             {!personal && <select aria-label="Filter venue" value={venue} onChange={(e) => {
               setVenue(e.target.value); setLo(''); setPage(1);
             }}>
@@ -171,6 +172,10 @@ export default function Assignments({ personal = false }) {
           </div>
           </div>
           <div className="assignment-table-head">
+            <button type="button" className="btn btn--sm assignment-filter-toggle"
+              aria-expanded={filtersOpen} aria-controls="assignment-filters" onClick={() => setFiltersOpen(!filtersOpen)}>
+              {filtersOpen ? 'Tutup filter' : 'Cari & filter'}{(venue || lo || query.trim()) && ' · aktif'}
+            </button>
             <p className="assignment-results muted small" aria-live="polite">
               {rows.length ? `${number.format(start + 1)}–${number.format(Math.min(start + pageSize, rows.length))} dari ${number.format(rows.length)} hasil` : '0 hasil'}
             </p>
