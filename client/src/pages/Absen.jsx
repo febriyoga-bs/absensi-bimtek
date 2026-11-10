@@ -221,7 +221,7 @@ function Signal({ accuracy }) {
   );
 }
 
-function CaptureStep({ role, info, ch, onDone, onRestart }) {
+export function CaptureStep({ role, info, ch, onDone, onRestart, selfLo = false }) {
   const camRef = useRef(null);
   const watchRef = useRef(null);
   const checkedOnce = useRef(false);
@@ -254,7 +254,7 @@ function CaptureStep({ role, info, ch, onDone, onRestart }) {
     const s = geo.samples.slice(-5).reduce((a, b) => (b.accuracy < a.accuracy ? b : a), geo.samples[geo.samples.length - 1]);
     if (!s) return;
     setChecking(true);
-    api('/precheck', { method: 'POST', body: { token: ch.token, lat: s.lat, lng: s.lng, accuracy: s.accuracy } })
+    api(selfLo ? '/lo/precheck' : '/precheck', { method: 'POST', admin: selfLo, body: { token: ch.token, lat: s.lat, lng: s.lng, accuracy: s.accuracy } })
       .then(setArea).catch(() => {}).finally(() => setChecking(false));
   }
   useEffect(() => {
@@ -282,8 +282,9 @@ function CaptureStep({ role, info, ch, onDone, onRestart }) {
     setBusy(true);
     setError(null);
     try {
-      const r = await api('/attendance', {
+      const r = await api(selfLo ? '/lo/attendance' : '/attendance', {
         method: 'POST',
+        admin: selfLo,
         body: {
           token: ch.token, photo, samples: captureSamples, deviceId: getDeviceId(),
           clientTime: new Date().toISOString(),
@@ -296,7 +297,7 @@ function CaptureStep({ role, info, ch, onDone, onRestart }) {
       setError(e.data?.reasons
         ? <><b>{e.message}</b><ul>{e.data.reasons.map((x) => <li key={x}>{x}</li>)}</ul></>
         : e.message);
-      if (e.status === 401 || e.status === 409) setTimeout(onRestart, 3000);
+      if ([401, 409, 410].includes(e.status)) setTimeout(onRestart, 3000);
       // pesan error ada di bawah bingkai kamera → gulir agar terlihat
       setTimeout(() => document.querySelector('.capture .alert--err')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
     } finally {
@@ -407,7 +408,7 @@ function CaptureStep({ role, info, ch, onDone, onRestart }) {
   );
 }
 
-function Done({ result, role, onClose }) {
+export function Done({ result, role, onClose }) {
   const ok = result.status === 'valid';
   return (
     <div className="card done">

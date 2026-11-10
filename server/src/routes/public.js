@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import { savePhoto, deletePhoto } from '../storage.js';
 import { q, getSettings } from '../db.js';
 import { ah, HttpError, haversine, clientIp } from '../util.js';
-import { signChallenge, verifyChallenge } from '../auth.js';
+import { requireAdmin, signChallenge, verifyChallenge } from '../auth.js';
 import { sanitizeSamples, analyzeLocation, analyzeClientMeta, scoreOf, locate, compactSamples } from '../antifake.js';
 
 const r = Router();
@@ -47,6 +47,7 @@ const publicSession = (s) => s && ({ name: s.name, type: s.type, role: s.role, s
 const alreadyRecorded = (status) => status === 'berhalangan'
   ? 'Anda tercatat mundur/berhalangan hadir untuk sesi ini. Hubungi panitia jika status perlu diubah.'
   : 'Anda sudah absen untuk sesi ini.';
+const isLoProfile = (person) => person.role === 'panitia' && /^(lo(?:\s|$)|liaison officer$)/i.test(person.position?.trim() || '');
 
 r.get('/info', ah(async (req, res) => {
   const s = await getSettings();
@@ -137,8 +138,34 @@ r.post('/challenge', ipLimiter, ah(async (req, res) => {
   if (person.role !== role) {
     throw new HttpError(400, `Kode ini terdaftar sebagai ${person.role}. Gunakan halaman absen ${person.role}.`);
   }
+  if (isLoProfile(person)) throw new HttpError(403, 'Silakan masuk ke Dashboard LO dan buka Absen Saya.');
 
-  const session = await activeSession(role, person.venue_id);
+  res.json(await buildChallenge(person));
+}));
+
+function requireLo(req, res, next) {
+  if (req.user.role !== 'lo') return next(new HttpError(403, 'Absen Saya hanya tersedia untuk akun LO.'));
+  next();
+}
+
+async function getLoProfile(user) {
+  const { rows: [person] } = await q(
+    `SELECT p.* FROM lo_accounts l JOIN people p
+       ON lower(p.code)=lower(l.username) AND p.venue_id=l.venue_id
+     WHERE l.id=$1 AND l.venue_id=$2 AND l.active
+       AND p.role='panitia' AND lower(trim(p.position))='lo' AND p.archived_at IS NULL`,
+    [user.lo, user.venue]);
+  return person;
+}
+
+r.post('/lo/challenge', ipLimiter, requireAdmin, requireLo, ah(async (req, res) => {
+  const person = await getLoProfile(req.user);
+  if (!person) throw new HttpError(404, 'Profil absensi LO belum terhubung. Hubungi Admin Utama.');
+  res.json(await buildChallenge(person, req.user));
+}));
+
+async function buildChallenge(person, loAccount) {
+  const session = await activeSession(person.role, person.venue_id);
   if (!session) throw new HttpError(400, 'Belum ada sesi absensi yang dibuka saat ini.');
 
   const venues = await allowedVenues(person, session);
@@ -151,8 +178,8 @@ r.post('/challenge', ipLimiter, ah(async (req, res) => {
   }
 
   const nonce = crypto.randomInt(0, 10000).toString().padStart(4, '0');
-  res.json({
-    token: signChallenge(person.id, session.id, nonce),
+  return {
+    token: signChallenge(person.id, session.id, nonce, loAccount),
     nonce,
     person: {
       name: person.name, position: person.position, code: person.code, ruangan: person.ruangan,
@@ -164,8 +191,28 @@ r.post('/challenge', ipLimiter, ah(async (req, res) => {
     },
     session: publicSession(session),
     venues: venues.map((v) => ({ name: v.name, address: v.address, radius_m: v.radius_m })),
-  });
-}));
+  };
+}
+
+function attendanceChallenge(req, token) {
+  const ch = verifyChallenge(token);
+  if (!ch) throw new HttpError(req.user ? 410 : 401, 'Waktu absen habis. Silakan ulangi dari awal.');
+  if ((ch.lo ?? null) !== (req.user?.lo ?? null) || (ch.lo != null && ch.venue !== req.user?.venue)) {
+    throw new HttpError(403, 'Token absensi ini tidak berlaku untuk akun Anda.');
+  }
+  return ch;
+}
+
+async function challengePerson(req, ch) {
+  if (ch.lo != null) {
+    const person = await getLoProfile(req.user);
+    if (person?.id === ch.p) return person;
+    throw new HttpError(403, 'Profil absensi LO berubah. Silakan mulai ulang.');
+  }
+  const { rows: [person] } = await q('SELECT * FROM people WHERE id=$1 AND archived_at IS NULL', [ch.p]);
+  if (person && isLoProfile(person)) throw new HttpError(403, 'Silakan masuk ke Dashboard LO dan buka Absen Saya.');
+  return person;
+}
 
 // Riwayat absensi yang pernah dikirim dari perangkat/browser ini (berdasarkan ID perangkat
 // acak yang disimpan di browser). POST agar ID tidak tercatat di log URL.
@@ -190,13 +237,12 @@ r.post('/riwayat', ipLimiter, ah(async (req, res) => {
 
 // Cek posisi sebelum foto, supaya peserta tahu apakah sudah di dalam area venue.
 // Keputusan akhir tetap di /attendance (pakai banyak sampel + deteksi fake GPS).
-r.post('/precheck', ah(async (req, res) => {
+const precheck = ah(async (req, res) => {
   const { token, lat, lng, accuracy } = req.body || {};
-  const ch = verifyChallenge(token);
-  if (!ch) throw new HttpError(401, 'Waktu absen habis. Silakan ulangi dari awal.');
+  const ch = attendanceChallenge(req, token);
   if (![lat, lng].every((x) => typeof x === 'number' && Number.isFinite(x))) throw new HttpError(400, 'Lokasi tidak valid');
-  const [{ rows: [person] }, { rows: [session] }] = await Promise.all([
-    q('SELECT * FROM people WHERE id=$1 AND archived_at IS NULL', [ch.p]),
+  const [person, { rows: [session] }] = await Promise.all([
+    challengePerson(req, ch),
     q('SELECT * FROM sessions WHERE id=$1', [ch.s]),
   ]);
   if (!person || !session) throw new HttpError(400, 'Data tidak ditemukan');
@@ -213,17 +259,18 @@ r.post('/precheck', ah(async (req, res) => {
     radius_m: l.venue?.radius_m ?? null,
     max_accuracy_m: settings.max_accuracy_m,
   });
-}));
+});
+r.post('/precheck', precheck);
+r.post('/lo/precheck', requireAdmin, requireLo, precheck);
 
 // Langkah 2: kirim foto realtime + sampel GPS
-r.post('/attendance', ah(async (req, res) => {
+const recordAttendance = ah(async (req, res) => {
   const { token, photo, samples: rawSamples, deviceId, clientTime, meta } = req.body || {};
-  const ch = verifyChallenge(token);
-  if (!ch) throw new HttpError(401, 'Waktu absen habis. Silakan ulangi dari awal.');
+  const ch = attendanceChallenge(req, token);
 
   const settings = await getSettings();
-  const [{ rows: [person] }, { rows: [session] }] = await Promise.all([
-    q('SELECT * FROM people WHERE id=$1 AND archived_at IS NULL', [ch.p]),
+  const [person, { rows: [session] }] = await Promise.all([
+    challengePerson(req, ch),
     q('SELECT * FROM sessions WHERE id=$1', [ch.s]),
   ]);
   if (!person || !session) throw new HttpError(400, 'Data tidak ditemukan');
@@ -327,6 +374,8 @@ r.post('/attendance', ah(async (req, res) => {
     session_type: session.type,
     name: person.name,
   });
-}));
+});
+r.post('/attendance', recordAttendance);
+r.post('/lo/attendance', requireAdmin, requireLo, recordAttendance);
 
 export default r;

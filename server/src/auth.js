@@ -69,9 +69,12 @@ export function verifyPassword(pw, stored) {
 }
 
 /** Token absensi sekali pakai, mengikat orang + sesi + nonce, berlaku singkat. */
-export function signChallenge(personId, sessionId, nonce) {
+export function signChallenge(personId, sessionId, nonce, loAccount) {
   const ttl = Number(process.env.CHALLENGE_TTL || 300);
-  return jwt.sign({ p: personId, s: sessionId, n: nonce }, SECRET(), { expiresIn: ttl });
+  return jwt.sign({
+    p: personId, s: sessionId, n: nonce,
+    ...(loAccount && { lo: loAccount.lo, venue: loAccount.venue }),
+  }, SECRET(), { expiresIn: ttl });
 }
 
 export function verifyChallenge(token) {

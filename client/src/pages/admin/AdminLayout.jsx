@@ -10,6 +10,7 @@ const NAV = [
   { to: '/admin/pendampingan', end: true, icon: 'chart', label: 'Rekap Pendampingan', lo: true },
   { to: '/admin/pendampingan/saya', end: true, icon: 'list', label: 'Daftar Pendampingan', lo: true, loOnly: true },
   { to: '/admin/scan', icon: 'users', label: 'Absenkan Peserta', lo: true },
+  { to: '/admin/absen-saya', end: true, icon: 'idcard', label: 'Absen Saya', lo: true, loOnly: true },
   { to: '/admin/absensi', icon: 'list', label: 'Verifikasi Absensi', lo: true },
   { to: '/admin/sesi', icon: 'calendar', label: 'Sesi & Jadwal' },
   { to: '/admin/orang', icon: 'users', label: 'Peserta & Panitia' },
