@@ -2,7 +2,7 @@
 // Jalankan:  npm --prefix server run seed-venues   (aman dijalankan berulang kali)
 //
 // - Venue yang sudah ada (mis. "EL HOTEL", "Grand Mercure Harmoni", "Hotel Makassar") hanya
-//   DIGANTI NAMANYA; koordinat, radius, status, akun LO, dan kode venuenya tetap.
+//   DIGANTI NAMANYA; koordinat, radius, status, dan akun LO tetap.
 // - Venue yang belum ada dibuat dengan koordinat PERKIRAAN dan status NONAKTIF.
 //   Cek titiknya di menu Venue → Ubah (tempel koordinat dari Google Maps), lalu centang Aktif.
 import 'dotenv/config';

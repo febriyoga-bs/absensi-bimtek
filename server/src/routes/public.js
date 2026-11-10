@@ -3,7 +3,7 @@ import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
 import { savePhoto, deletePhoto } from '../storage.js';
 import { q, getSettings } from '../db.js';
-import { ah, HttpError, haversine, verifyVenueCode, clientIp } from '../util.js';
+import { ah, HttpError, haversine, clientIp } from '../util.js';
 import { signChallenge, verifyChallenge } from '../auth.js';
 import { sanitizeSamples, analyzeLocation, analyzeClientMeta, scoreOf, locate, compactSamples } from '../antifake.js';
 
@@ -67,7 +67,6 @@ r.get('/info', ah(async (req, res) => {
     event_name: s.event_name,
     organizer: s.organizer,
     event_dates: s.event_dates,
-    require_venue_code: s.require_venue_code,
     venues: venues.map(({ id, ...v }) => v),
     sessions: { peserta: forRole('peserta'), panitia: forRole('panitia') },
     server_time: new Date().toISOString(),
@@ -117,7 +116,6 @@ r.post('/npsn', ipLimiter, ah(async (req, res) => {
 r.post('/challenge', ipLimiter, ah(async (req, res) => {
   const { code, role } = req.body || {};
   if (!ROLES.includes(role)) throw new HttpError(400, 'Peran tidak valid');
-  const settings = await getSettings();
 
   const input = String(code || '').trim();
   let { rows } = await q('SELECT * FROM people WHERE lower(code) = lower($1) AND archived_at IS NULL', [input]);
@@ -166,7 +164,6 @@ r.post('/challenge', ipLimiter, ah(async (req, res) => {
     },
     session: publicSession(session),
     venues: venues.map((v) => ({ name: v.name, address: v.address, radius_m: v.radius_m })),
-    require_venue_code: settings.require_venue_code,
   });
 }));
 
@@ -220,7 +217,7 @@ r.post('/precheck', ah(async (req, res) => {
 
 // Langkah 2: kirim foto realtime + sampel GPS
 r.post('/attendance', ah(async (req, res) => {
-  const { token, photo, samples: rawSamples, deviceId, venueCode, clientTime, meta } = req.body || {};
+  const { token, photo, samples: rawSamples, deviceId, clientTime, meta } = req.body || {};
   const ch = verifyChallenge(token);
   if (!ch) throw new HttpError(401, 'Waktu absen habis. Silakan ulangi dari awal.');
 
@@ -256,12 +253,7 @@ r.post('/attendance', ah(async (req, res) => {
   const venues = await allowedVenues(person, session);
   const samples = sanitizeSamples(rawSamples);
   const loc = analyzeLocation(samples, venues, { maxAccuracy: settings.max_accuracy_m, clientTime });
-  const hard = [...loc.hard];
-  // Kode venue dicek terhadap venue tempat orang itu berada (tiap venue punya layar kode sendiri)
-  if (settings.require_venue_code && loc.venue && !verifyVenueCode(loc.venue.code_secret, venueCode)) {
-    hard.push(`Kode venue salah atau sudah kedaluwarsa. Lihat kode terbaru di layar panitia ${loc.venue.name}.`);
-  }
-
+  const hard = loc.hard;
   const ip = clientIp(req);
   const ua = String(req.headers['user-agent'] || '').slice(0, 300);
   const dev = String(deviceId || '').slice(0, 64) || null;

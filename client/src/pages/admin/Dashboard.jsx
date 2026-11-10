@@ -5,16 +5,19 @@ import Icon from '../../components/Icon.jsx';
 import { useVisiblePolling } from '../../lib/poll.js';
 import { fmtDT } from './shared.js';
 import { Skel, SkelCards } from '../../components/Skeleton.jsx';
+import AttendanceDetailDialog from './AttendanceDetailDialog.jsx';
 
 const number = new Intl.NumberFormat('id-ID');
 const venueGroups = [
   ['bendahara', 'Bendahara (sekolah)'], ['pengawas', 'Pengawas'],
-  ['fasil', 'Fasilitator'], ['lo', 'LO'],
+  ['fasil', 'Fasilitator'], ['dinas', 'Dinas Pendidikan'],
+  ['bpmp', 'BB/BPMP'], ['lo', 'LO'],
 ];
 
-function VenueAttendanceCard({ venue }) {
-  const total = venueGroups.reduce((sum, [key]) => sum + venue[key].total, 0);
-  const attended = venueGroups.reduce((sum, [key]) => sum + venue[key].attended, 0);
+function VenueAttendanceCard({ venue, onDetails }) {
+  const participantGroups = venueGroups.filter(([key]) => key !== 'lo');
+  const total = participantGroups.reduce((sum, [key]) => sum + venue[key].total, 0);
+  const attended = participantGroups.reduce((sum, [key]) => sum + venue[key].attended, 0);
 
   return (
     <article className="venue-attendance">
@@ -22,23 +25,25 @@ function VenueAttendanceCard({ venue }) {
         <span className="kpi__icon"><Icon name="pin" size={20} /></span>
         <div>
           <h4>{venue.name}</h4>
-          <div className="muted small"><b>{number.format(attended)}</b> dari {number.format(total)} orang sudah absen</div>
+          <div className="muted small"><b>{number.format(attended)}</b> dari {number.format(total)} peserta sudah absen</div>
+          <div className="muted small">{number.format(venue.lo.total)} LO tercatat terpisah</div>
         </div>
       </header>
-      <dl className="venue-attendance__groups">
+      <div className="venue-attendance__groups">
         {venueGroups.map(([key, label]) => {
           const { total, attended, registered } = venue[key];
           return (
-            <div key={key}>
-              <dt>{label}</dt>
-              <dd><b>{number.format(attended)}</b> / {number.format(total)} <span>sudah absen</span></dd>
+            <button type="button" key={key} aria-haspopup="dialog" aria-label={`Lihat daftar ${label} di ${venue.name}`}
+              onClick={() => onDetails({ label, subtitle: venue.name, path: `/admin/venue-attendance/${venue.id}/${key}` })}>
+              <span className="venue-attendance__label">{label}</span>
+              <span className="venue-attendance__count"><b>{number.format(attended)}</b> / {number.format(total)} <small>sudah absen</small></span>
               {registered < total && <small className="muted">
                 {registered === 0 ? 'Belum ada profil absensi' : `${number.format(registered)} punya profil absensi`}
               </small>}
-            </div>
+            </button>
           );
         })}
-      </dl>
+      </div>
     </article>
   );
 }
@@ -52,6 +57,7 @@ export default function Dashboard() {
   const [venueId, setVenueId] = useState(''); // filter venue (admin utama)
   const [venueAttendance, setVenueAttendance] = useState(null);
   const [summaryError, setSummaryError] = useState(false);
+  const [details, setDetails] = useState(null);
 
   useEffect(() => { api('/admin/venues', { admin: true }).then(setVenues); }, []);
 
@@ -99,14 +105,15 @@ export default function Dashboard() {
 
       <section className="venue-attendance-section" aria-labelledby="venue-attendance-title">
         <h3 id="venue-attendance-title">Ringkasan per venue</h3>
-        <p className="muted small">Akumulasi semua sesi. Setiap profil dihitung sekali per venue jika absensinya valid atau perlu dicek.</p>
+        <p className="muted small">Akumulasi semua sesi. Setiap profil dengan absensi valid atau perlu dicek dihitung sekali per venue. Kartu sesi di bawah menghitung kehadiran untuk sesi tersebut.</p>
         {summaryError && <p className="alert alert--warn" role="status">Ringkasan venue gagal diperbarui.</p>}
         {!venueAttendance && !summaryError && <div className="stats"><SkelCards n={2} h={190} /></div>}
         {venueAttendance && !shownVenues.length && <p className="muted">Belum ada venue untuk ditampilkan.</p>}
         <div className="venue-attendance-grid">
-          {shownVenues.map((venue) => <VenueAttendanceCard key={venue.id} venue={venue} />)}
+          {shownVenues.map((venue) => <VenueAttendanceCard key={venue.id} venue={venue} onDetails={setDetails} />)}
         </div>
       </section>
+      <AttendanceDetailDialog details={details} onClose={() => setDetails(null)} />
 
       {loading && <div className="stats"><SkelCards n={3} h={170} /></div>}
       {!loading && !sessions.length && <p className="muted">Belum ada sesi{!lo && <> — <Link to="/admin/sesi">buat sesi</Link></>}.</p>}
@@ -130,7 +137,7 @@ export default function Dashboard() {
                 <span className={s.review ? 'warn' : ''}>⚠ Perlu cek {s.review}</span>
                 <span>✕ Ditolak {s.rejected}</span>
                 {s.unavailable > 0 && <span>Berhalangan {s.unavailable}</span>}
-                <span title="Percobaan diblokir otomatis (di luar area venue, kode venue salah, dll.)">⛔ Diblokir {s.blocked}</span>
+                <span title="Percobaan diblokir otomatis oleh pemeriksaan lokasi">⛔ Diblokir {s.blocked}</span>
               </div>
               {!lo && s.by_venue.length > 0 && (
                 <div className="chips">

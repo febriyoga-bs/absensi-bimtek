@@ -75,11 +75,12 @@ def extract(book):
     if len(expected_counts) != len(facilitators) or school_counts != expected_counts:
         raise ValueError("Pemetaan sekolah berbeda dari daftar fasilitator.")
     bendahara, pengawas, koordinator = "1 Bendahara", "2 Pengawas", "4 Koor Pelaporan"
+    organization_types = {"5 Dinas Pendidikan": "Dinas Pendidikan", "6 BB/BPMP": "BB/BPMP"}
     people = read_rows(book, "Peserta per Ruangan", {
         "venue": "Hotel", "room": "Ruangan", "group": "Kelompok", "type": "Unsur",
         "supervisor": "ID Pengawas", "name": "Nama", "npsn": "NPSN", "lo": "Nama LO",
-        "institution": "Asal/Instansi",
-    }, lambda row: len(row) > 3 and row[3] in (bendahara, pengawas, koordinator))
+        "institution": "Asal/Instansi", "city": "Kab/Kota", "province": "Provinsi",
+    }, lambda row: len(row) > 3 and row[3] in (bendahara, pengawas, koordinator, *organization_types))
     detail = {}
     for key, kind, field in (
         ("coordinators", koordinator, "coordinator_count"), ("supervisors", pengawas, "supervisor_count"),
@@ -92,8 +93,21 @@ def extract(book):
             {key: row[key] for key in ("venue", "room", "group", "lo", "name", "institution")}
             for row in rows
         ]
-    participants = extract_participants([row for row in people if row["type"] != koordinator], school_rows)
-    return dict(venues=venues, lo=lo, facilitators=facilitators, schools=schools, participants=participants, **detail)
+    participants = extract_participants([row for row in people if row["type"] in (bendahara, pengawas)], school_rows)
+    for position, field in (("Bendahara", "school_count"), ("Pengawas", "supervisor_count")):
+        counts = Counter(lo_key(row, "lo") for row in participants if row["position"] == position)
+        if set(counts) - lo_keys or any(counts[lo_key(row, "name")] != row[field] for row in lo):
+            raise ValueError(f"Penugasan {position} berbeda dari Rekap LO.")
+    organizations = [
+        dict(venue=row["venue"], institution=row["institution"], position=organization_types[row["type"]],
+             kab_kota=row["city"], provinsi=row["province"])
+        for row in people if row["type"] in organization_types
+    ]
+    keys = {(row["venue"], row["position"], row["institution"]) for row in organizations}
+    if len(keys) != len(organizations) or any(not row["institution"] or row["venue"] not in venues for row in organizations):
+        raise ValueError("Ada duplikasi atau penempatan instansi yang tidak valid.")
+    return dict(venues=venues, lo=lo, facilitators=facilitators, schools=schools, participants=participants,
+                organizations=organizations, **detail)
 
 
 def extract_participants(rows, schools):
@@ -122,7 +136,7 @@ def extract_participants(rows, schools):
         participants.append(dict(
             code=("B-" if is_treasurer else "P-") + npsns[0],
             name=row["name"].strip(), position="Bendahara" if is_treasurer else "Pengawas",
-            venue=row["venue"], ruangan=row["room"], npsn="; ".join(npsns),
+            venue=row["venue"], lo=row["lo"], ruangan=row["room"], npsn="; ".join(npsns),
             institution="; ".join(s["name"] for s in group),
             provinsi=joined(group, "province"), kab_kota=joined(group, "city"),
             ptn=joined(group, "institution"), koor_pelaporan=joined(group, "coordinator"),

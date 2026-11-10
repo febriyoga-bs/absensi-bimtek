@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { hashPassword } from './auth.js';
@@ -36,6 +36,78 @@ function usernameFor({ name, venue }, roster) {
   const displayName = words.slice(0, sameFirstName.length > 1 ? 2 : 1)
     .map((word) => word[0].toUpperCase() + word.slice(1)).join('.');
   return `LO${Object.keys(hotels).indexOf(venue) + 1}.${displayName}`;
+}
+
+async function prepareFacilitators(db, facilitators, venueIds, dryRun) {
+  await db.query('LOCK TABLE people IN SHARE ROW EXCLUSIVE MODE');
+  const { rows: existing } = await db.query(
+    "SELECT code, name, role, position, venue_id, archived_at FROM people WHERE lower(trim(position)) ~ '^fasil(itator)?($|[[:space:]])'");
+  const newRows = [];
+  const assignments = facilitators.map((row) => {
+    const venueId = venueIds.get(row.venue);
+    const matches = existing.filter((person) => norm(person.name) === norm(row.name));
+    const [profile] = matches;
+    if (!venueId || matches.length > 1 || (profile &&
+      (profile.role !== 'peserta' || profile.venue_id !== venueId || profile.archived_at))) {
+      throw new Error(`Profil fasilitator perlu diperiksa: ${row.name}.`);
+    }
+    const code = profile?.code || 'F-' + createHash('sha256').update(norm(row.name)).digest('hex').slice(0, 12).toUpperCase();
+    const position = profile?.position || 'Fasilitator Pelaporan';
+    if (!profile) newRows.push({ code, name: row.name, position, venue_id: venueId, institution: row.institution, ruangan: row.room });
+    return { ...row, code, position };
+  });
+  if (!dryRun && newRows.length) {
+    await db.query(`INSERT INTO people (code,name,role,position,venue_id,institution,ruangan,roster_added_at)
+      SELECT code,name,'peserta',position,venue_id,institution,ruangan,now()
+      FROM jsonb_to_recordset($1::jsonb) AS f(code text,name text,position text,venue_id int,institution text,ruangan text)`,
+    [JSON.stringify(newRows)]);
+  }
+  return { assignments, createdFacilitators: newRows.length };
+}
+
+function attendanceAssignments(people, rosterLo) {
+  const byAssignment = new Map(rosterLo.map((lo) => [JSON.stringify([lo.venue, lo.name]), lo]));
+  const groups = {};
+  for (const person of people) {
+    const owner = byAssignment.get(JSON.stringify([person.venue, person.lo]));
+    if (!owner) throw new Error('Ada peserta dengan penugasan LO yang belum terdaftar.');
+    (groups[owner.account_id] ??= []).push({
+      code: person.code, name: person.name, position: person.position, npsn: person.npsn ?? null, venue_id: owner.venue_id,
+    });
+  }
+  return groups;
+}
+
+async function prepareOrganizations(db, organizations, venueIds, dryRun) {
+  const rows = organizations.map((entry) => {
+    const prefix = entry.position === 'Dinas Pendidikan' ? 'DINAS' : 'BPMP';
+    const key = norm(entry.venue) + ':' + norm(entry.institution);
+    return { ...entry, code: prefix + '-' + createHash('sha256').update(key).digest('hex').slice(0, 12).toUpperCase(),
+      venue_id: venueIds.get(entry.venue) };
+  });
+  if (rows.some((row) => row.venue_id == null) || new Set(rows.map((row) => row.code)).size !== rows.length) {
+    throw new Error('Venue atau kode absensi instansi tidak valid.');
+  }
+  const { rows: existing } = await db.query(
+    'SELECT code, role, position, institution, venue_id, archived_at FROM people WHERE lower(code)=ANY($1::text[])',
+    [rows.map((row) => row.code.toLowerCase())]);
+  const byCode = new Map(existing.map((row) => [row.code.toLowerCase(), row]));
+  const missing = rows.filter((row) => {
+    const profile = byCode.get(row.code.toLowerCase());
+    if (!profile) return true;
+    if (profile.role !== 'peserta' || profile.position !== row.position || profile.institution !== row.institution
+      || profile.venue_id !== row.venue_id || profile.archived_at) {
+      throw new Error(`Profil instansi perlu diperiksa: ${row.institution}.`);
+    }
+    return false;
+  });
+  if (!dryRun && missing.length) {
+    await db.query(`INSERT INTO people (code,name,role,position,venue_id,institution,kab_kota,provinsi,roster_added_at)
+      SELECT code,institution,'peserta',position,venue_id,institution,kab_kota,provinsi,now()
+      FROM jsonb_to_recordset($1::jsonb) AS o(code text,position text,venue_id int,institution text,kab_kota text,provinsi text)`,
+    [JSON.stringify(missing)]);
+  }
+  return missing.length;
 }
 
 async function importRoster(db, roster, { dryRun, credentialsPath, resetLogins, sharedPassword }) {
@@ -115,11 +187,13 @@ async function importRoster(db, roster, { dryRun, credentialsPath, resetLogins, 
     credentials.push((resetLogins ? [username, name, venue] : [username, password, name, venue]).join('\t'));
   }
 
-  const result = { createdVenues, renamedVenues, movedAccounts, createdAccounts, resetAccounts };
+  const { assignments, createdFacilitators } = await prepareFacilitators(db, roster.facilitators, venueIds, dryRun);
+  const createdOrganizations = await prepareOrganizations(db, roster.organizations, venueIds, dryRun);
+  const result = { createdVenues, renamedVenues, movedAccounts, createdAccounts, resetAccounts, createdFacilitators, createdOrganizations };
   if (dryRun) return result;
   await db.query(
     'INSERT INTO assignment_roster (id, data) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data',
-    [JSON.stringify({ ...roster, lo: rosterLo })]);
+    [JSON.stringify({ ...roster, lo: rosterLo, attendance_assignments: attendanceAssignments([...roster.participants, ...assignments], rosterLo) })]);
   if (credentials.length) {
     const header = resetLogins ? 'Username\tNama LO\tVenue' : 'Username\tPassword awal\tNama LO\tVenue';
     writeFileSync(credentialsPath, [header, ...credentials].join('\n') + '\n',
@@ -151,6 +225,9 @@ try {
   if (roster.venues.length !== 7 || roster.lo.length !== 76 ||
       roster.facilitators.length !== 470 || roster.schools.length !== 1884 || roster.participants?.length !== 3360 ||
       roster.coordinators?.length !== 107 || roster.supervisors?.length !== 1476 ||
+      roster.organizations?.filter((row) => row.position === 'Dinas Pendidikan').length !== 287 ||
+      roster.organizations?.filter((row) => row.position === 'BB/BPMP').length !== 31 ||
+      roster.participants.some((person) => !roster.lo.some((lo) => lo.name === person.lo && lo.venue === person.venue)) ||
       new Set(roster.lo.map(({ name }) => norm(name))).size !== roster.lo.length) {
     throw new Error('Jumlah atau identitas data tidak cocok dengan pemetaan revisi 8.');
   }

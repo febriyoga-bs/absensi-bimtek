@@ -18,9 +18,8 @@ Stack: React (Vite) + Node.js/Express + PostgreSQL.
 | `/admin/sesi` | Jadwal sesi (masuk/pulang, untuk peserta/panitia/semua) |
 | `/admin/orang` | Data peserta & panitia (bisa dikunci ke venue tertentu), impor CSV / tempel dari Excel |
 | `/admin/orang/sinkronisasi` | Pratinjau dan penerapan daftar absensi Bendahara dan Pengawas revisi 8 |
-| `/admin/venue` | **Banyak venue**: koordinat, radius, aktif/nonaktif, layar kode per venue |
-| `/admin/pengaturan` | Nama acara, penyelenggara, tanggal, akurasi GPS maks, wajib kode venue |
-| `/admin/kode-venue?venue=ID` | Layar kode 6 digit per venue yang berganti tiap 30 detik (tampilkan di proyektor/TV) |
+| `/admin/venue` | **Banyak venue**: koordinat, radius, aktif/nonaktif |
+| `/admin/pengaturan` | Nama acara, penyelenggara, tanggal, akurasi GPS maks |
 
 ## Multi venue
 
@@ -32,17 +31,18 @@ Venue yang berlaku untuk seseorang dihitung dari **venue aktif ∩ venue sesi �
 | Sesi dibatasi ke venue A dan B | Hanya di A atau B |
 | Orang dikunci ke venue B | Hanya di B (meskipun sesi berlaku untuk semua venue) |
 
-Server memilih venue terdekat yang radiusnya mencakup posisi peserta. Bila **Kode Venue** diwajibkan, kode dicek terhadap venue tersebut, karena tiap venue punya layar kodenya sendiri. Venue yang sudah dipakai absen tidak bisa dihapus; nonaktifkan saja.
+Server memilih venue terdekat yang radiusnya mencakup posisi peserta. Venue yang sudah dipakai absen tidak bisa dihapus; nonaktifkan saja.
 
 ## Akun LO per venue
 
 Admin utama membuat akun LO di menu **Akun LO**, berisi nama, username, password, dan venue. LO login di `/admin/login` lewat tab **LO Venue**, lalu hanya bisa:
 - melihat **Rekap** untuk venue-nya,
 - **memverifikasi** (sahkan atau tolak) absensi di venue-nya,
-- mengunduh **CSV** venue-nya,
-- membuka **layar kode venue** miliknya.
+- mengunduh **CSV** venue-nya.
 
 Menu Peserta, Sesi, Venue, Akun LO, dan Pengaturan hanya untuk Admin Utama. Menu Daftar Pendampingan menampilkan fasilitator, sekolah, dan ruangan yang ditugaskan ke akun LO tersebut. LO perlu login ulang setelah penempatan venuenya berubah.
+
+Di **Absenkan Peserta**, akun LO langsung melihat tabel **Binaan saya** untuk sekolah dan fasilitator, serta **Venue saya** untuk Dinas Pendidikan dan BB/BPMP. Pilihan **Semua peserta** menampilkan daftar lengkap. LO dapat mencatat kehadiran atau status berhalangan untuk Bendahara, Pengawas, dan Fasilitator binaannya serta peserta Dinas Pendidikan dan BB/BPMP di venue sendiri. Verifikasi kehadiran oleh LO mengikuti penugasan. Admin Utama dapat mencatat absensi seluruh kategori. Profil Fasilitator dan perwakilan instansi dimuat saat impor pemetaan Bimtek Pelaporan 3.
 
 ## Impor pembagian Bimtek Pelaporan 3 revisi 8
 
@@ -96,7 +96,6 @@ Browser **tidak bisa** membaca langsung apakah aplikasi Fake GPS terpasang (itu 
 |---|---|
 | Jarak dari venue > radius (dihitung server dengan haversine dari median sampel) | **Ditolak** |
 | Akurasi GPS lebih buruk dari batas | **Ditolak** |
-| **Kode venue** salah (bila diwajibkan) | **Ditolak** |
 | Token kedaluwarsa atau sesi sudah ditutup | **Ditolak** |
 | Sampel koordinat identik persis (GPS asli selalu bergoyang) | Perlu dicek |
 | Koordinat ≤ 4 desimal (diketik manual) | Perlu dicek |
@@ -108,7 +107,6 @@ Browser **tidak bisa** membaca langsung apakah aplikasi Fake GPS terpasang (itu 
 
 Absen yang skor tandanya ≥ 2 masuk status **review**, dan panitia memeriksa fotonya di `/admin/absensi`. Percobaan yang ditolak dicatat di tab *Percobaan diblokir*.
 
-> **Rekomendasi:** aktifkan **Wajibkan Kode Venue** dan tampilkan `/admin/kode-venue` di layar meja registrasi. Ini satu-satunya lapisan yang tidak bisa diakali Fake GPS, karena kodenya hanya terlihat oleh orang yang benar-benar ada di ruangan. Foto wajah ber-watermark menjadi bukti tambahan.
 
 ## Menjalankan (development)
 
@@ -174,5 +172,5 @@ Jalankan di belakang Caddy/Nginx dengan HTTPS. Kalau `R2_BUCKET` dikosongkan, fo
 2. **Venue**: tambah setiap lokasi. Koordinat bisa ditempel dari Google Maps atau diambil dengan "Pakai lokasi saya" saat berada di venue. Radius 100–200 m cocok untuk hotel atau aula.
 3. **Peserta & Panitia**: impor CSV dengan format `kode,nama,peran,instansi,jabatan,telepon,venue`. Kolom venue berisi nama venue persis, atau dikosongkan agar bebas.
 4. **Sesi**: buat sesi masuk/pulang per hari, misalnya panitia dibuka 06.30 dan peserta 07.30–09.00. Sesi bisa dibatasi ke venue tertentu.
-5. Bagikan link `/absen/peserta` dan `/absen/panitia` (bisa dibuat QR code), lalu buka **Layar kode** untuk setiap venue di TV atau proyektornya.
+5. Bagikan link `/absen/peserta` dan `/absen/panitia` (bisa dibuat QR code).
 6. Pantau `/admin` dan cek absen berstatus *Perlu dicek* di `/admin/absensi`.

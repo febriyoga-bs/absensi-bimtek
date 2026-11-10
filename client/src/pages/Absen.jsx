@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { startGeoWatch } from '../lib/geo.js';
 import { getDeviceId } from '../lib/device.js';
+import { formatRoom } from '../lib/room.js';
 import { useNow, fmtFull, fmtHM, fmtRemaining, initials } from '../lib/time.js';
 import CameraCapture from '../components/CameraCapture.jsx';
 import Icon from '../components/Icon.jsx';
@@ -194,7 +195,6 @@ export default function Absen({ role }) {
             <ul className="checklist">
               <li><Icon name="crosshair" size={18} /><span>Aktifkan <b>GPS / Lokasi</b> lalu izinkan akses <b>Kamera</b> & <b>Lokasi</b> saat diminta.</span></li>
               <li><Icon name="pin" size={18} /><span>Absen hanya bisa di dalam area venue{info?.venues?.length ? `: ${info.venues.map((v) => v.name).join(', ')}` : ''}.</span></li>
-              {info?.require_venue_code && <li><Icon name="monitor" size={18} /><span>Siapkan <b>kode venue 6 digit</b> dari layar panitia.</span></li>}
               <li><Icon name="shield" size={18} /><span>Aplikasi Fake GPS terdeteksi otomatis dan absensi akan ditolak atau diperiksa panitia.</span></li>
             </ul>
             <Link to="/riwayat" className="link-row"><Icon name="clock" size={16} />Sudah absen? Cek riwayat di perangkat ini</Link>
@@ -231,7 +231,6 @@ function CaptureStep({ role, info, ch, onDone, onRestart }) {
   const [camLabel, setCamLabel] = useState('');
   const [photo, setPhoto] = useState(null);
   const [captureSamples, setCaptureSamples] = useState(null);
-  const [venueCode, setVenueCode] = useState('');
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [startedAt] = useState(Date.now());
@@ -287,7 +286,6 @@ function CaptureStep({ role, info, ch, onDone, onRestart }) {
         method: 'POST',
         body: {
           token: ch.token, photo, samples: captureSamples, deviceId: getDeviceId(),
-          venueCode: ch.require_venue_code ? venueCode : undefined,
           clientTime: new Date().toISOString(),
           meta: { cameraLabel: camLabel, webdriver: navigator.webdriver === true },
         },
@@ -316,7 +314,7 @@ function CaptureStep({ role, info, ch, onDone, onRestart }) {
         <span className="person__text">
           <b>{ch.person.name}</b>
           <small>{[ch.person.position, ch.person.institution].filter(Boolean).join(' · ') || ch.person.code}</small>
-          {ch.person.ruangan && <small>Ruangan: <b>{ch.person.ruangan}</b></small>}
+          {ch.person.ruangan && <small>Ruangan: <b>{formatRoom(ch.person.ruangan)}</b></small>}
         </span>
         <span className="tag tag--type">{ch.session.type}</span>
       </div>
@@ -347,24 +345,14 @@ function CaptureStep({ role, info, ch, onDone, onRestart }) {
                 aria-label="Ambil foto"><Icon name="camera" size={30} /></button>
             </>
           ) : (
-            <>
-              {ch.require_venue_code && (
-                <label className="vf-code">
-                  <span>Kode venue dari layar panitia</span>
-                  <input inputMode="numeric" maxLength={6} value={venueCode} placeholder="000000" autoFocus
-                    onChange={(e) => setVenueCode(e.target.value.replace(/\D/g, ''))} className="input-code" />
-                </label>
-              )}
-              <div className="vf-buttons">
-                <button className="btn" onClick={() => { setPhoto(null); setError(null); }} disabled={busy}>
-                  <Icon name="refresh" size={18} /> Ulangi
-                </button>
-                <button className="btn btn--primary" onClick={submit}
-                  disabled={busy || (ch.require_venue_code && venueCode.length !== 6)}>
-                  {busy ? <><Spinner /> Mengirim…</> : <><Icon name="check" size={18} /> Kirim Absensi</>}
-                </button>
-              </div>
-            </>
+            <div className="vf-buttons">
+              <button className="btn" onClick={() => { setPhoto(null); setError(null); }} disabled={busy}>
+                <Icon name="refresh" size={18} /> Ulangi
+              </button>
+              <button className="btn btn--primary" onClick={submit} disabled={busy}>
+                {busy ? <><Spinner /> Mengirim…</> : <><Icon name="check" size={18} /> Kirim Absensi</>}
+              </button>
+            </div>
           )}
         </div>
       </div>

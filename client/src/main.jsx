@@ -15,7 +15,6 @@ import Records from './pages/admin/Records.jsx';
 import Sessions from './pages/admin/Sessions.jsx';
 import People from './pages/admin/People.jsx';
 import Settings from './pages/admin/Settings.jsx';
-import VenueCode from './pages/admin/VenueCode.jsx';
 import Venues from './pages/admin/Venues.jsx';
 import LoAccounts from './pages/admin/LoAccounts.jsx';
 const Assignments = lazy(() => import('./pages/admin/Assignments.jsx'));
@@ -35,7 +34,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <Route path="/riwayat" element={<Riwayat />} />
         <Route path="/qr/:token" element={<QrCard />} />
         <Route path="/admin/login" element={<Login />} />
-        <Route path="/admin/kode-venue" element={<VenueCode />} />
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<Dashboard />} />
           <Route path="absensi" element={<Records />} />

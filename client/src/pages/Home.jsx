@@ -111,11 +111,6 @@ export default function Home() {
               <small>Bukti absen tampil dan tercatat di panitia.</small>
             </li>
           </ol>
-          {info?.require_venue_code && (
-            <div className="note"><Icon name="monitor" size={18} />
-              Siapkan juga <b>kode venue 6 digit</b> yang tampil di layar panitia di lokasi Anda.
-            </div>
-          )}
         </section>
 
         {!info && (

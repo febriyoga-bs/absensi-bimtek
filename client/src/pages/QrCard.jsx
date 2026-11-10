@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import QRCode from 'qrcode';
 import { api } from '../api.js';
+import { formatRoom } from '../lib/room.js';
 import Icon from '../components/Icon.jsx';
 import BrandMark from '../components/BrandMark.jsx';
 import { Skel } from '../components/Skeleton.jsx';
@@ -37,7 +38,7 @@ export default function QrCard() {
     g.font = 'bold 34px sans-serif'; g.fillText(p.name.slice(0, 40), W / 2, W + pad);
     g.font = '26px sans-serif'; g.fillStyle = '#5d6b82';
     g.fillText([p.position, p.code].filter(Boolean).join(' · ').slice(0, 50), W / 2, W + pad + 44);
-    if (p.ruangan || p.venue) g.fillText([p.venue, p.ruangan].filter(Boolean).join(' – ').slice(0, 55), W / 2, W + pad + 84);
+    if (p.ruangan || p.venue) g.fillText([p.venue, formatRoom(p.ruangan)].filter(Boolean).join(' – ').slice(0, 55), W / 2, W + pad + 84);
     g.font = '22px sans-serif'; g.fillText(p.event_name || 'Absensi', W / 2, W + pad + 130);
     const a = document.createElement('a');
     a.href = c.toDataURL('image/png');
@@ -71,7 +72,7 @@ export default function QrCard() {
                   <span>{[p.position, p.code].filter(Boolean).join(' · ')}</span>
                   {p.institution && <span className="muted small">{p.institution}</span>}
                   {(p.venue || p.ruangan) && (
-                    <span className="tag tag--venue"><Icon name="pin" size={13} /> {[p.venue, p.ruangan].filter(Boolean).join(' – ')}</span>
+                    <span className="tag tag--venue"><Icon name="pin" size={13} /> {[p.venue, formatRoom(p.ruangan)].filter(Boolean).join(' – ')}</span>
                   )}
                 </div>
               ) : <div className="qr-card__info" style={{ width: '70%' }}><Skel w="80%" h={20} /><Skel w="55%" /><Skel w="65%" h={12} /></div>}

@@ -134,7 +134,7 @@ export default function Records() {
                 {r.participant_note && <div className="rec__note small"><b>Catatan</b><div>{r.participant_note}</div></div>}
                 <div className="row">
                   <span className={`st st--${r.status}`}>{ST_LABEL[r.status]}</span>
-                  {r.status !== 'berhalangan' && <>
+                  {r.status !== 'berhalangan' && r.can_verify !== false && <>
                     {r.status !== 'valid' && <button className="btn btn--sm btn--ok" onClick={() => setStatus(r.id, 'valid')}>Sahkan</button>}
                     {r.status !== 'ditolak' && <button className="btn btn--sm btn--danger" onClick={() => setStatus(r.id, 'ditolak')}>Tolak</button>}
                   </>}

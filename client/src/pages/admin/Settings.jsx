@@ -8,7 +8,7 @@ export default function Settings() {
   const [msg, setMsg] = useState(null);
   useEffect(() => { api('/admin/settings', { admin: true }).then(setS); }, []);
   if (!s) return <div className="card" style={{ display: 'grid', gap: 16, maxWidth: 720 }}><Skel w="30%" h={22} /><SkelLines n={4} gap={18} /><Skel w={140} h={42} r={10} /></div>;
-  const f = (k) => (e) => setS({ ...s, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value });
+  const f = (k) => (e) => setS({ ...s, [k]: e.target.value });
 
   async function save(e) {
     e.preventDefault();
@@ -31,11 +31,6 @@ export default function Settings() {
             manual oleh LO/panitia. Absen tetap ditolak bila jelas di luar area venue atau akurasi lebih buruk dari 1.000 m.</small>
         </label>
         <span />
-        <label className="check span2">
-          <input type="checkbox" checked={s.require_venue_code} onChange={f('require_venue_code')} />
-          <span><b>Wajibkan Kode Venue</b> — peserta harus memasukkan kode 6 digit yang berganti tiap 30 detik di layar panitia
-            venue masing-masing. Ini lapisan terkuat melawan Fake GPS karena kode hanya terlihat oleh orang yang benar-benar ada di lokasi.</span>
-        </label>
         {msg && <div className={`alert span2 ${msg.err ? 'alert--err' : 'alert--ok'}`}>{msg.text}</div>}
         <div className="row span2"><button className="btn btn--primary">Simpan</button></div>
       </form>

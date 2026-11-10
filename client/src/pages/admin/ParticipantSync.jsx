@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api.js';
 import { Spinner } from '../../components/Skeleton.jsx';
+import { formatRoom } from '../../lib/room.js';
 
 const PAGE_SIZE = 30;
 const number = new Intl.NumberFormat('id-ID');
@@ -116,8 +117,8 @@ export default function ParticipantSync() {
                   <tr key={`${row.code}:${row.npsn}`} role="row">
                     <td role="cell"><b>{row.name}</b><div className="muted small">{row.position} · {row.code}</div></td>
                     <td role="cell" data-label="NPSN" className="stack-full">{row.npsn || '—'}</td>
-                    <td role="cell" data-label="Saat ini">{row.from_venue || '—'}{row.from_room && <div className="muted small">{row.from_room}</div>}</td>
-                    <td role="cell" data-label="Dari Excel">{row.to_venue || '—'}{row.to_room && <div className="muted small">{row.to_room}</div>}
+                    <td role="cell" data-label="Saat ini">{row.from_venue || '—'}{row.from_room && <div className="muted small">{formatRoom(row.from_room)}</div>}</td>
+                    <td role="cell" data-label="Dari Excel">{row.to_venue || '—'}{row.to_room && <div className="muted small">{formatRoom(row.to_room)}</div>}
                       {row.restored && <div className="muted small">Diaktifkan kembali</div>}</td>
                     {action === 'review' && <td role="cell" data-label="Perlu diperiksa" className="stack-full">{row.reason}{row.candidates.map((p) => (
                       <div key={p.code} className="muted small">{p.name} ({p.code})</div>

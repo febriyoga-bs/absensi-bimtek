@@ -4,8 +4,9 @@ import jsQR from 'jsqr';
 import { api } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
 import { fmtDT } from './shared.js';
-import { Skel, Spinner } from '../../components/Skeleton.jsx';
+import { SkelRows, Spinner } from '../../components/Skeleton.jsx';
 import CameraCapture from '../../components/CameraCapture.jsx';
+import { formatRoom } from '../../lib/room.js';
 
 // Absenkan lewat scan QR dinonaktifkan sementara. Ubah ke true untuk memunculkan lagi tab "Scan QR"
 // (server juga perlu QR_SCAN_ENABLED = true di server/src/routes/admin.js).
@@ -31,6 +32,22 @@ const KIND = {
   err: { cls: 'err', icon: 'x', title: 'Gagal' },
 };
 
+const categories = {
+  sekolah: { label: 'Sekolah', icon: 'school', placeholder: 'Cari nama, sekolah, NPSN, atau kode' },
+  fasil: { label: 'Fasilitator', icon: 'users', placeholder: 'Cari nama, kode, atau PTN fasilitator' },
+  dinas: { label: 'Dinas Pendidikan', icon: 'building', placeholder: 'Cari nama atau kode Dinas Pendidikan' },
+  bpmp: { label: 'BB/BPMP', icon: 'building', placeholder: 'Cari nama atau kode BB/BPMP' },
+};
+const number = new Intl.NumberFormat('id-ID');
+
+function attendanceStatus(person) {
+  if (person.unavailable) return ['Mundur/Berhalangan Hadir', 'tag--off'];
+  if (person.attended?.status === 'ditolak') return ['Ditolak', 'tag--off'];
+  if (person.attended?.status === 'review') return ['Perlu dicek', 'tag--venue'];
+  if (person.attended) return ['Sudah absen', 'tag--open'];
+  return [person.session ? 'Belum absen' : 'Belum ada sesi', 'tag--off'];
+}
+
 export default function Scan() {
   const { lo, user } = useOutletContext();
   const videoRef = useRef(null);
@@ -44,20 +61,23 @@ export default function Scan() {
   const [venues, setVenues] = useState([]);
   const [venueId, setVenueId] = useState('');
   const [manual, setManual] = useState('');
-  const [tab, setTab] = useState(QR_SCAN_ENABLED ? 'qr' : 'sekolah'); // 'qr' | 'sekolah'
-  const [schoolQ, setSchoolQ] = useState('');
-  const [schoolOpts, setSchoolOpts] = useState([]);
-  const [searching, setSearching] = useState(false);
-  const [schoolLoading, setSchoolLoading] = useState(false);
-  const [openList, setOpenList] = useState(false);
-  const [school, setSchool] = useState(null);
-  const [schoolErr, setSchoolErr] = useState(null);
-  const [pending, setPending] = useState(null); // kode yang sedang diabsenkan
-  const [shot, setShot] = useState(null); // peserta yang sedang difoto sebelum diabsenkan
+  const [tab, setTab] = useState(QR_SCAN_ENABLED ? 'qr' : 'sekolah');
+  const [search, setSearch] = useState('');
+  const [filterVenue, setFilterVenue] = useState('');
+  const [showAll, setShowAll] = useState(false);
+  const [page, setPage] = useState(1);
+  const [list, setList] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [listError, setListError] = useState('');
+  const [revision, setRevision] = useState(0);
+  const [pending, setPending] = useState(null);
+  const [shot, setShot] = useState(null);
   const venueRef = useRef('');
   venueRef.current = venueId;
 
-  useEffect(() => { if (!lo) api('/admin/venues', { admin: true }).then(setVenues).catch(() => {}); }, [lo]);
+  useEffect(() => {
+    if (QR_SCAN_ENABLED && !lo) api('/admin/venues', { admin: true }).then(setVenues).catch(() => {});
+  }, [lo]);
 
   async function submit(body) {
     busyRef.current = true;
@@ -78,28 +98,33 @@ export default function Scan() {
     return r;
   }
 
-  // Autocomplete sekolah (nama sekolah / NPSN / nama peserta)
   useEffect(() => {
-    if (tab !== 'sekolah' || schoolQ.trim().length < 2) { setSchoolOpts([]); return undefined; }
-    setSearching(true);
-    const t = setTimeout(() => {
-      api(`/admin/schools?q=${encodeURIComponent(schoolQ.trim())}`, { admin: true }).then(setSchoolOpts).catch(() => setSchoolOpts([]))
-        .finally(() => setSearching(false));
-    }, 250);
-    return () => clearTimeout(t);
-  }, [schoolQ, tab]);
+    if (tab === 'qr') return;
+    let current = true;
+    setLoading(true);
+    setListError('');
+    const params = new URLSearchParams({ category: tab, q: search.trim(), page, venue_id: filterVenue });
+    if (lo && showAll) params.set('scope', 'all');
+    const timer = setTimeout(() => {
+      api(`/admin/scan/participants?${params}`, { admin: true })
+        .then((response) => { if (current) setList(response); })
+        .catch((error) => { if (current) setListError(error.message); })
+        .finally(() => { if (current) setLoading(false); });
+    }, search.trim() ? 220 : 0);
+    return () => { current = false; clearTimeout(timer); };
+  }, [tab, search, page, filterVenue, lo, showAll, revision]);
 
-  async function openSchool(npsn) {
-    setOpenList(false); setSchoolErr(null); setSchoolLoading(true);
-    try { setSchool(await api(`/admin/school/${npsn}`, { admin: true })); }
-    catch (e) { setSchoolErr(e.message); setSchool(null); }
-    finally { setSchoolLoading(false); }
+  function changeTab(next) {
+    if (tab === next) return;
+    setTab(next);
+    setSearch('');
+    setPage(1);
+    setLoading(true);
   }
 
-  // Pilih peserta → buka kamera → foto peserta → baru tercatat
   function absenkan(p) {
-    setShot({ code: p.code, name: p.name, position: p.position, school: school?.school,
-      npsn: school?.npsn, sessionId: p.session?.id });
+    setShot({ code: p.code, name: p.name, position: p.position, school: p.institution?.split('; ')[0],
+      sessionId: p.session?.id });
   }
 
   async function sendShot(photo, note) {
@@ -109,7 +134,7 @@ export default function Scan() {
     setPending(null);
     if (r.kind !== 'err') {
       setShot(null);
-      if (target.npsn) openSchool(target.npsn);
+      setRevision((value) => value + 1);
     }
     return r;
   }
@@ -120,10 +145,10 @@ export default function Scan() {
     setPending(p.code);
     const r = await submit({ code: p.code, session_id: p.session.id, unavailable: true });
     setPending(null);
-    if (r.kind !== 'err') openSchool(school.npsn);
+    if (r.kind !== 'err') setRevision((value) => value + 1);
   }
 
-  // Kamera belakang + pemindaian QR (± 6 kali per detik); mati saat tab "Cari sekolah"
+  // Kamera pemindai hanya aktif pada tab QR.
   useEffect(() => {
     if (!running || tab !== 'qr') return undefined;
     let stream; let timer; let stopped = false;
@@ -165,13 +190,15 @@ export default function Scan() {
   }, [running, tab]);
 
   const K = result && KIND[result.kind];
+  const pages = list ? Math.ceil(list.total / list.limit) : 0;
+  const organizationTab = tab === 'dinas' || tab === 'bpmp';
 
   return (
     <>
       <div className="page-head">
         <div><h2>Absenkan Peserta</h2>
           <p className="muted">
-            {QR_SCAN_ENABLED ? 'Scan QR peserta atau cari sekolahnya.' : 'Cari sekolah, lalu catat kehadiran atau status berhalangan peserta.'} Catatan masuk ke sesi yang sedang dibuka
+            {lo ? 'Anda bisa mengabsenkan binaan Anda serta peserta Dinas Pendidikan dan BB/BPMP di venue Anda.' : 'Pilih jenis peserta, lalu cari nama sekolah, fasilitator, atau instansi.'} Catatan masuk ke sesi yang sedang dibuka
             {lo && user?.venue ? <> untuk venue <b>{user.venue.name}</b></> : ''}.
           </p></div>
         {tab === 'qr' && (
@@ -180,74 +207,90 @@ export default function Scan() {
           </button>
         )}
       </div>
-      {QR_SCAN_ENABLED && <div className="tabs">
-        <button className={tab === 'qr' ? 'on' : ''} onClick={() => setTab('qr')}><Icon name="qr" size={16} /> Scan QR</button>
-        <button className={tab === 'sekolah' ? 'on' : ''} onClick={() => setTab('sekolah')}><Icon name="school" size={16} /> Cari sekolah</button>
-      </div>}
+      <div className="tabs" role="group" aria-label="Jenis peserta">
+        {QR_SCAN_ENABLED && <button className={tab === 'qr' ? 'on' : ''} onClick={() => changeTab('qr')} disabled={!!pending}><Icon name="qr" size={16} /> Scan QR</button>}
+        {Object.entries(categories).map(([key, category]) => (
+          <button key={key} className={tab === key ? 'on' : ''} aria-pressed={tab === key} onClick={() => changeTab(key)} disabled={!!pending}>
+            <Icon name={category.icon} size={16} /> {category.label}
+          </button>
+        ))}
+      </div>
 
-      <div className="scan">
-        {tab === 'sekolah' && (
-          <div className="scan__cam card form">
-            <label className="ac">
-              <span>Sekolah</span>
-              <span className="input-icon">
-                <Icon name="school" />
-                <input value={schoolQ} autoFocus placeholder="Ketik nama sekolah, NPSN, atau nama peserta"
-                  onChange={(e) => { setSchoolQ(e.target.value); setOpenList(true); }}
-                  onFocus={() => setOpenList(true)} onBlur={() => setTimeout(() => setOpenList(false), 150)} />
-              </span>
-              {openList && schoolQ.trim().length >= 2 && (
-                <ul className="ac__list" role="listbox">
-                  {schoolOpts.map((o) => (
-                    <li key={o.npsn}><button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setSchoolQ(o.school); openSchool(o.npsn); }}>
-                      <b>{o.school}</b><small>NPSN {o.npsn}{o.kab_kota ? ` · ${o.kab_kota.split('; ')[0]}` : ''}</small>
-                    </button></li>
+      <div className={tab === 'qr' ? 'scan' : 'scan scan--table'}>
+        {tab !== 'qr' && (
+          <section className="scan__directory">
+            <div className="toolbar filters">
+              {lo && <select aria-label="Cakupan peserta" value={showAll ? 'all' : 'assigned'} onChange={(e) => {
+                setLoading(true); setShowAll(e.target.value === 'all'); setFilterVenue(''); setPage(1);
+              }}>
+                <option value="assigned">{organizationTab ? 'Venue saya' : 'Binaan saya'}</option>
+                <option value="all">Semua peserta</option>
+              </select>}
+              <input type="search" aria-label="Cari peserta" placeholder={categories[tab].placeholder} value={search} maxLength={150}
+                onChange={(e) => { setLoading(true); setSearch(e.target.value); setPage(1); }} />
+              {(!lo || showAll) && <select aria-label="Filter venue" value={filterVenue}
+                onChange={(e) => { setLoading(true); setFilterVenue(e.target.value); setPage(1); }}>
+                <option value="">Semua venue</option>
+                {list?.venues.map((venue) => <option key={venue.id} value={venue.id}>{venue.name}</option>)}
+              </select>}
+              <button type="button" className="btn btn--sm" disabled={loading || !!pending} onClick={() => setRevision((value) => value + 1)}>
+                <Icon name="refresh" size={15} />Muat ulang
+              </button>
+            </div>
+            {listError && <div className="alert alert--err" role="alert">{listError}</div>}
+            <p className="muted small" aria-live="polite">
+              {loading ? 'Memuat daftar peserta…' : `${number.format(list?.total || 0)} peserta`}
+            </p>
+            <div className="assignment-table">
+              <table className="table stack-table" role="table" aria-label={`Daftar ${categories[tab].label}`} aria-busy={loading}>
+                <thead role="rowgroup"><tr role="row">
+                  {['Peserta', 'Sekolah / Instansi', 'Venue', 'Sesi', 'Status', 'Tindakan'].map((name) => (
+                    <th key={name} scope="col" role="columnheader">{name}</th>
                   ))}
-                  {searching && !schoolOpts.length && <li className="ac__empty"><Spinner size={14} /> Mencari…</li>}
-                  {!searching && !schoolOpts.length && <li className="ac__empty">Tidak ada sekolah yang cocok{lo ? ' di venue ini' : ''}.</li>}
-                </ul>
-              )}
-            </label>
-            {schoolErr && <div className="alert alert--err"><Icon name="alert" size={18} /><span>{schoolErr}</span></div>}
-            {schoolLoading && !school && (
-              <div className="school"><Skel h={56} r={10} /><Skel h={64} r={10} /><Skel h={64} r={10} /><Skel h={64} r={10} /></div>
-            )}
-            {school && (
-              <div className="school" style={schoolLoading && !pending ? { opacity: 0.55 } : undefined}>
-                <div className="npsn-pick__school"><Icon name="school" size={18} />
-                  <span><b>{school.school}</b><small>NPSN {school.npsn}{school.kab_kota ? ` · ${school.kab_kota.split('; ')[0]}` : ''}</small></span></div>
-                {!school.session && <div className="alert alert--warn"><Icon name="clock" size={18} /><span>Belum ada sesi peserta yang dibuka saat ini.</span></div>}
-                {school.session && <p className="muted small" style={{ margin: 0 }}>Sesi: <b>{school.session.type || school.session.name}</b></p>}
-                <ul className="school__people">
-                  {school.people.map((p) => (
-                    <li key={p.code}>
-                      <span className="school__who">
-                        <small>{p.position || 'Peserta'}</small>
-                        <b>{p.name}</b>
-                        <small className="muted">{p.code}{p.ruangan ? ` · ${p.ruangan}` : ''}{p.other_venue ? ` · venue: ${p.venue_name}` : ''}</small>
-                      </span>
-                      {p.other_venue ? (
-                        <span className="muted small">Venue lain</span>
-                      ) : p.attended ? (
-                        <span className={`st st--${p.attended.status}`} title={p.attended.method}>
-                          {p.attended.status === 'ditolak' ? 'Ditolak' : `✓ ${fmtDT(p.attended.at).split(', ').pop()}`}
-                        </span>
-                      ) : (
-                        <div className="school__actions">
-                          {p.unavailable && <span className="tag tag--off">Mundur/Berhalangan Hadir</span>}
-                          <button className="btn btn--sm btn--primary" disabled={!p.session || !!pending || schoolLoading} onClick={() => absenkan(p)}>
-                            {pending === p.code ? <><Spinner size={13} /> Menyimpan…</> : 'Absenkan'}
-                          </button>
-                          {!p.unavailable && <button className="btn btn--sm" disabled={!p.session || !!pending || schoolLoading}
-                            onClick={() => markUnavailable(p)}>Mundur/Berhalangan Hadir</button>}
-                        </div>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
+                </tr></thead>
+                <tbody role="rowgroup">
+                  {loading && <SkelRows rows={4} cols={6} />}
+                  {!loading && !listError && !list?.rows.length && <tr role="row"><td role="cell" colSpan={6}>
+                    {lo && !showAll && !search.trim()
+                      ? `Tidak ada ${organizationTab ? 'peserta kategori ini di venue Anda' : 'binaan di kategori ini'}. Pilih Semua peserta untuk melihat daftar lengkap.`
+                      : 'Tidak ada peserta yang cocok.'}
+                  </td></tr>}
+                  {!loading && !listError && list?.rows.map((p) => {
+                    const [status, style] = attendanceStatus(p);
+                    return (
+                      <tr key={p.id} role="row">
+                        <td role="cell"><b>{p.name}</b><div className="muted small">{[p.position, p.code].filter(Boolean).join(' · ')}</div></td>
+                        <td role="cell" data-label="Sekolah / Instansi" className="cell-clamp">{p.institution || '—'}
+                          {p.npsn && <div className="muted small">NPSN {p.npsn}</div>}
+                        </td>
+                        <td role="cell" data-label="Venue">
+                          {p.venue_name ? <span className="tag tag--venue">{p.venue_name}</span> : '—'}
+                          {p.ruangan && <div className="muted small">{formatRoom(p.ruangan)}</div>}
+                        </td>
+                        <td role="cell" data-label="Sesi" className="small">{p.session?.type || p.session?.name || '—'}</td>
+                        <td role="cell" data-label="Status"><span className={`tag ${style}`}>{status}</span></td>
+                        <td role="cell" className="stack-full">
+                          {p.can_check_in && !p.attended ? (
+                            <div className="row scan__row-actions">
+                              <button className="btn btn--sm btn--primary" disabled={!p.session || !!pending}
+                                onClick={() => absenkan(p)}>{pending === p.code ? <Spinner size={13} /> : 'Absenkan'}</button>
+                              {!p.unavailable && <button className="btn btn--sm" disabled={!p.session || !!pending}
+                                onClick={() => markUnavailable(p)}>Mundur/Berhalangan Hadir</button>}
+                            </div>
+                          ) : <span className="muted small">{p.can_check_in ? '—' : organizationTab ? 'Di luar venue' : 'Di luar binaan'}</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {!listError && pages > 1 && <div className="pager">
+              <button className="btn btn--sm" disabled={page <= 1 || loading || !!pending} onClick={() => { setLoading(true); setPage(page - 1); }}>Sebelumnya</button>
+              <span className="muted small">Halaman {page} dari {pages}</span>
+              <button className="btn btn--sm" disabled={page >= pages || loading || !!pending} onClick={() => { setLoading(true); setPage(page + 1); }}>Berikutnya</button>
+            </div>}
+          </section>
         )}
 
         {QR_SCAN_ENABLED && tab === 'qr' && (
@@ -278,7 +321,7 @@ export default function Scan() {
 
         <div className="scan__side">
           {result ? (
-            <div key={result.id} className={`card scan__result scan__result--${K.cls}`}>
+            <div key={result.id} className={`card scan__result scan__result--${K.cls}`} role="status">
               <span className="scan__badge"><Icon name={K.icon} size={26} /></span>
               <div>
                 <b className="scan__title">{K.title}</b>
@@ -287,7 +330,7 @@ export default function Scan() {
                     <div className="scan__name">{result.person.name}</div>
                     <div className="muted small">{[result.person.position, result.person.code].filter(Boolean).join(' · ')}</div>
                     {result.person.institution && <div className="muted small">{result.person.institution}</div>}
-                    {result.person.ruangan && <div className="small">Ruangan: <b>{result.person.ruangan}</b></div>}
+                    {result.person.ruangan && <div className="small">Ruangan: <b>{formatRoom(result.person.ruangan)}</b></div>}
                   </>
                 )}
                 {result.session && <div className="small">{result.session.type || result.session.name}</div>}
@@ -295,7 +338,7 @@ export default function Scan() {
                 {result.msg && <div className="small scan__msg">{result.msg}</div>}
               </div>
             </div>
-          ) : (
+          ) : tab === 'qr' && (
             <div className="card scan__result"><span className="muted">Belum ada peserta yang diabsenkan.</span></div>
           )}
 
@@ -314,7 +357,7 @@ export default function Scan() {
           </div>
         </div>
       </div>
-      {shot && <LoShot target={shot} lo={lo} user={user} busy={pending === shot.code} onSend={sendShot} onClose={() => setShot(null)} />}
+      {shot && <LoShot target={shot} user={user} busy={pending === shot.code} onSend={sendShot} onClose={() => setShot(null)} />}
     </>
   );
 }

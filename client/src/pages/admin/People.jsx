@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
 import { Skel, SkelRows, SkelLines, Spinner } from '../../components/Skeleton.jsx';
+import { formatRoom } from '../../lib/room.js';
 
 // urutan alami: LO2-01 sebelum LO10-01, tanpa peduli huruf besar/kecil
 const cmp = (a, b) => String(a ?? '').localeCompare(String(b ?? ''), 'id', { numeric: true, sensitivity: 'base' });
@@ -248,7 +249,7 @@ export default function People() {
         {roomOpts.length > 0 && (
           <select value={fRoom} onChange={(e) => setFRoom(e.target.value)} aria-label="Filter ruangan">
             <option value="">Semua ruangan</option>
-            {roomOpts.map((x) => <option key={x} value={x}>{x}</option>)}
+            {roomOpts.map((x) => <option key={x} value={x}>{formatRoom(x)}</option>)}
           </select>
         )}
         {provOpts.length > 0 && (
@@ -284,7 +285,7 @@ export default function People() {
                 {p.npsn && <div className="muted small">NPSN {p.npsn}</div>}</td>
               <td role="cell" data-label="Wilayah" className="small cell-clamp" title={[p.kab_kota, p.provinsi].filter(Boolean).join(', ')}>
                 {p.kab_kota}{p.provinsi && <div className="muted">{p.provinsi}</div>}</td>
-              <td role="cell" data-label="Ruangan" className="small">{p.ruangan}{p.region && <div className="muted">{p.region}</div>}</td>
+              <td role="cell" data-label="Ruangan" className="small">{formatRoom(p.ruangan)}{p.region && <div className="muted">{p.region}</div>}</td>
               <td role="cell" data-label="Venue">{p.venue_name ? <span className="tag tag--venue">{p.venue_name}</span> : <span className="muted small">Semua</span>}</td>
               <td role="cell" className="stack-full">{p.archived_at ? <span className="tag tag--off">Diarsipkan</span> : <div className="row">
                 {p.qr_token && <a className="btn btn--sm" href={qrLink(p)} target="_blank" rel="noreferrer" title="Buka kartu QR"><Icon name="qr" size={14} />QR</a>}

@@ -37,13 +37,13 @@ export default function Venues() {
     );
   }
 
-  async function save(e, extra = {}) {
-    e?.preventDefault();
+  async function save(e) {
+    e.preventDefault();
     try {
       await api(form.id ? `/admin/venues/${form.id}` : '/admin/venues', {
-        method: form.id ? 'PUT' : 'POST', admin: true, body: { ...form, ...extra },
+        method: form.id ? 'PUT' : 'POST', admin: true, body: form,
       });
-      setMsg({ text: extra.rotate_secret ? 'Kode venue diganti.' : form.id ? 'Venue diperbarui.' : 'Venue ditambahkan.' });
+      setMsg({ text: form.id ? 'Venue diperbarui.' : 'Venue ditambahkan.' });
       setForm(blank);
       load();
     } catch (e) { setMsg({ err: true, text: e.message }); }
@@ -114,7 +114,6 @@ export default function Venues() {
               <td role="cell" data-label="LO" className="small">{v.lo_count ? `${v.lo_count} akun` : <span className="muted">–</span>}</td>
               <td role="cell" data-label="Status"><span className={`tag ${v.active ? 'tag--open' : 'tag--off'}`}>{v.active ? 'Aktif' : 'Nonaktif'}</span></td>
               <td role="cell" className="stack-full"><div className="row">
-                <a className="btn btn--sm" href={`/admin/kode-venue?venue=${v.id}`} target="_blank" rel="noreferrer"><Icon name="monitor" size={15} />Layar kode</a>
                 <button className="btn btn--sm" onClick={() => edit(v)}>Ubah</button>
                 <button className="btn btn--sm btn--danger" onClick={() => del(v)}>Hapus</button>
               </div></td>

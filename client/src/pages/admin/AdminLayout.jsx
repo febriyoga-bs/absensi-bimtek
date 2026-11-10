@@ -73,9 +73,6 @@ export default function AdminLayout() {
               <Icon name={n.icon} size={18} />{n.label}
             </NavLink>
           ))}
-          <NavLink to={lo && user?.venue ? `/admin/kode-venue?venue=${user.venue.id}` : '/admin/kode-venue'} target="_blank">
-            <Icon name="monitor" size={18} />Layar Kode Venue ↗
-          </NavLink>
           <button className="link" onClick={() => { adminToken.clear(); nav('/admin/login'); }}>
             <Icon name="logout" size={18} /> Keluar
           </button>

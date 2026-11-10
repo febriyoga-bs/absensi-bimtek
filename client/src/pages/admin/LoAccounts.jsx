@@ -60,7 +60,7 @@ export default function LoAccounts() {
       <div className="page-head">
         <div>
           <h2>Akun LO Venue</h2>
-          <p className="muted">Akun LO digunakan untuk mencatat dan memverifikasi absensi, melihat rekap kehadiran, mengunduh CSV, dan membuka layar kode di venue yang ditugaskan.</p>
+          <p className="muted">Akun LO bisa mencatat dan memverifikasi absensi, melihat rekap kehadiran, serta mengunduh CSV untuk venue yang ditugaskan.</p>
         </div>
       </div>
 

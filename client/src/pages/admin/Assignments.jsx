@@ -1,11 +1,18 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { api } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
+import AttendanceDetailDialog from './AttendanceDetailDialog.jsx';
 import { SkelRows } from '../../components/Skeleton.jsx';
+import { formatRoom } from '../../lib/room.js';
 
 const number = new Intl.NumberFormat('id-ID');
-const PAGE_SIZE = 30;
+function pageSizeForViewport() {
+  if (window.innerWidth <= 900) return 1;
+  if (window.innerHeight < 680) return 3;
+  return window.innerHeight < 850 ? 5 : 7;
+}
+const reportValue = (row, field) => field === 'room' || field === 'rooms' ? formatRoom(row[field]) || null : row[field];
 const detailLists = {
   facilitator_count: 'facilitators',
   school_count: 'schools',
@@ -50,8 +57,8 @@ export default function Assignments({ personal = false }) {
   const [lo, setLo] = useState('');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(pageSizeForViewport);
   const [details, setDetails] = useState(null);
-  const dialog = useRef(null);
 
   useEffect(() => {
     if (!user) return;
@@ -64,16 +71,24 @@ export default function Assignments({ personal = false }) {
   }, [user?.role, personal]);
 
   useEffect(() => {
-    if (details && !dialog.current.open) dialog.current.showModal();
-  }, [details]);
+    function resize() {
+      const next = pageSizeForViewport();
+      if (next !== pageSize) {
+        setPageSize(next);
+        setPage(1);
+      }
+    }
+    window.addEventListener('resize', resize);
+    return () => window.removeEventListener('resize', resize);
+  }, [pageSize]);
 
   const report = reports[tab];
   const term = query.trim().toLowerCase();
   const rows = (data?.[tab] || []).filter((row) =>
     (!venue || row.venue === venue) && (!lo || (tab === 'lo' ? row.name : row.lo) === lo) &&
-    (!term || report.search.some((field) => String(row[field] ?? '').toLowerCase().includes(term))));
-  const pages = Math.ceil(rows.length / PAGE_SIZE);
-  const start = (page - 1) * PAGE_SIZE;
+    (!term || report.search.some((field) => String(reportValue(row, field) ?? '').toLowerCase().includes(term))));
+  const pages = Math.ceil(rows.length / pageSize);
+  const start = (page - 1) * pageSize;
 
   function changeTab(key) {
     setTab(key);
@@ -82,8 +97,10 @@ export default function Assignments({ personal = false }) {
   }
 
   function showDetails(row, field, label) {
-    const entries = data[detailLists[field]]?.filter((entry) => entry.venue === row.venue && entry.lo === row.name);
-    setDetails({ label, owner: row.name, venue: row.venue, entries });
+    const type = detailLists[field];
+    const entries = data[type]?.filter((entry) => entry.venue === row.venue && entry.lo === row.name);
+    const query = new URLSearchParams({ type, venue: row.venue, lo: row.name });
+    setDetails({ label, subtitle: `${row.name} · ${row.venue}`, path: `/admin/assignments/detail?${query}`, entries });
   }
 
   function exportCsv() {
@@ -94,7 +111,7 @@ export default function Assignments({ personal = false }) {
     };
     const csv = [
       report.columns.map(([, label]) => label),
-      ...rows.map((row) => report.columns.map(([field]) => row[field])),
+      ...rows.map((row) => report.columns.map(([field]) => reportValue(row, field))),
     ].map((row) => row.map(escape).join(',')).join('\r\n');
     const href = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }));
     const link = document.createElement('a');
@@ -124,7 +141,7 @@ export default function Assignments({ personal = false }) {
             <div>
               <b>{data.lo[0].venue}</b>
               <div className="muted small">Ruangan yang dicakup</div>
-              <div>{data.lo[0].rooms}</div>
+              <div>{formatRoom(data.lo[0].rooms)}</div>
             </div>
           </div>}
           <div className="assignment-controls">
@@ -152,9 +169,16 @@ export default function Assignments({ personal = false }) {
               <Icon name="download" size={16} />Unduh CSV sesuai filter
             </button>}
           </div>
-          <p className="assignment-results muted small" aria-live="polite">
-            {rows.length ? `${number.format(start + 1)}–${number.format(Math.min(start + PAGE_SIZE, rows.length))} dari ${number.format(rows.length)} hasil` : '0 hasil'}
-          </p>
+          </div>
+          <div className="assignment-table-head">
+            <p className="assignment-results muted small" aria-live="polite">
+              {rows.length ? `${number.format(start + 1)}–${number.format(Math.min(start + pageSize, rows.length))} dari ${number.format(rows.length)} hasil` : '0 hasil'}
+            </p>
+            {pages > 1 && <nav className="pager assignment-pager" aria-label="Halaman rekap pendampingan">
+              <button type="button" className="btn btn--sm" aria-label="Halaman sebelumnya" disabled={page === 1} onClick={() => setPage(page - 1)}>‹</button>
+              <span className="small" aria-live="polite">Halaman {number.format(page)} / {number.format(pages)}</span>
+              <button type="button" className="btn btn--sm" aria-label="Halaman berikutnya" disabled={page === pages} onClick={() => setPage(page + 1)}>›</button>
+            </nav>}
           </div>
         </>
       )}
@@ -163,9 +187,9 @@ export default function Assignments({ personal = false }) {
           <table className="table stack-table assignment-grid" role="table" aria-label={`Rekap ${report.label}`}>
             <thead role="rowgroup"><tr role="row">{report.columns.map(([field, label]) => <th key={field} scope="col" role="columnheader">{label}</th>)}</tr></thead>
             <tbody role="rowgroup">
-              {!loaded && <SkelRows rows={5} cols={report.columns.length} />}
+              {!loaded && <SkelRows rows={pageSize} cols={report.columns.length} />}
               {data && !rows.length && <tr><td colSpan={report.columns.length}>Tidak ada hasil untuk filter ini.</td></tr>}
-              {rows.slice(start, start + PAGE_SIZE).map((row, index) => (
+              {rows.slice(start, start + pageSize).map((row, index) => (
                 <tr key={row.npsn || start + index} role="row">
                   {report.columns.map(([field, label]) => (
                     <td key={field} role="cell" data-label={field === 'name' ? undefined : label}
@@ -174,7 +198,7 @@ export default function Assignments({ personal = false }) {
                       ? <button type="button" className="assignment-count" aria-haspopup="dialog"
                         aria-label={`${row[field]} ${label} untuk ${row.name}`}
                         onClick={() => showDetails(row, field, label)}>{number.format(row[field])}</button>
-                      : field === 'venue' ? <span className="assignment-venue">{row[field]}</span> : row[field] ?? '—'}</td>
+                      : field === 'venue' ? <span className="assignment-venue">{row[field]}</span> : reportValue(row, field) ?? '—'}</td>
                   ))}
                 </tr>
               ))}
@@ -182,36 +206,7 @@ export default function Assignments({ personal = false }) {
           </table>
         </div>
       )}
-      {pages > 1 && <div className="pager">
-        <button type="button" className="btn btn--sm" disabled={page === 1} onClick={() => setPage(page - 1)}>Sebelumnya</button>
-        <span>Halaman {page} dari {pages}</span>
-        <button type="button" className="btn btn--sm" disabled={page === pages} onClick={() => setPage(page + 1)}>Berikutnya</button>
-      </div>}
-      <dialog ref={dialog} className="assignment-dialog" aria-labelledby="assignment-detail-title"
-        onClose={() => setDetails(null)}>
-        {details && <>
-          <header>
-            <div>
-              <h3 id="assignment-detail-title">Daftar {details.label}</h3>
-              <p className="muted small">{details.owner} · {details.venue}</p>
-              {details.entries && <span className="assignment-detail-count">{number.format(details.entries.length)} hasil</span>}
-            </div>
-            <form method="dialog"><button className="btn btn--sm" autoFocus><Icon name="x" size={16} />Tutup</button></form>
-          </header>
-          {details.entries?.length > 0 && <ol>
-            {details.entries.map((entry, index) => (
-              <li key={entry.npsn || index}>
-                <b>{entry.name}</b>
-                <div className="muted small">
-                  {[entry.npsn && `NPSN ${entry.npsn}`, entry.institution, entry.room].filter(Boolean).join(' · ')}
-                </div>
-              </li>
-            ))}
-          </ol>}
-          {!details.entries && <p className="muted">Rincian belum dimuat.</p>}
-          {details.entries?.length === 0 && <p className="muted">Tidak ada {details.label.toLowerCase()} untuk penugasan ini.</p>}
-        </>}
-      </dialog>
+      <AttendanceDetailDialog details={details} onClose={() => setDetails(null)} />
     </>
   );
 }
