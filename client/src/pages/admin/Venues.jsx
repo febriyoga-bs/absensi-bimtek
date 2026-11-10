@@ -100,20 +100,20 @@ export default function Venues() {
         </div>
       </form>
 
-      <table className="table">
+      <table className="table stack-table" role="table" aria-label="Daftar venue">
         <thead><tr><th>Venue</th><th>Koordinat</th><th>Radius</th><th>Dikunci</th><th>LO</th><th>Status</th><th></th></tr></thead>
         <tbody>
           {list.map((v) => (
-            <tr key={v.id}>
-              <td><b>{v.name}</b>{v.address && <div className="muted small">{v.address}</div>}</td>
-              <td><button type="button" className="link-btn small" onClick={() => setMapPoint({
+            <tr key={v.id} role="row">
+              <td role="cell"><b>{v.name}</b>{v.address && <div className="muted small">{v.address}</div>}</td>
+              <td role="cell" data-label="Koordinat"><button type="button" className="link-btn small" onClick={() => setMapPoint({
                 lat: v.lat, lng: v.lng, title: v.name, rows: [['Alamat', v.address], ['Radius', `${v.radius_m} m`]],
               })}><Icon name="pin" size={14} />{Number(v.lat).toFixed(5)}, {Number(v.lng).toFixed(5)}</button></td>
-              <td>{v.radius_m} m</td>
-              <td className="small">{v.people_count} orang</td>
-              <td className="small">{v.lo_count ? `${v.lo_count} akun` : <span className="muted">–</span>}</td>
-              <td><span className={`tag ${v.active ? 'tag--open' : 'tag--off'}`}>{v.active ? 'Aktif' : 'Nonaktif'}</span></td>
-              <td><div className="row">
+              <td role="cell" data-label="Radius">{v.radius_m} m</td>
+              <td role="cell" data-label="Peserta ditetapkan" className="small">{v.people_count} orang</td>
+              <td role="cell" data-label="LO" className="small">{v.lo_count ? `${v.lo_count} akun` : <span className="muted">–</span>}</td>
+              <td role="cell" data-label="Status"><span className={`tag ${v.active ? 'tag--open' : 'tag--off'}`}>{v.active ? 'Aktif' : 'Nonaktif'}</span></td>
+              <td role="cell" className="stack-full"><div className="row">
                 <a className="btn btn--sm" href={`/admin/kode-venue?venue=${v.id}`} target="_blank" rel="noreferrer"><Icon name="monitor" size={15} />Layar kode</a>
                 <button className="btn btn--sm" onClick={() => edit(v)}>Ubah</button>
                 <button className="btn btn--sm btn--danger" onClick={() => del(v)}>Hapus</button>

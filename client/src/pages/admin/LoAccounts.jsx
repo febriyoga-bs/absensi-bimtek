@@ -107,17 +107,17 @@ export default function LoAccounts() {
         </div>
       </form>
 
-      <table className="table">
+      <table className="table stack-table" role="table" aria-label="Daftar akun LO">
         <thead><tr><th>Nama</th><th>Username</th><th>Venue</th><th>Login terakhir</th><th>Status</th><th></th></tr></thead>
         <tbody>
           {list.map((l) => (
-            <tr key={l.id}>
-              <td><b>{l.name}</b></td>
-              <td><code>{l.username}</code></td>
-              <td><span className="tag tag--venue">{l.venue_name}</span></td>
-              <td className="small">{l.last_login_at ? fmtDT(l.last_login_at) : <span className="muted">Belum pernah</span>}</td>
-              <td><span className={`tag ${l.active ? 'tag--open' : 'tag--off'}`}>{l.active ? 'Aktif' : 'Nonaktif'}</span></td>
-              <td><div className="row">
+            <tr key={l.id} role="row">
+              <td role="cell"><b>{l.name}</b></td>
+              <td role="cell" data-label="Username"><code>{l.username}</code></td>
+              <td role="cell" data-label="Venue"><span className="tag tag--venue">{l.venue_name}</span></td>
+              <td role="cell" data-label="Login terakhir" className="small">{l.last_login_at ? fmtDT(l.last_login_at) : <span className="muted">Belum pernah</span>}</td>
+              <td role="cell" data-label="Status"><span className={`tag ${l.active ? 'tag--open' : 'tag--off'}`}>{l.active ? 'Aktif' : 'Nonaktif'}</span></td>
+              <td role="cell" className="stack-full"><div className="row">
                 <button className="btn btn--sm" onClick={() => { setForm({ ...l, password: '' }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Ubah</button>
                 <button className="btn btn--sm" onClick={() => toggle(l)}>{l.active ? 'Nonaktifkan' : 'Aktifkan'}</button>
                 <button className="btn btn--sm btn--danger" onClick={() => del(l)}>Hapus</button>

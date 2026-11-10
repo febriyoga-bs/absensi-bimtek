@@ -97,17 +97,17 @@ export default function Sessions() {
           {form.id && <button type="button" className="btn" onClick={() => setForm(blank())}>Batal</button>}
         </div>
       </form>
-      <table className="table">
+      <table className="table stack-table" role="table" aria-label="Daftar sesi absensi">
         <thead><tr><th>Sesi</th><th>Untuk</th><th>Waktu (WIB)</th><th>Venue</th><th>Hadir</th><th></th></tr></thead>
         <tbody>
           {list.map((s) => (
-            <tr key={s.id}>
-              <td><b>{s.name}</b> <span className="tag tag--type">{s.type}</span> {s.is_open && <span className="tag tag--open">● Dibuka</span>}</td>
-              <td><span className={`tag tag--${s.role}`}>{s.role}</span></td>
-              <td className="small">{fmtDT(s.starts_at)} – {fmtDT(s.ends_at)}</td>
-              <td className="small">{s.venue_ids?.length ? s.venue_ids.map(venueName).join(', ') : <span className="muted">Semua venue</span>}</td>
-              <td>{s.valid + s.review}/{s.expected}</td>
-              <td><div className="row">
+            <tr key={s.id} role="row">
+              <td role="cell"><b>{s.name}</b> <span className="tag tag--type">{s.type}</span> {s.is_open && <span className="tag tag--open">● Dibuka</span>}</td>
+              <td role="cell" data-label="Untuk"><span className={`tag tag--${s.role}`}>{s.role}</span></td>
+              <td role="cell" data-label="Waktu (WIB)" className="small">{fmtDT(s.starts_at)} – {fmtDT(s.ends_at)}</td>
+              <td role="cell" data-label="Venue" className="small">{s.venue_ids?.length ? s.venue_ids.map(venueName).join(', ') : <span className="muted">Semua venue</span>}</td>
+              <td role="cell" data-label="Hadir">{s.valid + s.review}/{s.expected}</td>
+              <td role="cell" className="stack-full"><div className="row">
                 <button className="btn btn--sm" onClick={() => setForm({ ...s, venue_ids: s.venue_ids || [], starts_at: toLocalInput(s.starts_at), ends_at: toLocalInput(s.ends_at) })}>Ubah</button>
                 <button className="btn btn--sm btn--danger" onClick={() => del(s)}>Hapus</button>
               </div></td>

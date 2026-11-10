@@ -268,25 +268,25 @@ export default function People() {
         {!archived && <button className="btn btn--sm" onClick={exportQrLinks} disabled={!shown.length} title="CSV berisi link QR pribadi & link WhatsApp untuk orang yang tampil">
           <Icon name="share" size={14} />Ekspor link QR (WA)</button>}
       </div>
-      <table className="table">
+      <table className="table stack-table" role="table" aria-label="Daftar peserta dan panitia">
         <thead><tr>
           <Th k="code">Kode</Th><Th k="name">Nama</Th><Th k="position">Jabatan</Th><Th k="institution">Instansi / Sekolah</Th>
           <Th k="kab_kota">Wilayah</Th><Th k="ruangan">Ruangan</Th><Th k="venue_name">Venue</Th><th></th>
         </tr></thead>
         <tbody style={loading && list.length ? { opacity: 0.55, transition: 'opacity .2s' } : undefined}>
           {shown.slice(0, limit).map((p) => (
-            <tr key={p.id}>
-              <td className="nowrap"><code>{p.code}</code></td>
-              <td><b>{p.name}</b>{p.phone && <div className="muted small">{p.phone}</div>}
+            <tr key={p.id} role="row">
+              <td role="cell" className="nowrap"><code>{p.code}</code></td>
+              <td role="cell" data-label="Nama" className="stack-full"><b>{p.name}</b>{p.phone && <div className="muted small">{p.phone}</div>}
                 {p.notes && <div className="note-flag small" title={p.notes}><Icon name="alert" size={12} /> {p.notes}</div>}</td>
-              <td>{p.position}</td>
-              <td className="cell-clamp" title={p.institution || ''}>{p.institution}
+              <td role="cell" data-label="Jabatan">{p.position}</td>
+              <td role="cell" data-label="Instansi / Sekolah" className="cell-clamp" title={p.institution || ''}>{p.institution}
                 {p.npsn && <div className="muted small">NPSN {p.npsn}</div>}</td>
-              <td className="small cell-clamp" title={[p.kab_kota, p.provinsi].filter(Boolean).join(', ')}>
+              <td role="cell" data-label="Wilayah" className="small cell-clamp" title={[p.kab_kota, p.provinsi].filter(Boolean).join(', ')}>
                 {p.kab_kota}{p.provinsi && <div className="muted">{p.provinsi}</div>}</td>
-              <td className="small">{p.ruangan}{p.region && <div className="muted">{p.region}</div>}</td>
-              <td>{p.venue_name ? <span className="tag tag--venue">{p.venue_name}</span> : <span className="muted small">Semua</span>}</td>
-              <td>{p.archived_at ? <span className="tag tag--off">Diarsipkan</span> : <div className="row">
+              <td role="cell" data-label="Ruangan" className="small">{p.ruangan}{p.region && <div className="muted">{p.region}</div>}</td>
+              <td role="cell" data-label="Venue">{p.venue_name ? <span className="tag tag--venue">{p.venue_name}</span> : <span className="muted small">Semua</span>}</td>
+              <td role="cell" className="stack-full">{p.archived_at ? <span className="tag tag--off">Diarsipkan</span> : <div className="row">
                 {p.qr_token && <a className="btn btn--sm" href={qrLink(p)} target="_blank" rel="noreferrer" title="Buka kartu QR"><Icon name="qr" size={14} />QR</a>}
                 <button className="btn btn--sm" onClick={() => { setForm({ ...p, venue_id: p.venue_id ?? '' }); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Ubah</button>
                 <button className="btn btn--sm btn--danger" onClick={() => del(p)}>Hapus</button>

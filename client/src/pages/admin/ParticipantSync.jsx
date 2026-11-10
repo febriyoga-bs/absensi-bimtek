@@ -106,20 +106,20 @@ export default function ParticipantSync() {
             <span className="muted small" aria-live="polite">{number.format(rows.length)} hasil</span>
           </div>
           <div className="assignment-table">
-            <table className="table" aria-label={actions[action]}>
+            <table className="table stack-table" role="table" aria-label={actions[action]}>
               <thead><tr>
                 <th scope="col">Peserta</th><th scope="col">NPSN</th><th scope="col">Penempatan saat ini</th>
                 <th scope="col">Penempatan dari Excel</th>{action === 'review' && <th scope="col">Perlu diperiksa</th>}
               </tr></thead>
               <tbody>
                 {rows.slice(first, first + PAGE_SIZE).map((row) => (
-                  <tr key={`${row.code}:${row.npsn}`}>
-                    <td><b>{row.name}</b><div className="muted small">{row.position} · {row.code}</div></td>
-                    <td>{row.npsn || '—'}</td>
-                    <td>{row.from_venue || '—'}{row.from_room && <div className="muted small">{row.from_room}</div>}</td>
-                    <td>{row.to_venue || '—'}{row.to_room && <div className="muted small">{row.to_room}</div>}
+                  <tr key={`${row.code}:${row.npsn}`} role="row">
+                    <td role="cell"><b>{row.name}</b><div className="muted small">{row.position} · {row.code}</div></td>
+                    <td role="cell" data-label="NPSN" className="stack-full">{row.npsn || '—'}</td>
+                    <td role="cell" data-label="Saat ini">{row.from_venue || '—'}{row.from_room && <div className="muted small">{row.from_room}</div>}</td>
+                    <td role="cell" data-label="Dari Excel">{row.to_venue || '—'}{row.to_room && <div className="muted small">{row.to_room}</div>}
                       {row.restored && <div className="muted small">Diaktifkan kembali</div>}</td>
-                    {action === 'review' && <td>{row.reason}{row.candidates.map((p) => (
+                    {action === 'review' && <td role="cell" data-label="Perlu diperiksa" className="stack-full">{row.reason}{row.candidates.map((p) => (
                       <div key={p.code} className="muted small">{p.name} ({p.code})</div>
                     ))}</td>}
                   </tr>

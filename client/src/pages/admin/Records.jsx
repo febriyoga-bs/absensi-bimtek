@@ -143,16 +143,16 @@ export default function Records() {
       )}
 
       {tab === 'blok' && (
-        <table className="table">
+        <table className="table stack-table" role="table" aria-label="Percobaan absensi diblokir">
           <thead><tr><th>Waktu</th><th>Nama</th><th>Alasan</th><th>Jarak</th><th>Peta</th></tr></thead>
           <tbody>
             {attempts.map((a) => (
-              <tr key={a.id}>
-                <td className="small">{fmtDT(a.created_at)}</td>
-                <td>{a.name} <span className="muted small">{a.code}</span></td>
-                <td className="small">{a.reasons.join(' ')}</td>
-                <td>{dist(a.distance_m)}</td>
-                <td>{a.lat != null && (
+              <tr key={a.id} role="row">
+                <td role="cell" data-label="Waktu" className="small">{fmtDT(a.created_at)}</td>
+                <td role="cell" data-label="Peserta" className="stack-full">{a.name} <span className="muted small">{a.code}</span></td>
+                <td role="cell" data-label="Alasan" className="small stack-full">{a.reasons.join(' ')}</td>
+                <td role="cell" data-label="Jarak">{dist(a.distance_m)}</td>
+                <td role="cell">{a.lat != null && (
                   <button type="button" className="link-btn" onClick={() => setMapPoint({
                     lat: a.lat, lng: a.lng, title: `${a.name || 'Percobaan'} — diblokir`,
                     rows: [['Waktu', fmtDT(a.created_at) + ' WIB'], ['Venue terdekat', a.venue_name], ['Jarak', dist(a.distance_m)],
