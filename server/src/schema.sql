@@ -159,6 +159,9 @@ ALTER TABLE attendance ALTER COLUMN accuracy_m DROP NOT NULL;
 ALTER TABLE attendance ALTER COLUMN distance_m DROP NOT NULL;
 ALTER TABLE attendance ADD COLUMN IF NOT EXISTS method     TEXT NOT NULL DEFAULT 'selfie';
 ALTER TABLE attendance ADD COLUMN IF NOT EXISTS scanned_by TEXT;
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS participant_note TEXT;
+ALTER TABLE attendance DROP CONSTRAINT IF EXISTS attendance_status_check,
+  ADD CONSTRAINT attendance_status_check CHECK (status IN ('valid','review','ditolak','berhalangan'));
 
 -- Salinan pembagian tugas dari Excel, terpisah dari data absensi.
 CREATE TABLE IF NOT EXISTS assignment_roster (

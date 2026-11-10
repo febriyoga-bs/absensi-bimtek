@@ -26,7 +26,8 @@ function beep(ok) {
 
 const KIND = {
   ok: { cls: 'ok', icon: 'check', title: 'Absen tercatat' },
-  dup: { cls: 'warn', icon: 'clock', title: 'Sudah absen' },
+  unavailable: { cls: 'warn', icon: 'clock', title: 'Mundur/Berhalangan Hadir' },
+  dup: { cls: 'warn', icon: 'clock', title: 'Status sudah tercatat' },
   err: { cls: 'err', icon: 'x', title: 'Gagal' },
 };
 
@@ -63,18 +64,18 @@ export default function Scan() {
     let r;
     try {
       const d = await api('/admin/scan', { method: 'POST', admin: true, body: { ...body, venue_id: venueRef.current || undefined } });
-      r = { kind: 'ok', person: d.person, session: d.session, at: d.at };
+      r = { kind: d.status === 'berhalangan' ? 'unavailable' : 'ok', person: d.person, session: d.session, at: d.at };
     } catch (e) {
       const d = e.data || {};
       r = { kind: e.status === 409 ? 'dup' : 'err', msg: e.message, person: d.person, session: d.session, at: d.at };
     }
     r.id = Date.now();
-    beep(r.kind === 'ok');
+    beep(r.kind === 'ok' || r.kind === 'unavailable');
     setResult(r);
     setHistory((h) => [r, ...h].slice(0, 30));
+    if (body.qr) setTimeout(() => { busyRef.current = false; }, 1200);
+    else busyRef.current = false;
     return r;
-    // jeda sebentar agar LO sempat membaca hasilnya
-    setTimeout(() => { busyRef.current = false; }, 1200);
   }
 
   // Autocomplete sekolah (nama sekolah / NPSN / nama peserta)
@@ -97,19 +98,29 @@ export default function Scan() {
 
   // Pilih peserta → buka kamera → foto peserta → baru tercatat
   function absenkan(p) {
-    setShot({ code: p.code, name: p.name, position: p.position, school: school?.school, fromSchool: true });
+    setShot({ code: p.code, name: p.name, position: p.position, school: school?.school,
+      npsn: school?.npsn, sessionId: p.session?.id });
   }
 
-  async function sendShot(photo) {
+  async function sendShot(photo, note) {
     const target = shot;
     setPending(target.code);
-    const r = await submit({ code: target.code, photo });
-    busyRef.current = false;
+    const r = await submit({ code: target.code, session_id: target.sessionId, photo, note });
     setPending(null);
-    if (r.kind === 'err' && /foto/i.test(r.msg || '')) return r; // biarkan kamera terbuka untuk foto ulang
-    setShot(null);
-    if (target.fromSchool && school) openSchool(school.npsn);
+    if (r.kind !== 'err') {
+      setShot(null);
+      if (target.npsn) openSchool(target.npsn);
+    }
     return r;
+  }
+
+  async function markUnavailable(p) {
+    const sessionName = p.session.type || p.session.name;
+    if (!window.confirm(`Tandai ${p.name} mundur/berhalangan hadir untuk sesi "${sessionName}"?`)) return;
+    setPending(p.code);
+    const r = await submit({ code: p.code, session_id: p.session.id, unavailable: true });
+    setPending(null);
+    if (r.kind !== 'err') openSchool(school.npsn);
   }
 
   // Kamera belakang + pemindaian QR (± 6 kali per detik); mati saat tab "Cari sekolah"
@@ -160,7 +171,7 @@ export default function Scan() {
       <div className="page-head">
         <div><h2>Absenkan Peserta</h2>
           <p className="muted">
-            {QR_SCAN_ENABLED ? 'Scan QR peserta atau cari sekolahnya.' : 'Cari sekolah, pilih peserta, lalu foto pesertanya.'} Absen langsung tercatat di sesi yang sedang dibuka
+            {QR_SCAN_ENABLED ? 'Scan QR peserta atau cari sekolahnya.' : 'Cari sekolah, lalu catat kehadiran atau status berhalangan peserta.'} Catatan masuk ke sesi yang sedang dibuka
             {lo && user?.venue ? <> untuk venue <b>{user.venue.name}</b></> : ''}.
           </p></div>
         {tab === 'qr' && (
@@ -215,14 +226,21 @@ export default function Scan() {
                         <b>{p.name}</b>
                         <small className="muted">{p.code}{p.ruangan ? ` · ${p.ruangan}` : ''}{p.other_venue ? ` · venue: ${p.venue_name}` : ''}</small>
                       </span>
-                      {p.attended ? (
-                        <span className="st st--valid" title={p.attended.method}>✓ {fmtDT(p.attended.at).split(', ').pop()}</span>
-                      ) : p.other_venue ? (
+                      {p.other_venue ? (
                         <span className="muted small">Venue lain</span>
+                      ) : p.attended ? (
+                        <span className={`st st--${p.attended.status}`} title={p.attended.method}>
+                          {p.attended.status === 'ditolak' ? 'Ditolak' : `✓ ${fmtDT(p.attended.at).split(', ').pop()}`}
+                        </span>
                       ) : (
-                        <button className="btn btn--sm btn--primary" disabled={!school.session || pending === p.code} onClick={() => absenkan(p)}>
-                          {pending === p.code ? <><Spinner size={13} /> Menyimpan…</> : 'Absenkan'}
-                        </button>
+                        <div className="school__actions">
+                          {p.unavailable && <span className="tag tag--off">Mundur/Berhalangan Hadir</span>}
+                          <button className="btn btn--sm btn--primary" disabled={!p.session || !!pending || schoolLoading} onClick={() => absenkan(p)}>
+                            {pending === p.code ? <><Spinner size={13} /> Menyimpan…</> : 'Absenkan'}
+                          </button>
+                          {!p.unavailable && <button className="btn btn--sm" disabled={!p.session || !!pending || schoolLoading}
+                            onClick={() => markUnavailable(p)}>Mundur/Berhalangan Hadir</button>}
+                        </div>
                       )}
                     </li>
                   ))}
@@ -274,7 +292,7 @@ export default function Scan() {
                 )}
                 {result.session && <div className="small">{result.session.type || result.session.name}</div>}
                 {result.at && <div className="small">{result.kind === 'dup' ? 'Tercatat sebelumnya: ' : ''}{fmtDT(result.at)} WIB</div>}
-                {result.kind !== 'ok' && <div className="small scan__msg">{result.msg}</div>}
+                {result.msg && <div className="small scan__msg">{result.msg}</div>}
               </div>
             </div>
           ) : (
@@ -288,7 +306,7 @@ export default function Scan() {
               {history.map((h) => (
                 <li key={h.id} className={`scan__hist--${KIND[h.kind].cls}`}>
                   <Icon name={KIND[h.kind].icon} size={15} />
-                  <span><b>{h.person?.name || h.msg}</b>{h.person && h.kind !== 'ok' && <small> — {h.msg}</small>}</span>
+                  <span><b>{h.person?.name || h.msg}</b>{h.person && h.kind !== 'ok' && <small> — {h.msg || KIND[h.kind].title}</small>}</span>
                   <small className="muted">{new Date(h.id).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</small>
                 </li>
               ))}
@@ -306,6 +324,7 @@ function LoShot({ target, user, busy, onSend, onClose }) {
   const camRef = useRef(null);
   const [facing, setFacing] = useState('environment');
   const [photo, setPhoto] = useState(null);
+  const [note, setNote] = useState('');
   const [err, setErr] = useState(null);
 
   function capture() {
@@ -320,9 +339,15 @@ function LoShot({ target, user, busy, onSend, onClose }) {
     setErr(null); setPhoto(img);
   }
 
-  async function send() {
-    const r = await onSend(photo);
-    if (r?.kind === 'err') { setErr(r.msg); setPhoto(null); }
+  async function send(e) {
+    e.preventDefault();
+    if (!photo || !note.trim() || busy) return;
+    setErr(null);
+    const r = await onSend(photo, note.trim());
+    if (r?.kind === 'err') {
+      setErr(r.msg);
+      if (r.msg.startsWith('Foto peserta wajib')) setPhoto(null);
+    }
   }
 
   return (
@@ -334,29 +359,30 @@ function LoShot({ target, user, busy, onSend, onClose }) {
           <button type="button" className="btn btn--sm" onClick={onClose} disabled={busy} aria-label="Tutup"><Icon name="x" size={16} /></button>
         </div>
         <div className="viewfinder">
-          {photo ? <img src={photo} alt="Foto peserta" className="preview" /> : <CameraCapture key={facing} ref={camRef} facing={facing} />}
+          {photo ? <img src={photo} alt="Foto peserta" className="preview lo-shot__preview" /> : <CameraCapture key={facing} ref={camRef} facing={facing} />}
           {!photo && (
             <button type="button" className="lo-shot__flip" onClick={() => setFacing((f) => (f === 'user' ? 'environment' : 'user'))}>
               <Icon name="refresh" size={14} /> {facing === 'user' ? 'Kamera belakang' : 'Kamera depan'}
             </button>
           )}
-          <div className={`viewfinder__actions ${photo ? 'viewfinder__actions--below' : ''}`}>
-            {!photo ? (
-              <>
-                <span className="vf-note">Pastikan wajah peserta terlihat jelas</span>
-                <button type="button" className="shutter" onClick={capture} aria-label="Ambil foto"><Icon name="camera" size={30} /></button>
-              </>
-            ) : (
-              <div className="vf-buttons">
-                <button className="btn" onClick={() => setPhoto(null)} disabled={busy}><Icon name="refresh" size={18} /> Ulangi</button>
-                <button className="btn btn--primary" onClick={send} disabled={busy}>
-                  {busy ? <><Spinner /> Menyimpan…</> : <><Icon name="check" size={18} /> Absenkan</>}
-                </button>
-              </div>
-            )}
-          </div>
+          {!photo && <div className="viewfinder__actions">
+            <span className="vf-note">Pastikan wajah peserta terlihat jelas</span>
+            <button type="button" className="shutter" onClick={capture} aria-label="Ambil foto"><Icon name="camera" size={30} /></button>
+          </div>}
         </div>
-        {err && <div className="alert alert--err"><Icon name="alert" size={18} /><span>{err}</span></div>}
+        {err && <div className="alert alert--err" role="alert"><Icon name="alert" size={18} /><span>{err}</span></div>}
+        {photo && <form className="form lo-shot__form" onSubmit={send}>
+          <label>Catatan
+            <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Kendala yang dihadapi peserta"
+              rows={3} maxLength={1000} required disabled={busy} />
+          </label>
+          <div className="vf-buttons">
+            <button type="button" className="btn" onClick={() => setPhoto(null)} disabled={busy}><Icon name="refresh" size={18} /> Ulangi</button>
+            <button type="submit" className="btn btn--primary" disabled={busy || !note.trim()}>
+              {busy ? <><Spinner /> Menyimpan…</> : <><Icon name="check" size={18} /> Absenkan</>}
+            </button>
+          </div>
+        </form>}
       </div>
     </div>
   );

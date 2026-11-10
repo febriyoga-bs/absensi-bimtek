@@ -19,12 +19,13 @@ const ipLimiter = rateLimit({ windowMs: 60_000, limit: Number(process.env.IP_RAT
   message: { error: 'Server sedang sangat sibuk, coba lagi dalam 1 menit.' } });
 const MAX_FAILED_PER_PERSON = 10; // percobaan ditolak per orang per 10 menit
 
-async function activeSession(role) {
+async function activeSession(role, venue) {
   const { rows } = await q(
     `SELECT * FROM sessions
      WHERE role IN ($1,'semua') AND now() BETWEEN starts_at AND ends_at
-     ORDER BY starts_at LIMIT 1`,
-    [role]
+       AND ($2::int IS NULL OR cardinality(COALESCE(venue_ids,'{}'))=0 OR $2=ANY(venue_ids))
+     ORDER BY starts_at, id LIMIT 1`,
+    [role, venue]
   );
   return rows[0];
 }
@@ -43,6 +44,9 @@ async function allowedVenues(person, session) {
 }
 
 const publicSession = (s) => s && ({ name: s.name, type: s.type, role: s.role, starts_at: s.starts_at, ends_at: s.ends_at });
+const alreadyRecorded = (status) => status === 'berhalangan'
+  ? 'Anda tercatat mundur/berhalangan hadir untuk sesi ini. Hubungi panitia jika status perlu diubah.'
+  : 'Anda sudah absen untuk sesi ini.';
 
 r.get('/info', ah(async (req, res) => {
   const s = await getSettings();
@@ -136,7 +140,7 @@ r.post('/challenge', ipLimiter, ah(async (req, res) => {
     throw new HttpError(400, `Kode ini terdaftar sebagai ${person.role}. Gunakan halaman absen ${person.role}.`);
   }
 
-  const session = await activeSession(role);
+  const session = await activeSession(role, person.venue_id);
   if (!session) throw new HttpError(400, 'Belum ada sesi absensi yang dibuka saat ini.');
 
   const venues = await allowedVenues(person, session);
@@ -145,7 +149,7 @@ r.post('/challenge', ipLimiter, ah(async (req, res) => {
   const done = await q('SELECT created_at, status FROM attendance WHERE person_id=$1 AND session_id=$2',
     [person.id, session.id]);
   if (done.rows[0]) {
-    throw new HttpError(409, 'Anda sudah absen untuk sesi ini.', { at: done.rows[0].created_at, status: done.rows[0].status });
+    throw new HttpError(409, alreadyRecorded(done.rows[0].status), { at: done.rows[0].created_at, status: done.rows[0].status });
   }
 
   const nonce = crypto.randomInt(0, 10000).toString().padStart(4, '0');
@@ -234,9 +238,9 @@ r.post('/attendance', ah(async (req, res) => {
   const [{ rows: [fails] }, { rows: [already] }] = await Promise.all([
     q(`SELECT count(*)::int AS n FROM attempt_logs
        WHERE person_id=$1 AND created_at > now() - interval '10 minutes'`, [person.id]),
-    q('SELECT 1 FROM attendance WHERE person_id=$1 AND session_id=$2', [person.id, session.id]),
+    q('SELECT status FROM attendance WHERE person_id=$1 AND session_id=$2', [person.id, session.id]),
   ]);
-  if (already) throw new HttpError(409, 'Anda sudah absen untuk sesi ini.');
+  if (already) throw new HttpError(409, alreadyRecorded(already.status));
   if (fails.n >= MAX_FAILED_PER_PERSON) {
     throw new HttpError(429, 'Terlalu banyak percobaan gagal. Tunggu 10 menit atau hubungi panitia.');
   }
@@ -288,7 +292,7 @@ r.post('/attendance', ah(async (req, res) => {
 
   // Teleport: lokasi absen sebelumnya mustahil dicapai dalam selang waktu tsb.
   const prev = await q(
-    'SELECT lat, lng, created_at FROM attendance WHERE person_id=$1 ORDER BY created_at DESC LIMIT 1', [person.id]);
+    'SELECT lat, lng, created_at FROM attendance WHERE person_id=$1 AND lat IS NOT NULL AND lng IS NOT NULL ORDER BY created_at DESC LIMIT 1', [person.id]);
   if (prev.rows[0]) {
     const p = prev.rows[0];
     const hours = (Date.now() - new Date(p.created_at).getTime()) / 3_600_000;
@@ -318,7 +322,8 @@ r.post('/attendance', ah(async (req, res) => {
   );
   if (!ins.rows[0]) {
     await deletePhoto(file);
-    throw new HttpError(409, 'Anda sudah absen untuk sesi ini.');
+    const { rows: [recorded] } = await q('SELECT status FROM attendance WHERE person_id=$1 AND session_id=$2', [person.id, session.id]);
+    throw new HttpError(409, alreadyRecorded(recorded?.status));
   }
 
   res.json({

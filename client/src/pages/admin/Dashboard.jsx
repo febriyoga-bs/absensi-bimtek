@@ -6,6 +6,43 @@ import { useVisiblePolling } from '../../lib/poll.js';
 import { fmtDT } from './shared.js';
 import { Skel, SkelCards } from '../../components/Skeleton.jsx';
 
+const number = new Intl.NumberFormat('id-ID');
+const venueGroups = [
+  ['bendahara', 'Bendahara (sekolah)'], ['pengawas', 'Pengawas'],
+  ['fasil', 'Fasilitator'], ['lo', 'LO'],
+];
+
+function VenueAttendanceCard({ venue }) {
+  const total = venueGroups.reduce((sum, [key]) => sum + venue[key].total, 0);
+  const attended = venueGroups.reduce((sum, [key]) => sum + venue[key].attended, 0);
+
+  return (
+    <article className="venue-attendance">
+      <header className="venue-attendance__head">
+        <span className="kpi__icon"><Icon name="pin" size={20} /></span>
+        <div>
+          <h4>{venue.name}</h4>
+          <div className="muted small"><b>{number.format(attended)}</b> dari {number.format(total)} orang sudah absen</div>
+        </div>
+      </header>
+      <dl className="venue-attendance__groups">
+        {venueGroups.map(([key, label]) => {
+          const { total, attended, registered } = venue[key];
+          return (
+            <div key={key}>
+              <dt>{label}</dt>
+              <dd><b>{number.format(attended)}</b> / {number.format(total)} <span>sudah absen</span></dd>
+              {registered < total && <small className="muted">
+                {registered === 0 ? 'Belum ada profil absensi' : `${number.format(registered)} punya profil absensi`}
+              </small>}
+            </div>
+          );
+        })}
+      </dl>
+    </article>
+  );
+}
+
 export default function Dashboard() {
   const { user, lo } = useOutletContext() || {};
   const [data, setSessions] = useState(null);
@@ -13,17 +50,23 @@ export default function Dashboard() {
   const loading = !data;
   const [venues, setVenues] = useState(null);
   const [venueId, setVenueId] = useState(''); // filter venue (admin utama)
+  const [venueAttendance, setVenueAttendance] = useState(null);
+  const [summaryError, setSummaryError] = useState(false);
 
   useEffect(() => { api('/admin/venues', { admin: true }).then(setVenues); }, []);
 
   const qs = !lo && venueId ? `?venue_id=${venueId}` : '';
   // Diperbarui tiap 30 detik, hanya saat tab ini sedang dilihat
   useVisiblePolling(() => api(`/admin/sessions${qs}`, { admin: true }).then(setSessions).catch(() => {}), 30_000, [qs]);
+  useVisiblePolling(() => api('/admin/venue-attendance', { admin: true })
+    .then((rows) => { setVenueAttendance(rows); setSummaryError(false); })
+    .catch(() => setSummaryError(true)), 30_000);
 
   const open = sessions.filter((s) => s.is_open);
   const sum = (k) => open.reduce((a, s) => a + s[k], 0);
   const activeVenues = venues?.filter((v) => v.active).length ?? 0;
   const venueQs = (sid) => `/export?session_id=${sid}${!lo && venueId ? `&venue_id=${venueId}` : ''}`;
+  const shownVenues = (venueAttendance || []).filter((venue) => !venueId || String(venue.id) === venueId);
 
   return (
     <>
@@ -33,7 +76,7 @@ export default function Dashboard() {
           <p className="muted">Diperbarui otomatis tiap 30 detik selama halaman ini terbuka.</p>
         </div>
         {!lo && venues?.length > 1 && (
-          <select value={venueId} onChange={(e) => setVenueId(e.target.value)} style={{ width: 'auto', minWidth: 220 }}>
+          <select aria-label="Filter venue" value={venueId} onChange={(e) => setVenueId(e.target.value)} style={{ width: 'auto', minWidth: 220 }}>
             <option value="">Semua venue</option>
             {venues.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
           </select>
@@ -53,6 +96,17 @@ export default function Dashboard() {
           ? <div className="kpi"><span className="kpi__icon"><Icon name="pin" /></span><span><b style={{ fontSize: 16 }}>{user?.venue?.name}</b><small>Venue Anda</small></span></div>
           : <div className="kpi"><span className="kpi__icon"><Icon name="pin" /></span><span><b>{!venues ? <Skel w={30} h={26} /> : activeVenues}</b><small>Venue aktif</small></span></div>}
       </div>
+
+      <section className="venue-attendance-section" aria-labelledby="venue-attendance-title">
+        <h3 id="venue-attendance-title">Ringkasan per venue</h3>
+        <p className="muted small">Akumulasi semua sesi. Setiap profil dihitung sekali per venue jika absensinya valid atau perlu dicek.</p>
+        {summaryError && <p className="alert alert--warn" role="status">Ringkasan venue gagal diperbarui.</p>}
+        {!venueAttendance && !summaryError && <div className="stats"><SkelCards n={2} h={190} /></div>}
+        {venueAttendance && !shownVenues.length && <p className="muted">Belum ada venue untuk ditampilkan.</p>}
+        <div className="venue-attendance-grid">
+          {shownVenues.map((venue) => <VenueAttendanceCard key={venue.id} venue={venue} />)}
+        </div>
+      </section>
 
       {loading && <div className="stats"><SkelCards n={3} h={170} /></div>}
       {!loading && !sessions.length && <p className="muted">Belum ada sesi{!lo && <> — <Link to="/admin/sesi">buat sesi</Link></>}.</p>}
@@ -75,6 +129,7 @@ export default function Dashboard() {
                 <span>✓ Valid {s.valid}</span>
                 <span className={s.review ? 'warn' : ''}>⚠ Perlu cek {s.review}</span>
                 <span>✕ Ditolak {s.rejected}</span>
+                {s.unavailable > 0 && <span>Berhalangan {s.unavailable}</span>}
                 <span title="Percobaan diblokir otomatis (di luar area venue, kode venue salah, dll.)">⛔ Diblokir {s.blocked}</span>
               </div>
               {!lo && s.by_venue.length > 0 && (

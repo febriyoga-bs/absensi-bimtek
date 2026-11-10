@@ -6,7 +6,7 @@ import { MapModal } from '../../components/MapEmbed.jsx';
 import { fmtDT, FLAG_LABEL } from './shared.js';
 import { SkelCards } from '../../components/Skeleton.jsx';
 
-const ST_LABEL = { valid: 'Valid', review: 'Perlu dicek', ditolak: 'Ditolak' };
+const ST_LABEL = { valid: 'Valid', review: 'Perlu dicek', ditolak: 'Ditolak', berhalangan: 'Mundur/Berhalangan Hadir' };
 const PAGE = 48;
 const dist = (m) => (m == null ? '-' : m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`);
 
@@ -23,6 +23,7 @@ export default function Records() {
   const [tab, setTab] = useState('absen');
   const [zoom, setZoom] = useState(null);
   const [mapPoint, setMapPoint] = useState(null);
+  const [exportAll, setExportAll] = useState(false);
   const sid = params.get('sesi') || '';
   const status = params.get('status') || '';
   const venue = lo ? '' : params.get('venue') || '';
@@ -84,9 +85,16 @@ export default function Records() {
           <option value="review">Perlu dicek{counts ? ` (${counts.review})` : ''}</option>
           <option value="valid">Valid{counts ? ` (${counts.valid})` : ''}</option>
           <option value="ditolak">Ditolak{counts ? ` (${counts.ditolak})` : ''}</option>
+          <option value="berhalangan">Mundur/Berhalangan Hadir{counts ? ` (${counts.berhalangan})` : ''}</option>
         </select>
         <button className="btn btn--sm" onClick={load}><Icon name="refresh" size={15} />Muat ulang</button>
-        {sid && <a className="btn btn--sm" href={adminUrl(`/export?session_id=${sid}${venue ? `&venue_id=${venue}` : ''}`)}><Icon name="download" size={15} />Unduh CSV</a>}
+        {sid && <>
+          <select aria-label="Isi ekspor CSV" value={String(exportAll)} onChange={(e) => setExportAll(e.target.value === 'true')}>
+            <option value="false">CSV: Sudah absen</option>
+            <option value="true">CSV: Semua peserta</option>
+          </select>
+          <a className="btn btn--sm" href={adminUrl(`/export?session_id=${sid}${venue ? `&venue_id=${venue}` : ''}${exportAll ? '&include_all=true' : ''}`)}><Icon name="download" size={15} />Unduh CSV</a>
+        </>}
       </div>
       <div className="tabs">
         <button className={tab === 'absen' ? 'on' : ''} onClick={() => setTab('absen')}>Absensi masuk ({total})</button>
@@ -100,8 +108,8 @@ export default function Records() {
             <div key={r.id} className={`rec rec--${r.status}`}>
               <div>
                 {!r.has_photo
-                  ? <div className="rec__qr"><Icon name={r.method === 'qr' ? 'qr' : 'users'} size={40} />
-                    <b>{r.method === 'qr' ? 'Scan QR' : 'Diabsenkan LO'}</b><small>{r.scanned_by || 'LO / panitia'}</small></div>
+                  ? <div className="rec__qr"><Icon name={r.status === 'berhalangan' ? 'clock' : r.method === 'qr' ? 'qr' : 'users'} size={40} />
+                    <b>{r.status === 'berhalangan' ? ST_LABEL.berhalangan : r.method === 'qr' ? 'Scan QR' : 'Diabsenkan LO'}</b><small>{r.scanned_by || 'LO / panitia'}</small></div>
                   : <img src={r.photo_url || adminUrl(`/photo/${r.id}`)} alt={r.name} loading="lazy" title="Klik untuk memperbesar"
                     onClick={() => setZoom(r.photo_url || adminUrl(`/photo/${r.id}`))} />}
               </div>
@@ -110,7 +118,7 @@ export default function Records() {
                 <div className="rec__name">{r.name} <span className={`tag tag--${r.role}`}>{r.role}</span></div>
                 <div className="muted small">{r.code} · {r.institution || '-'}</div>
                 {r.venue_name && <div><span className="tag tag--venue">{r.venue_name}</span></div>}
-                {r.lat == null ? <div className="small">{fmtDT(r.created_at)} WIB · {r.method === 'qr' ? 'dipindai' : 'diabsenkan'} {r.scanned_by || 'LO'}</div> : <>
+                {r.lat == null ? <div className="small">{fmtDT(r.created_at)} WIB · {r.status === 'berhalangan' ? 'dicatat oleh' : r.method === 'qr' ? 'dipindai oleh' : 'diabsenkan oleh'} {r.scanned_by || 'LO'}</div> : <>
                 <div className="small">{fmtDT(r.created_at)} WIB · {dist(r.distance_m)} dari venue · akurasi ±{Math.round(r.accuracy_m)} m</div>
                 <div className="rec__geo">{Number(r.lat).toFixed(6)}, {Number(r.lng).toFixed(6)}</div>
                 <button type="button" className="link-btn" onClick={() => setMapPoint({
@@ -123,10 +131,13 @@ export default function Records() {
                     {r.flags.filter((f) => f.code !== 'qr_lo').map((f, i) => <li key={i} title={f.detail}>{FLAG_LABEL[f.code] || f.code}<br /><small>{f.detail}</small></li>)}
                   </ul>
                 )}
+                {r.participant_note && <div className="rec__note small"><b>Catatan</b><div>{r.participant_note}</div></div>}
                 <div className="row">
                   <span className={`st st--${r.status}`}>{ST_LABEL[r.status]}</span>
-                  {r.status !== 'valid' && <button className="btn btn--sm btn--ok" onClick={() => setStatus(r.id, 'valid')}>Sahkan</button>}
-                  {r.status !== 'ditolak' && <button className="btn btn--sm btn--danger" onClick={() => setStatus(r.id, 'ditolak')}>Tolak</button>}
+                  {r.status !== 'berhalangan' && <>
+                    {r.status !== 'valid' && <button className="btn btn--sm btn--ok" onClick={() => setStatus(r.id, 'valid')}>Sahkan</button>}
+                    {r.status !== 'ditolak' && <button className="btn btn--sm btn--danger" onClick={() => setStatus(r.id, 'ditolak')}>Tolak</button>}
+                  </>}
                 </div>
               </div>
             </div>
