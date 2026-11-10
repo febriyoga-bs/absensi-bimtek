@@ -21,6 +21,8 @@ const Assignments = lazy(() => import('./pages/admin/Assignments.jsx'));
 const ParticipantSync = lazy(() => import('./pages/admin/ParticipantSync.jsx'));
 const Scan = lazy(() => import('./pages/admin/Scan.jsx'));
 const LoSelfAttendance = lazy(() => import('./pages/admin/LoSelfAttendance.jsx'));
+const Reporting = lazy(() => import('./pages/admin/Reporting.jsx'));
+const ArrivalRecap = lazy(() => import('./pages/admin/ArrivalRecap.jsx'));
 const ChangePassword = lazy(() => import('./pages/admin/ChangePassword.jsx'));
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -37,6 +39,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <Route path="/admin/login" element={<Login />} />
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<Dashboard />} />
+          <Route path="kehadiran" element={<ArrivalRecap />} />
           <Route path="absensi" element={<Records />} />
           <Route path="scan" element={<Scan />} />
           <Route path="absen-saya" element={<LoSelfAttendance />} />
@@ -47,6 +50,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="venue" element={<Venues />} />
           <Route path="lo" element={<LoAccounts />} />
           <Route path="pendampingan" element={<Assignments />} />
+          <Route path="pelaporan" element={<Reporting />} />
           <Route path="pendampingan/saya" element={<Assignments key="mine" personal />} />
           <Route path="pengaturan" element={<Settings />} />
         </Route>

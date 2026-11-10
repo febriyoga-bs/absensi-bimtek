@@ -12,6 +12,8 @@ import { parsePeople, EXTRA_FIELDS } from '../peopleImport.js';
 import { applyParticipantPlan, getParticipantPlan } from '../participantSync.js';
 import { getVenueAttendance, getVenueAttendanceDetails } from '../venueAttendance.js';
 import { getAssignmentAttendance } from '../assignmentAttendance.js';
+import { getReporting, importReporting } from '../reporting.js';
+import { getArrivalRecap, importArrivalRecap } from '../arrivalRecap.js';
 
 const r = Router();
 
@@ -52,6 +54,19 @@ r.post('/login', loginLimiter, ah(async (req, res) => {
 }));
 
 r.use(requireAdmin);
+
+r.get('/reporting', ah(async (req, res) => {
+  res.json(await getReporting(req.query.dataset, req.user));
+}));
+r.post('/reporting/import', requireSuper, ah(async (req, res) => {
+  res.json(await importReporting(req.body?.csv));
+}));
+r.get('/arrival-recap', ah(async (req, res) => {
+  res.json(await getArrivalRecap(req.user));
+}));
+r.post('/arrival-recap/import', requireSuper, ah(async (req, res) => {
+  res.json(await importArrivalRecap(req.body?.rows));
+}));
 
 const publicLoAssignment = ({ account_id, venue_id, ...lo }) => lo;
 
@@ -514,17 +529,22 @@ r.get('/scan/participants', ah(async (req, res) => {
   const assignedOnly = req.user.role === 'lo' && req.query.scope !== 'all';
   const { rows: [list] } = await q(
     `WITH matching AS (
-      SELECT p.id, p.role, p.code, p.name, p.position, p.institution, p.npsn, p.ruangan, p.venue_id, v.name AS venue_name
+      SELECT p.id, p.role, p.code, p.name, p.position, p.institution, p.npsn, p.ruangan, p.venue_id, v.name AS venue_name,
+        arrival.marks->>p.id::text AS arrival_status
       FROM people p LEFT JOIN venues v ON v.id=p.venue_id
+      LEFT JOIN venue_arrival_recap arrival ON arrival.venue_id=p.venue_id
       WHERE p.role='peserta' AND p.archived_at IS NULL AND (${scanCategories[category]})
         AND (NOT $7::boolean OR ${canCheckInForLo('$5', '$6')})
         AND ($2::int IS NULL OR p.venue_id=$2)
         AND ($1='' OR p.name ILIKE '%'||$1||'%' OR p.code ILIKE '%'||$1||'%'
           OR p.institution ILIKE '%'||$1||'%' OR p.npsn ILIKE '%'||$1||'%' OR v.name ILIKE '%'||$1||'%')
+    ), filtered AS (
+      SELECT * FROM matching WHERE $8::text='' OR arrival_status IN ('selesai','sudah_tiba')
+        OR ($8='present' AND arrival_status='sedang_antre')
     ), page_rows AS (
-      SELECT * FROM matching ORDER BY name,id LIMIT $3 OFFSET $4
+      SELECT * FROM filtered ORDER BY name,id LIMIT $3 OFFSET $4
     ), details AS (
-      SELECT p.id, p.code, p.name, p.position, p.institution, p.npsn, p.ruangan, p.venue_name,
+      SELECT p.id, p.code, p.name, p.position, p.institution, p.npsn, p.ruangan, p.venue_name, p.arrival_status,
         ${canCheckInForLo('$5', '$6')} AS can_check_in,
         CASE WHEN s.id IS NOT NULL THEN json_build_object('id',s.id,'name',s.name,'type',s.type) END AS session,
         CASE WHEN a.id IS NOT NULL THEN json_build_object('at',a.created_at,'status',a.status,'method',a.method) END AS recorded
@@ -537,12 +557,18 @@ r.get('/scan/participants', ah(async (req, res) => {
       ) s ON true
       LEFT JOIN attendance a ON a.person_id=p.id AND a.session_id=s.id
     )
-    SELECT (SELECT count(*)::int FROM matching) AS total,
+    SELECT (SELECT count(*)::int FROM filtered) AS total,
+      (SELECT json_build_object(
+        'arrived', count(*) FILTER (WHERE arrival_status IN ('selesai','sudah_tiba')),
+        'queued', count(*) FILTER (WHERE arrival_status='sedang_antre'),
+        'unrecorded', count(*) FILTER (WHERE arrival_status IS NULL)
+      ) FROM matching) AS arrival_summary,
       COALESCE((SELECT jsonb_agg(d ORDER BY d.name,d.id) FROM details d),'[]') AS rows,
       COALESCE((SELECT jsonb_agg(jsonb_build_object('id',v.id,'name',v.name) ORDER BY v.name) FROM venues v),'[]') AS venues`,
-    [term, venueId, limit, (page - 1) * limit, req.user.lo, req.user.venue, assignedOnly]);
+    [term, venueId, limit, (page - 1) * limit, req.user.lo, req.user.venue, assignedOnly,
+      ['present', 'arrived'].includes(req.query.arrival) ? req.query.arrival : '']);
   res.json({
-    total: list.total, limit, venues: list.venues,
+    total: list.total, limit, venues: list.venues, arrival_summary: list.arrival_summary,
     rows: list.rows.map(({ recorded, ...person }) => ({
       ...person,
       code: person.can_check_in ? person.code : undefined,

@@ -170,5 +170,21 @@ CREATE TABLE IF NOT EXISTS assignment_roster (
 );
 ALTER TABLE assignment_roster ENABLE ROW LEVEL SECURITY;
 
+CREATE TABLE IF NOT EXISTS school_reporting (
+  npsn TEXT PRIMARY KEY,
+  status TEXT NOT NULL CHECK (status IN ('belum_kirim', 'menunggu_reviu', 'ditolak', 'diterima')),
+  submitted_on DATE,
+  progress NUMERIC CHECK (progress BETWEEN 0 AND 100),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE school_reporting ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS venue_arrival_recap (
+  venue_id INT PRIMARY KEY REFERENCES venues(id) ON DELETE CASCADE,
+  marks JSONB NOT NULL,
+  imported_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE venue_arrival_recap ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE people ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
 ALTER TABLE people ADD COLUMN IF NOT EXISTS roster_added_at TIMESTAMPTZ;

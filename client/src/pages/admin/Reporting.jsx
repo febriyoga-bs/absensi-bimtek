@@ -1,0 +1,310 @@
+import { useEffect, useState } from 'react';
+import { useOutletContext } from 'react-router-dom';
+import { api } from '../../api.js';
+import { formatRoom } from '../../lib/room.js';
+import { fmtFull } from '../../lib/time.js';
+import { readMonitoringCsv } from '../../lib/reportingFiles.js';
+import { SkelCards } from '../../components/Skeleton.jsx';
+import './Reporting.css';
+
+const labels = {
+  belum_kirim: 'Belum kirim', menunggu_reviu: 'Menunggu reviu', ditolak: 'Ditolak',
+  diterima: 'Diterima', belum_ada_data: 'Belum ada data', sudah_absen: 'Sudah absen',
+  belum_absen: 'Belum absen', sudah_tiba: 'Sudah tiba', sedang_antre: 'Sedang antre',
+  bersedia_hadir: 'Bersedia hadir', belum_konfirmasi: 'Belum konfirmasi',
+  berhalangan: 'Berhalangan', tidak_terdata: 'Tidak terdata',
+};
+const reportStatuses = ['belum_kirim', 'menunggu_reviu', 'ditolak', 'diterima', 'belum_ada_data'];
+const datasetNames = { current: 'BIMTEK TAHAP 3', k3: 'BIMTEK TAHAP 2' };
+const views = { schools: 'Sekolah', facilitators: 'Fasilitator', ranking: 'Peringkat LO', regions: 'Wilayah' };
+const PAGE_SIZE = 10;
+const nf = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 });
+const percent = (numerator, total) => total ? numerator * 100 / total : 0;
+const submitted = (school) => school.status !== 'belum_kirim' && school.status !== 'belum_ada_data';
+const ownerKey = ({ name, venue }) => JSON.stringify([venue, name]);
+const matches = (row, query) => row.some((value) => String(value ?? '').toLowerCase().includes(query));
+const reportTag = (status) => <span className="reporting-tag" data-status={status}>{labels[status]}</span>;
+
+function grouped(rows, keyOf) {
+  const groups = new Map();
+  for (const row of rows) {
+    const key = keyOf(row);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  }
+  return groups;
+}
+
+function ReportingTable({ headers, rows }) {
+  const [page, setPage] = useState(1);
+  const pages = Math.ceil(rows.length / PAGE_SIZE);
+  const active = Math.min(page, pages || 1);
+  return (
+    <>
+      <div className="assignment-table-head">
+        <span className="muted small">{nf.format(rows.length)} hasil</span>
+        {pages > 1 && <nav className="pager assignment-pager" aria-label="Halaman pantau pelaporan">
+          <button className="btn btn--sm" aria-label="Halaman sebelumnya" disabled={active === 1} onClick={() => setPage(active - 1)}>‹</button>
+          <span className="small" aria-live="polite">Halaman {active} / {pages}</span>
+          <button className="btn btn--sm" aria-label="Halaman berikutnya" disabled={active === pages} onClick={() => setPage(active + 1)}>›</button>
+        </nav>}
+      </div>
+      {rows.length ? <div className="assignment-table">
+        <table className="table stack-table" role="table" aria-label="Rincian pelaporan">
+          <thead role="rowgroup"><tr role="row">{headers.map((heading) => <th key={heading} scope="col" role="columnheader">{heading}</th>)}</tr></thead>
+          <tbody role="rowgroup">{rows.slice((active - 1) * PAGE_SIZE, active * PAGE_SIZE).map(({ key, cells }) => (
+            <tr key={key} role="row">{cells.map((value, i) => <td key={headers[i]} role="cell" data-label={i ? headers[i] : undefined}>{value ?? '—'}</td>)}</tr>
+          ))}</tbody>
+        </table>
+      </div> : <p className="card muted">Tidak ada data untuk filter ini.</p>}
+    </>
+  );
+}
+
+function ImportReporting({ onSaved }) {
+  const [file, setFile] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [feedback, setFeedback] = useState(null);
+  async function save(e) {
+    e.preventDefault();
+    if (!file || busy) return;
+    setBusy(true);
+    setFeedback(null);
+    try {
+      const { updated, skipped } = await api('/admin/reporting/import', {
+        admin: true, method: 'POST', body: { csv: await readMonitoringCsv(file) },
+      });
+      setFeedback({ message: `${nf.format(updated)} status sekolah disimpan.${skipped ? ` ${nf.format(skipped)} NPSN di luar pemetaan Tahap 3 dilewati.` : ''}` });
+      onSaved();
+    } catch (e) {
+      setFeedback({ error: true, message: e.message });
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <details className="card reporting-import">
+      <summary>Impor status BIMTEK TAHAP 3</summary>
+      <form className="form" onSubmit={save}>
+        <p className="muted small">Unggah CSV Monitoring Laporan 50% untuk memperbarui status reviu, tanggal kirim, dan capaian fisik sekolah Tahap 3 berdasarkan NPSN.</p>
+        <p className="muted small">Format ringkas dengan kolom <code>npsn</code>, <code>status</code>, <code>tanggal_kirim</code> dan <code>progres_fisik</code> juga bisa dipakai.</p>
+        <input type="file" accept=".csv,text/csv" aria-label="File CSV monitoring" disabled={busy} onChange={(e) => setFile(e.target.files[0])} />
+        <button className="btn btn--primary" disabled={!file || busy}>{busy ? 'Menyimpan…' : 'Simpan status dari CSV'}</button>
+        {feedback && <p className={feedback.error ? 'alert alert--err' : 'alert alert--ok'} role="status">{feedback.message}</p>}
+      </form>
+    </details>
+  );
+}
+
+function ReportingView({ data, dataset, canImport, refresh }) {
+  const [view, setView] = useState('schools');
+  const [venue, setVenue] = useState(data.own?.venue || '');
+  const [lo, setLo] = useState(data.own ? ownerKey(data.own) : '');
+  const [status, setStatus] = useState('');
+  const [attendance, setAttendance] = useState('');
+  const [absence, setAbsence] = useState('');
+  const [term, setTerm] = useState('');
+  const [threshold, setThreshold] = useState(2);
+  const [baseline, setBaseline] = useState(data.baseline || '');
+  const [movement, setMovement] = useState(false);
+  const [selectedFacilitator, setSelectedFacilitator] = useState(null);
+  const query = term.trim().toLowerCase();
+  const venueMatch = (row) => !venue || venue === row.venue;
+  const scope = (row) => venueMatch(row) && (!lo || lo === ownerKey({ venue: row.venue, name: row.lo }));
+  const schools = data.schools.filter(scope);
+  const byFacilitator = grouped(schools, (row) => row.facilitator_id);
+  const byLo = grouped(data.schools, (row) => ownerKey({ name: row.lo, venue: row.venue }));
+  const facilitatorNames = new Map(data.facilitators.map((f) => [f.id, f.name]));
+  const current = dataset === 'current';
+  const venueStatus = (school) => current ? school.venue_attendance || 'tidak_terdata' : school.attendance;
+  const attendanceOptions = current ? ['sudah_tiba', 'sedang_antre', 'tidak_terdata']
+    : ['sudah_tiba', 'sedang_antre', 'bersedia_hadir', 'belum_konfirmasi', 'berhalangan', 'tidak_terdata'];
+  const present = schools.filter((s) => ['sudah_tiba', 'sedang_antre'].includes(venueStatus(s))).length;
+  const checkedIn = current ? schools.filter((s) => s.attendance === 'sudah_absen').length : null;
+  const waiting = schools.filter((s) => s.status === 'menunggu_reviu');
+  const overdue = (rows) => rows.filter((s) => s.status === 'menunggu_reviu' && s.wait_days > threshold).length;
+  const counts = new Map([...grouped(schools, (s) => s.status)].map(([key, group]) => [key, group.length]));
+  const hasReports = data.schools.some((s) => s.status !== 'belum_ada_data');
+  const nextView = (key) => { setView(key); setTerm(''); setSelectedFacilitator(null); };
+
+  const schoolRows = (list, search = '') => list
+    .filter((s) => matches([s.name, s.npsn, s.city, s.province, facilitatorNames.get(s.facilitator_id)], search))
+    .sort((a, b) => (b.wait_days ?? -1) - (a.wait_days ?? -1) || (a.rank || Infinity) - (b.rank || Infinity) || a.name.localeCompare(b.name, 'id'))
+    .map((s) => ({ key: s.npsn, cells: [
+      <><b>{s.name}</b><div className="muted small">NPSN {s.npsn} · {s.city || s.province || '—'}</div></>,
+      <>{s.venue}<div className="muted small">{formatRoom(s.room)}{s.lo && ` · ${s.lo}`}</div></>,
+      facilitatorNames.get(s.facilitator_id), <>{reportTag(s.status)}{s.wait_days != null && <div className="muted small">{nf.format(s.wait_days)} hari</div>}</>,
+      s.progress == null ? '—' : `${nf.format(s.progress)}%`, reportTag(venueStatus(s)),
+      reportTag(current ? s.attendance : 'tidak_terdata'),
+    ] }));
+  const schoolHeaders = ['Sekolah', 'Venue / LO', 'Fasilitator', 'Laporan 50%', 'Progres fisik', 'Kehadiran di venue', 'Absensi'];
+  let headers = schoolHeaders;
+  let rows = [];
+  if (view === 'schools') rows = schoolRows(schools.filter((s) => (!status || s.status === status)
+    && (!attendance || venueStatus(s) === attendance) && (!current || !absence || s.attendance === absence)), query);
+  if (view === 'facilitators') {
+    headers = ['Fasilitator', 'Venue / LO', 'Sekolah', 'Belum kirim', 'Menunggu reviu', `Lewat ${threshold} hari`];
+    rows = data.facilitators.filter((f) => scope(f) && matches([f.name, f.institution, f.coordinator, f.lo], query))
+      .map((f) => {
+        const group = byFacilitator.get(f.id) || [];
+        const late = overdue(group);
+        const pending = group.filter((s) => s.status === 'menunggu_reviu').length;
+        const unsent = group.filter((s) => s.status === 'belum_kirim').length;
+        return { key: f.id, late, pending, name: f.name, cells: [
+          <><b>{f.name}</b><div className="muted small">{[f.institution, f.coordinator].filter(Boolean).join(' · ')}</div></>,
+          <>{f.venue}<div className="muted small">{[formatRoom(f.room), f.lo].filter(Boolean).join(' · ')}</div></>,
+          <button className="btn btn--sm" onClick={() => setSelectedFacilitator(f)} aria-label={`Lihat sekolah ${f.name}`}>{group.length}</button>,
+          unsent, pending, late,
+        ] };
+      }).sort((a, b) => b.late - a.late || b.pending - a.pending || a.name.localeCompare(b.name, 'id'));
+  }
+  if (view === 'ranking') {
+    headers = ['Peringkat', 'Nama LO', 'Venue', 'Sudah kirim', 'Cakupan data', 'Capaian', 'Kirim sejak tanggal'];
+    if (hasReports) rows = data.lo.filter(venueMatch).map((owner) => {
+      const group = byLo.get(ownerKey(owner)) || [];
+      const sent = group.filter(submitted).length;
+      const known = group.filter((s) => s.status !== 'belum_ada_data').length;
+      const change = baseline ? group.filter((s) => submitted(s) && s.submitted_on && s.submitted_on >= baseline).length : 0;
+      return { ...owner, total: group.length, sent, known, change, ratio: percent(sent, group.length) };
+    }).filter((r) => r.known > 0).sort((a, b) =>
+      (movement && baseline ? b.change - a.change : 0) || b.ratio - a.ratio || b.sent - a.sent || a.name.localeCompare(b.name, 'id'))
+      .map((r, i) => ({ key: ownerKey(r), cells: [i + 1, <><b>{r.name}</b>{data.own && ownerKey(data.own) === ownerKey(r) && <span className="reporting-own">Anda</span>}</>,
+        r.venue, r.sent, `${r.known} / ${r.total}`,
+        <div className="reporting-progress"><b>{nf.format(r.ratio)}%</b><progress aria-label={`Capaian ${r.name}`} value={r.ratio} max={100} /></div>,
+        baseline ? r.change : '—'] }))
+      .filter((r) => matches([JSON.parse(r.key)[1]], query));
+  }
+  if (view === 'regions') {
+    headers = ['Wilayah', 'Sekolah', 'Belum kirim', 'Menunggu reviu', 'Ditolak', 'Diterima', 'Belum ada data'];
+    rows = [...grouped(schools, (s) => [s.city, s.province].filter(Boolean).join(' · ') || 'Wilayah belum tersedia')]
+      .filter(([region]) => matches([region], query))
+      .sort(([a], [b]) => a.localeCompare(b, 'id'))
+      .map(([region, group]) => ({ key: region, cells: [<b>{region}</b>, group.length, ...reportStatuses.map((code) => group.filter((s) => s.status === code).length)] }));
+  }
+  const detail = selectedFacilitator && byFacilitator.get(selectedFacilitator.id);
+  const selectedOwner = data.lo.find((owner) => ownerKey(owner) === lo);
+  const noData = counts.get('belum_ada_data') || 0;
+  const scopeTitle = selectedOwner?.name || venue || 'Semua venue';
+  const sourceNote = dataset === 'k3'
+    ? `Laporan 50% per ${data.stamp} · Kehadiran per ${data.attendance_stamp} · Arsip hanya memuat data kedatangan`
+    : [
+      data.stamp ? `Impor monitoring ${fmtFull(data.stamp)}` : 'Monitoring belum diimpor',
+      data.arrival_stamp ? `Impor kehadiran terbaru ${fmtFull(data.arrival_stamp)}` : 'Rekap kehadiran belum diimpor',
+      'Absensi Bendahara dari seluruh sesi di aplikasi',
+    ].join(' · ');
+
+  return (
+    <>
+      <section className="reporting-hero" aria-label="Ringkasan pelaporan">
+        <header className="reporting-hero-head">
+          <div>
+            <div className="reporting-eyebrow">{datasetNames[dataset]}{dataset === 'k3' && ' · Arsip'}</div>
+            <h3>{scopeTitle}</h3>
+            <p>{nf.format(schools.length)} sekolah{selectedOwner && ` · ${selectedOwner.venue}`}</p>
+            {dataset === 'k3' && <p>{data.title}</p>}
+          </div>
+          {dataset === 'current' && <button className="btn btn--sm" onClick={refresh}>Muat ulang</button>}
+        </header>
+        <div className="reporting-duo">
+          <div><b>{nf.format(counts.get('belum_kirim') || 0)}</b><span>Belum kirim Laporan 50%</span>
+            {noData > 0 && <small>{nf.format(noData)} sekolah belum memiliki data monitoring</small>}</div>
+          <div><b>{nf.format(waiting.length)}</b><span>Menunggu reviu fasilitator</span>
+            <small>{nf.format(overdue(waiting))} melewati {threshold} hari</small></div>
+        </div>
+        <div className={`reporting-highlights${current ? ' reporting-highlights--current' : ''}`}>
+          <div><b>{nf.format(schools.filter(submitted).length)}</b><small>Sudah kirim</small></div>
+          <div><b>{nf.format(present)}</b><small>Sudah tiba atau sedang antre</small></div>
+          {current && <div><b>{nf.format(checkedIn)}</b><small>Sudah absen</small></div>}
+          <div><b>{nf.format(counts.get('diterima') || 0)}</b><small>Laporan diterima</small></div>
+        </div>
+        <div className="reporting-source">{sourceNote}</div>
+      </section>
+      {canImport && <ImportReporting onSaved={refresh} />}
+      <div className="toolbar filters reporting-scope">
+        <select aria-label="Filter venue pelaporan" value={venue} onChange={(e) => { setVenue(e.target.value); setLo(''); setSelectedFacilitator(null); }}>
+          <option value="">Semua venue</option>
+          {data.venues.map((name) => <option key={name}>{name}</option>)}
+        </select>
+        {view !== 'ranking' && <select aria-label="Filter LO pelaporan" value={lo} onChange={(e) => { setLo(e.target.value); setSelectedFacilitator(null); }}>
+          <option value="">Semua LO</option>
+          {data.lo.filter(venueMatch).map((owner) => <option key={ownerKey(owner)} value={ownerKey(owner)}>{owner.name}{!venue && ` · ${owner.venue}`}</option>)}
+        </select>}
+      </div>
+      <h3 className="reporting-section-heading">Alur Laporan 50%</h3>
+      <div className="reporting-summary" aria-label="Filter alur laporan 50%">
+        {reportStatuses.filter((code) => dataset === 'current' || code !== 'belum_ada_data').map((code) => (
+          <button key={code} type="button" data-status={code} aria-pressed={view === 'schools' && status === code}
+            onClick={() => { nextView('schools'); setStatus(view === 'schools' && status === code ? '' : code); setAttendance(''); setAbsence(''); }}>
+            <span>{labels[code]}</span><b>{nf.format(counts.get(code) || 0)}</b>
+          </button>
+        ))}
+      </div>
+      <div className="assignment-tabs reporting-tabs" role="group" aria-label="Tampilan pantau pelaporan">
+        {Object.entries(views).map(([key, label]) => <button key={key} className={view === key ? 'on' : ''} aria-pressed={view === key} onClick={() => nextView(key)}>{label}</button>)}
+      </div>
+      <div className="toolbar filters">
+        <input type="search" aria-label="Cari data pelaporan" placeholder={view === 'schools' ? 'Cari sekolah, NPSN, atau wilayah' : `Cari ${views[view].toLowerCase()}`}
+          value={term} onChange={(e) => { setTerm(e.target.value); setSelectedFacilitator(null); }} />
+        {view === 'schools' && <>
+          <select aria-label="Status laporan" value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="">Semua status laporan</option>
+            {reportStatuses.filter((code) => dataset === 'current' || code !== 'belum_ada_data').map((code) => <option key={code} value={code}>{labels[code]}</option>)}
+          </select>
+          <select aria-label="Status kehadiran di venue" value={attendance} onChange={(e) => setAttendance(e.target.value)}>
+            <option value="">Semua kehadiran di venue</option>
+            {attendanceOptions.map((code) => <option key={code} value={code}>{labels[code]}</option>)}
+          </select>
+          {current && <select aria-label="Status absensi" value={absence} onChange={(e) => setAbsence(e.target.value)}>
+            <option value="">Semua status absensi</option>
+            {['sudah_absen', 'belum_absen'].map((code) => <option key={code} value={code}>{labels[code]}</option>)}
+          </select>}
+        </>}
+        {view === 'facilitators' && <select aria-label="Ambang tunggakan" value={threshold} onChange={(e) => setThreshold(Number(e.target.value))}>
+          {[1, 2, 3, 7].map((day) => <option key={day} value={day}>Lewat {day} hari</option>)}
+        </select>}
+        {view === 'ranking' && <>
+          <select aria-label="Urutan peringkat" value={movement ? 'movement' : 'progress'} onChange={(e) => setMovement(e.target.value === 'movement')}>
+            <option value="progress">Capaian</option><option value="movement">Pergerakan</option>
+          </select>
+          {movement && <input type="date" aria-label="Hitung kiriman sejak tanggal" value={baseline} onChange={(e) => setBaseline(e.target.value)} />}
+        </>}
+      </div>
+      {view === 'ranking' && <p className="muted small">Capaian dihitung dari laporan yang sudah dikirim dibanding seluruh sekolah binaan. LO tanpa data monitoring belum masuk peringkat.</p>}
+      <ReportingTable key={JSON.stringify([view, venue, lo, status, attendance, absence, term, threshold, baseline, movement])} headers={headers} rows={rows} />
+      {detail && <section className="card reporting-detail">
+        <div className="page-head"><h3>Sekolah binaan {selectedFacilitator.name}</h3>
+          <button className="btn btn--sm" onClick={() => setSelectedFacilitator(null)}>Tutup rincian</button></div>
+        <ReportingTable key={selectedFacilitator.id} headers={schoolHeaders} rows={schoolRows(detail)} />
+      </section>}
+    </>
+  );
+}
+
+export default function Reporting() {
+  const { user, lo } = useOutletContext();
+  const [dataset, setDataset] = useState('current');
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  const [revision, setRevision] = useState(0);
+  const refresh = () => setRevision((value) => value + 1);
+  useEffect(() => {
+    let current = true;
+    api(`/admin/reporting?dataset=${dataset}`, { admin: true })
+      .then((next) => { if (current) { setData(next); setError(''); } })
+      .catch((e) => { if (current) setError(e.message); });
+    return () => { current = false; };
+  }, [dataset, revision]);
+  return (
+    <div className="reporting-page">
+      <div className="page-head"><div><h2>Pantau Pelaporan</h2><p className="muted">Pantau Laporan 50%, antrean reviu, dan kehadiran sekolah.</p></div></div>
+      <div className="reporting-datasets" role="group" aria-label="Kegiatan pelaporan">
+        {Object.entries(datasetNames).map(([key, label]) => <button key={key} className={dataset === key ? 'on' : ''} aria-pressed={dataset === key}
+          onClick={() => { if (key !== dataset) { setDataset(key); setData(null); setError(''); } }}>{label}</button>)}
+      </div>
+      {error && <p className="alert alert--err" role="alert">{error} <button className="btn btn--sm" onClick={refresh}>Coba lagi</button></p>}
+      {!data && !error && <div className="kpis"><SkelCards n={3} h={76} /></div>}
+      {data && <ReportingView key={dataset} data={data} dataset={dataset} refresh={refresh}
+        canImport={dataset === 'current' && user?.role === 'admin' && !lo} />}
+    </div>
+  );
+}

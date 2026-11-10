@@ -549,6 +549,11 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .scan__directory { min-width: 0; }
 .scan__directory .toolbar { margin-top: 0; }
 .scan__directory .tag { white-space: normal; }
+.scan__arrival-recap { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fff; }
+.scan__arrival-recap .btn { margin-inline-start: auto; }
+.arrival-import { margin-bottom: 14px; }
+.arrival-import summary { font-weight: 700; cursor: pointer; }
+.arrival-import .form { margin-top: 12px; }
 .scan__row-actions { gap: 6px; }
 .scan__view { position: relative; aspect-ratio: 4 / 3; border-radius: 14px; overflow: hidden; background: #0b1220; }
 .scan__view video { width: 100%; height: 100%; object-fit: cover; display: block; }

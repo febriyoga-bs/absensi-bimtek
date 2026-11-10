@@ -1,0 +1,120 @@
+import { readFileSync } from 'node:fs';
+import { q } from './db.js';
+import { parseRows } from './peopleImport.js';
+import { HttpError } from './util.js';
+
+// Arsip statis dari Pantau Pelaporan LO · Bimtek K3.html. Hanya data yang dipakai dasbor.
+const archive = JSON.parse(readFileSync(new URL('./reportingK3.json', import.meta.url), 'utf8'));
+const statusCodes = new Set(['belum_kirim', 'menunggu_reviu', 'ditolak', 'diterima']);
+const sourceStatuses = {
+  belum_dikirim: 'belum_kirim', menunggu_reviu_fasil: 'menunggu_reviu', diterima_fasil: 'diterima',
+  dikembalikan_fasil: 'ditolak', dikembalikan_koordinator: 'ditolak',
+};
+const facilitatorKey = (row, name) => JSON.stringify([row.venue, row.lo, row.room, row.group, name]);
+
+export async function getReporting(dataset, user) {
+  if (dataset === 'k3') return archive;
+  if (dataset !== 'current') throw new HttpError(400, 'Kegiatan pelaporan tidak valid.');
+  const [{ rows: [roster] }, { rows: records }] = await Promise.all([
+    q("SELECT data->'lo' AS lo, data->'facilitators' AS facilitators, data->'schools' AS schools FROM assignment_roster WHERE id=1"),
+    q(`SELECT s.npsn, p.provinsi, p.peringkat, m.status, to_char(m.submitted_on,'YYYY-MM-DD') AS submitted_on, m.progress::float AS progress, m.updated_at,
+       arrival.marks->>p.id::text AS arrival_status, arrival.imported_at AS arrival_imported_at,
+       CASE WHEN m.status='menunggu_reviu' AND m.submitted_on IS NOT NULL
+            THEN GREATEST(0, (now() AT TIME ZONE 'Asia/Jakarta')::date - m.submitted_on) END AS wait_days,
+       EXISTS (SELECT 1 FROM attendance a WHERE a.person_id=p.id AND a.venue_id=v.id AND a.status IN ('valid','review')) AS attended
+       FROM assignment_roster r CROSS JOIN LATERAL jsonb_to_recordset(r.data->'schools') AS s(npsn text,venue text)
+       LEFT JOIN venues v ON v.name=s.venue
+       LEFT JOIN people p ON lower(p.code)='b-'||s.npsn AND p.role='peserta' AND lower(trim(p.position))='bendahara'
+         AND p.archived_at IS NULL AND p.venue_id=v.id
+       LEFT JOIN venue_arrival_recap arrival ON arrival.venue_id=v.id
+       LEFT JOIN school_reporting m ON m.npsn=s.npsn WHERE r.id=1`),
+  ]);
+  const lo = roster?.lo || [];
+  const source = new Map(records.map((row) => [row.npsn, row]));
+  const own = user.role === 'lo' ? lo.find((row) => row.account_id === user.lo && row.venue_id === user.venue) : null;
+  const ids = new Map();
+  const facilitators = (roster?.facilitators || []).map(({ name, institution, coordinator, venue, lo, room, group }, id) => {
+    ids.set(facilitatorKey({ venue, lo, room, group }, name), id);
+    return { id, name, institution, coordinator, venue, lo, room };
+  });
+  return {
+    title: 'Bimtek Pelaporan 3',
+    stamp: records.reduce((latest, row) => row.updated_at && (!latest || row.updated_at > latest) ? row.updated_at : latest, null),
+    arrival_stamp: records.reduce((latest, row) => row.arrival_imported_at && (!latest || row.arrival_imported_at > latest) ? row.arrival_imported_at : latest, null),
+    own: own && { name: own.name, venue: own.venue },
+    venues: [...new Set(lo.map((row) => row.venue))],
+    lo: lo.map(({ name, venue }) => ({ name, venue })),
+    facilitators,
+    schools: (roster?.schools || []).map((row) => {
+      const { npsn, name, city, venue, lo, room } = row;
+      const report = source.get(npsn);
+      return { npsn, name, province: report?.provinsi, city, venue, lo, room, rank: Number(report?.peringkat) || null,
+        facilitator_id: ids.get(facilitatorKey(row, row.facilitator)),
+        status: report?.status || 'belum_ada_data', progress: report?.progress,
+        submitted_on: report?.submitted_on, wait_days: report?.wait_days,
+        venue_attendance: report?.arrival_status === 'sedang_antre' ? 'sedang_antre'
+          : ['selesai', 'sudah_tiba'].includes(report?.arrival_status) ? 'sudah_tiba' : 'tidak_terdata',
+        attendance: report?.attended ? 'sudah_absen' : 'belum_absen' };
+    }),
+  };
+}
+
+async function parseReporting(csv) {
+  if (typeof csv !== 'string' || csv.length > 500_000) throw new HttpError(400, 'Pilih file CSV berukuran maksimal 500 KB.');
+  const [header, ...body] = parseRows(csv);
+  const names = header?.map((column) => column.toLowerCase());
+  const official = names?.includes('status reviu') || false;
+  const columns = (official ? ['npsn', 'status reviu', 'tanggal kirim', 'capaian saat ini (%)']
+    : ['npsn', 'status', 'tanggal_kirim', 'progres_fisik']).map((name) => names?.indexOf(name) ?? -1);
+  if (columns[0] < 0 || columns[1] < 0 || !body.length) throw new HttpError(400, 'CSV harus memuat kolom npsn dan status serta minimal satu baris data.');
+  const known = official ? new Set((await q(`SELECT s.npsn FROM assignment_roster r
+    CROSS JOIN LATERAL jsonb_to_recordset(r.data->'schools') AS s(npsn text) WHERE r.id=1`)).rows.map((s) => s.npsn)) : null;
+  let skipped = 0;
+  const seen = new Set();
+  const entries = [];
+  for (const [i, row] of body.entries()) {
+    const [npsn, rawStatus, rawDate, progress] = columns.map((index) => row[index] || '');
+    if (known && !known.has(npsn)) {
+      skipped++;
+      continue;
+    }
+    const key = rawStatus.toLowerCase().replace(/\s+/g, '_').replace('review', 'reviu');
+    const status = official && Object.hasOwn(sourceStatuses, key) ? sourceStatuses[key] : key;
+    const date = rawDate.replace(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?: \d{2}:\d{2}(?::\d{2})?)?$/,
+      (_, day, month, year) => `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`);
+    const parsedDate = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(date) : null;
+    const value = progress ? Number(progress.replace(/%$/, '').replace(',', '.')) : null;
+    if (!/^\d{8}$/.test(npsn) || seen.has(npsn) || !statusCodes.has(status)
+      || (date && (!parsedDate || Number.isNaN(+parsedDate) || parsedDate.toISOString().slice(0, 10) !== date || date.startsWith('0000')))
+      || (value != null && (!Number.isFinite(value) || value < 0 || value > 100))) {
+      throw new HttpError(400, `Data CSV baris ${i + 2} tidak valid atau NPSN muncul lebih dari sekali.`);
+    }
+    seen.add(npsn);
+    entries.push({ npsn, status, submitted_on: date || null, progress: value });
+  }
+  return { entries, official, skipped };
+}
+
+export async function importReporting(csv) {
+  const { entries, official, skipped } = await parseReporting(csv);
+  const { rows: [result] } = await q(`WITH incoming AS (
+    SELECT * FROM jsonb_to_recordset($1::jsonb) AS i(npsn text,status text,submitted_on date,progress numeric)
+  ), known AS (
+    SELECT DISTINCT s.npsn FROM assignment_roster r
+    CROSS JOIN LATERAL jsonb_to_recordset(r.data->'schools') AS s(npsn text) WHERE r.id=1
+  ), unknown AS (
+    SELECT i.npsn FROM incoming i LEFT JOIN known k USING (npsn) WHERE k.npsn IS NULL
+  ), saved AS (
+    INSERT INTO school_reporting(npsn,status,submitted_on,progress)
+    SELECT i.npsn,i.status,i.submitted_on,i.progress FROM incoming i JOIN known k USING (npsn)
+    WHERE $2::boolean OR NOT EXISTS (SELECT 1 FROM unknown) ORDER BY i.npsn
+    ON CONFLICT (npsn) DO UPDATE SET status=EXCLUDED.status, submitted_on=EXCLUDED.submitted_on,
+      progress=EXCLUDED.progress, updated_at=now()
+    RETURNING npsn
+  )
+  SELECT (SELECT count(*)::int FROM saved) AS updated, (SELECT count(*)::int FROM unknown) AS skipped,
+    ARRAY(SELECT npsn FROM unknown ORDER BY npsn LIMIT 10) AS unknown`, [JSON.stringify(entries), official]);
+  if (!official && result.unknown.length) throw new HttpError(400, `NPSN tidak ada di pemetaan Pelaporan 3 (${result.unknown.join(', ')}). Periksa CSV lalu coba lagi.`);
+  if (!result.updated) throw new HttpError(400, 'Tidak ada NPSN di CSV yang cocok dengan pemetaan Tahap 3.');
+  return { updated: result.updated, skipped: skipped + result.skipped };
+}

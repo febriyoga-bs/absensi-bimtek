@@ -78,8 +78,8 @@ export default function Dashboard() {
     <>
       <div className="page-head">
         <div>
-          <h2>Rekap Kehadiran{lo && user?.venue ? ` — ${user.venue.name}` : ''}</h2>
-          <p className="muted">Diperbarui otomatis tiap 30 detik selama halaman ini terbuka.</p>
+          <h2>Rekap Absensi{lo && user?.venue ? ` — ${user.venue.name}` : ''}</h2>
+          <p className="muted">Catatan absensi di aplikasi. Data diperbarui otomatis tiap 30 detik.</p>
         </div>
         {!lo && venues?.length > 1 && (
           <select aria-label="Filter venue" value={venueId} onChange={(e) => setVenueId(e.target.value)} style={{ width: 'auto', minWidth: 220 }}>

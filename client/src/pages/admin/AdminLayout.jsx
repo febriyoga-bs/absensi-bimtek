@@ -6,8 +6,10 @@ import BrandMark from '../../components/BrandMark.jsx';
 
 // lo: true → menu juga tampil untuk LO venue
 const NAV = [
-  { to: '/admin', end: true, icon: 'chart', label: 'Rekap Kehadiran', lo: true },
+  { to: '/admin', end: true, icon: 'chart', label: 'Rekap Absensi', lo: true },
+  { to: '/admin/kehadiran', end: true, icon: 'list', label: 'Rekap Kehadiran', lo: true },
   { to: '/admin/pendampingan', end: true, icon: 'chart', label: 'Rekap Pendampingan', lo: true },
+  { to: '/admin/pelaporan', end: true, icon: 'chart', label: 'Pantau Pelaporan', lo: true },
   { to: '/admin/pendampingan/saya', end: true, icon: 'list', label: 'Daftar Pendampingan', lo: true, loOnly: true },
   { to: '/admin/scan', icon: 'users', label: 'Absenkan Peserta', lo: true },
   { to: '/admin/absen-saya', end: true, icon: 'idcard', label: 'Absen Saya', lo: true, loOnly: true },

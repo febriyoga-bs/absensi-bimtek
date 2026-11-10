@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { Link, useOutletContext } from 'react-router-dom';
 import jsQR from 'jsqr';
 import { api } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
@@ -39,6 +39,8 @@ const categories = {
   bpmp: { label: 'BB/BPMP', icon: 'building', placeholder: 'Cari nama atau kode BB/BPMP' },
 };
 const number = new Intl.NumberFormat('id-ID');
+const arrivalLabels = { selesai: 'Sudah tiba', sudah_tiba: 'Sudah tiba', sedang_antre: 'Sedang antre' };
+const directoryHeaders = ['Peserta', 'Sekolah / Instansi', 'Venue', 'Sesi', 'Kehadiran di venue', 'Status absensi', 'Tindakan'];
 
 function attendanceStatus(person) {
   if (person.unavailable) return ['Mundur/Berhalangan Hadir', 'tag--off'];
@@ -64,6 +66,7 @@ export default function Scan() {
   const [tab, setTab] = useState(QR_SCAN_ENABLED ? 'qr' : 'sekolah');
   const [search, setSearch] = useState('');
   const [filterVenue, setFilterVenue] = useState('');
+  const [filterArrival, setFilterArrival] = useState('');
   const [showAll, setShowAll] = useState(false);
   const [page, setPage] = useState(1);
   const [list, setList] = useState(null);
@@ -103,7 +106,7 @@ export default function Scan() {
     let current = true;
     setLoading(true);
     setListError('');
-    const params = new URLSearchParams({ category: tab, q: search.trim(), page, venue_id: filterVenue });
+    const params = new URLSearchParams({ category: tab, q: search.trim(), page, venue_id: filterVenue, arrival: filterArrival });
     if (lo && showAll) params.set('scope', 'all');
     const timer = setTimeout(() => {
       api(`/admin/scan/participants?${params}`, { admin: true })
@@ -112,7 +115,7 @@ export default function Scan() {
         .finally(() => { if (current) setLoading(false); });
     }, search.trim() ? 220 : 0);
     return () => { current = false; clearTimeout(timer); };
-  }, [tab, search, page, filterVenue, lo, showAll, revision]);
+  }, [tab, search, page, filterVenue, filterArrival, lo, showAll, revision]);
 
   function changeTab(next) {
     if (tab === next) return;
@@ -233,30 +236,47 @@ export default function Scan() {
                 <option value="">Semua venue</option>
                 {list?.venues.map((venue) => <option key={venue.id} value={venue.id}>{venue.name}</option>)}
               </select>}
+              <select aria-label="Filter kehadiran dari rekap" value={filterArrival} onChange={(e) => {
+                setLoading(true); setFilterArrival(e.target.value); setPage(1);
+              }}>
+                <option value="">Semua status kedatangan</option>
+                <option value="arrived">Sudah tiba (rekap)</option>
+                <option value="present">Sudah tiba atau sedang antre (rekap)</option>
+              </select>
               <button type="button" className="btn btn--sm" disabled={loading || !!pending} onClick={() => setRevision((value) => value + 1)}>
                 <Icon name="refresh" size={15} />Muat ulang
               </button>
             </div>
             {listError && <div className="alert alert--err" role="alert">{listError}</div>}
+            {!loading && !listError && list?.arrival_summary && (
+              <div className="scan__arrival-recap">
+                <b>Rekap Kehadiran</b>
+                <span className="tag tag--open">{number.format(list.arrival_summary.arrived)} sudah tiba</span>
+                <span className="tag tag--venue">{number.format(list.arrival_summary.queued)} sedang antre</span>
+                <span className="tag tag--off">{number.format(list.arrival_summary.unrecorded)} belum terdata</span>
+                <Link className="btn btn--sm" to="/admin/kehadiran">Buka rekap</Link>
+              </div>
+            )}
             <p className="muted small" aria-live="polite">
               {loading ? 'Memuat daftar peserta…' : `${number.format(list?.total || 0)} peserta`}
             </p>
             <div className="assignment-table">
               <table className="table stack-table" role="table" aria-label={`Daftar ${categories[tab].label}`} aria-busy={loading}>
                 <thead role="rowgroup"><tr role="row">
-                  {['Peserta', 'Sekolah / Instansi', 'Venue', 'Sesi', 'Status', 'Tindakan'].map((name) => (
+                  {directoryHeaders.map((name) => (
                     <th key={name} scope="col" role="columnheader">{name}</th>
                   ))}
                 </tr></thead>
                 <tbody role="rowgroup">
-                  {loading && <SkelRows rows={4} cols={6} />}
-                  {!loading && !listError && !list?.rows.length && <tr role="row"><td role="cell" colSpan={6}>
-                    {lo && !showAll && !search.trim()
+                  {loading && <SkelRows rows={4} cols={directoryHeaders.length} />}
+                  {!loading && !listError && !list?.rows.length && <tr role="row"><td role="cell" colSpan={directoryHeaders.length}>
+                    {lo && !showAll && !search.trim() && !filterArrival
                       ? `Tidak ada ${organizationTab ? 'peserta kategori ini di venue Anda' : 'binaan di kategori ini'}. Pilih Semua peserta untuk melihat daftar lengkap.`
                       : 'Tidak ada peserta yang cocok.'}
                   </td></tr>}
                   {!loading && !listError && list?.rows.map((p) => {
                     const [status, style] = attendanceStatus(p);
+                    const arrival = arrivalLabels[p.arrival_status];
                     return (
                       <tr key={p.id} role="row">
                         <td role="cell"><b>{p.name}</b><div className="muted small">{[p.position, p.code].filter(Boolean).join(' · ')}</div></td>
@@ -268,7 +288,12 @@ export default function Scan() {
                           {p.ruangan && <div className="muted small">{formatRoom(p.ruangan)}</div>}
                         </td>
                         <td role="cell" data-label="Sesi" className="small">{p.session?.type || p.session?.name || '—'}</td>
-                        <td role="cell" data-label="Status"><span className={`tag ${style}`}>{status}</span></td>
+                        <td role="cell" data-label="Kehadiran di venue">
+                          <span className={`tag ${p.arrival_status === 'sedang_antre' ? 'tag--venue' : arrival ? 'tag--open' : 'tag--off'}`}>
+                            {arrival || 'Belum terdata'}
+                          </span>
+                        </td>
+                        <td role="cell" data-label="Status absensi"><span className={`tag ${style}`}>{status}</span></td>
                         <td role="cell" className="stack-full">
                           {p.can_check_in && !p.attended ? (
                             <div className="row scan__row-actions">
