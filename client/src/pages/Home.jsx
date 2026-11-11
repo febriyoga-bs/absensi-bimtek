@@ -1,11 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { adminToken, api } from '../api.js';
 import Icon from '../components/Icon.jsx';
 import FontIcon from '../components/FontIcon.jsx';
 import BrandMark from '../components/BrandMark.jsx';
 import { dashboardMenu } from '../lib/dashboardMenu.js';
-import { useVisiblePolling } from '../lib/poll.js';
 import { useNow, fmtClock, fmtDate } from '../lib/time.js';
 import { checkInDayLabel } from './admin/shared.js';
 
@@ -31,7 +30,9 @@ export default function Home() {
   const dashboardPath = signedIn ? '/admin' : '/admin/login';
   const dashboardLabel = signedIn ? 'Buka Dashboard' : 'Masuk Dashboard';
 
-  useVisiblePolling(() => api('/info').then(setInfo).catch(() => {}), 60_000);
+  useEffect(() => {
+    api('/info').then(setInfo).catch(() => {});
+  }, []);
 
   return (
     <div className="home">

@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import { api, adminUrl } from '../../api.js';
 import FontIcon from '../../components/FontIcon.jsx';
-import { useVisiblePolling } from '../../lib/poll.js';
 import { checkInDayLabel, fmtDT, sessionTitle } from './shared.js';
 import { Skel, SkelCards } from '../../components/Skeleton.jsx';
 import AttendanceDetailDialog from './AttendanceDetailDialog.jsx';
@@ -64,6 +63,8 @@ export default function Dashboard() {
   const [day, setDay] = useState('');
   const [venueAttendance, setVenueAttendance] = useState(null);
   const [summaryError, setSummaryError] = useState(false);
+  const [sessionsError, setSessionsError] = useState(false);
+  const [revision, setRevision] = useState(0);
   const [details, setDetails] = useState(null);
 
   useEffect(() => {
@@ -73,14 +74,22 @@ export default function Dashboard() {
 
   const dayQs = day ? `?day=${day}` : '';
   const qs = `?official=1${day ? `&day=${day}` : ''}${!lo && venueId ? `&venue_id=${venueId}` : ''}`;
-  const requestScope = useRef({ qs, dayQs });
-  requestScope.current = { qs, dayQs };
-  // Diperbarui tiap 30 detik, hanya saat tab ini sedang dilihat
-  useVisiblePolling(() => api(`/admin/sessions${qs}`, { admin: true })
-    .then((rows) => { if (requestScope.current.qs === qs) setSessions(rows); }).catch(() => {}), 30_000, [qs]);
-  useVisiblePolling(() => api(`/admin/venue-attendance${dayQs}`, { admin: true })
-    .then((rows) => { if (requestScope.current.dayQs === dayQs) { setVenueAttendance(rows); setSummaryError(false); } })
-    .catch(() => { if (requestScope.current.dayQs === dayQs) setSummaryError(true); }), 30_000, [dayQs]);
+  useEffect(() => {
+    let active = true;
+    setSessionsError(false);
+    api(`/admin/sessions${qs}`, { admin: true })
+      .then((rows) => { if (active) setSessions(rows); })
+      .catch(() => { if (active) setSessionsError(true); });
+    return () => { active = false; };
+  }, [qs, revision]);
+  useEffect(() => {
+    let active = true;
+    setSummaryError(false);
+    api(`/admin/venue-attendance${dayQs}`, { admin: true })
+      .then((rows) => { if (active) setVenueAttendance(rows); })
+      .catch(() => { if (active) setSummaryError(true); });
+    return () => { active = false; };
+  }, [dayQs, revision]);
 
   const open = sessions.filter((s) => s.is_open);
   const sum = (k) => open.reduce((a, s) => a + s[k], 0);
@@ -94,9 +103,10 @@ export default function Dashboard() {
       <div className="page-head">
         <div>
           <h2>Rekap Absensi{lo && user?.venue ? ` — ${user.venue.name}` : ''}</h2>
-          <p className="muted">Catatan absensi di aplikasi. Data diperbarui otomatis tiap 30 detik.</p>
+          <p className="muted">Klik Muat ulang atau reload browser untuk memperbarui data absensi.</p>
         </div>
         <div className="row dashboard-filters">
+          <button type="button" className="btn" onClick={() => setRevision((value) => value + 1)}>Muat ulang</button>
           {days.length > 0 && <select aria-label="Hari absensi" value={day} onChange={(e) => {
             setDay(e.target.value); setSessions(null); setVenueAttendance(null); setSummaryError(false);
           }}>
@@ -128,7 +138,8 @@ export default function Dashboard() {
       <section className="dashboard-sessions" aria-labelledby="dashboard-sessions-title">
       <h3 id="dashboard-sessions-title">Absensi per sesi</h3>
       <p className="muted small">Lihat jumlah yang sudah absen dibandingkan target tiap sesi.</p>
-      {loading && <div className="stats"><SkelCards n={3} h={170} /></div>}
+      {sessionsError && <p className="alert alert--warn" role="status">Rekap sesi gagal diperbarui. Klik Muat ulang untuk mencoba lagi.</p>}
+      {loading && !sessionsError && <div className="stats"><SkelCards n={3} h={170} /></div>}
       {!loading && !sessions.length && <p className="muted">Belum ada sesi{!lo && <> — <Link to="/admin/sesi">buat sesi</Link></>}.</p>}
       <div className="stats">
         {sessions.map((s) => {

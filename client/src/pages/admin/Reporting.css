@@ -25,6 +25,14 @@
 .reporting-ranking progress::-webkit-progress-value { background: #475bcb; border-radius: 999px; }
 .reporting-ranking progress::-moz-progress-bar { background: #475bcb; border-radius: 999px; }
 .reporting-ranking p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.reporting-scope--public select { flex: 0 1 270px; width: 270px; max-width: 100%; }
+.reporting-scope--public select:first-child { flex-basis: 220px; width: 220px; }
+.reporting-scope--public select:last-child { flex: 0 1 350px; width: 350px; }
+@media (max-width: 600px) {
+  .reporting-scope--public select, .reporting-scope--public select:first-child, .reporting-scope--public select:last-child {
+    flex: 1 1 100%; width: 100%; max-width: 100%;
+  }
+}
 .reporting-datasets {
   display: inline-grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -106,7 +114,8 @@
 .reporting-summary button[aria-pressed="true"] { border-color: var(--report-navy); background: #e8edfb; }
 .reporting-page :is([data-status="menunggu_reviu"], [data-status="sedang_antre"]) { --report-status: #c88723; --report-status-bg: #fdf1dd; }
 .reporting-page [data-status="ditolak"] { --report-status: #b34e3c; --report-status-bg: #fbe9e5; }
-.reporting-page :is([data-status="diterima"], [data-status="sudah_tiba"]) { --report-status: #1b3a7a; --report-status-bg: #e8edfb; }
+.reporting-page [data-status="diterima"] { --report-status: #1b3a7a; --report-status-bg: #e8edfb; }
+.reporting-page [data-status="sudah_tiba"] { --report-status: var(--ok); --report-status-bg: var(--ok-soft); --report-status-text: var(--ok); }
 .reporting-page [data-status="sudah_absen"] { --report-status-bg: var(--ok-soft); --report-status-text: var(--ok); }
 .reporting-tag, .reporting-own {
   display: inline-block; padding: 4px 8px; border-radius: 999px; background: var(--report-status-bg, #eef2f8);

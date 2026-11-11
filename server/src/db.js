@@ -12,7 +12,7 @@ const serverless = !!process.env.VERCEL;
  * yang membagi koneksi ke Postgres. Kode ini tidak memakai prepared
  * statement bernama / fitur sesi, jadi aman untuk mode transaksi.
  */
-export const pool = new pg.Pool({
+@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgresexport const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.PGSSL === 'true' ? { rejectUnauthorized: false } : undefined,
   max: Number(process.env.PG_POOL_MAX || (serverless ? 3 : 10)),

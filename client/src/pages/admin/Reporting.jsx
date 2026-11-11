@@ -261,14 +261,14 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
 
   return (
     <>
-      {publicView && <div className="toolbar filters reporting-scope">
+      {publicView && <div className="toolbar filters reporting-scope reporting-scope--public">
         <select aria-label="Cakupan progres" value={progressScope} onChange={(event) => {
           const next = event.target.value;
           setProgressScope(next); setSelectedFacilitator(null);
           if (next === 'all') { setVenue(''); setLo(''); }
-          if (next === 'venue') { setVenue(data.venues[0] || ''); setLo(''); }
+          if (next === 'venue') { setVenue(venue || data.venues[0] || ''); setLo(''); }
           if (next === 'lo') {
-            const first = data.lo[0];
+            const first = data.lo.find((owner) => owner.venue === venue) || data.lo[0];
             setVenue(first?.venue || ''); setLo(first ? ownerKey(first) : '');
           }
         }}>
@@ -276,16 +276,23 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
           <option value="venue">Progres per venue</option>
           <option value="lo">Progres per LO</option>
         </select>
-        {progressScope === 'venue' && <select aria-label="Filter venue pelaporan" value={venue}
-          onChange={(event) => { setVenue(event.target.value); setSelectedFacilitator(null); }}>
+        {progressScope !== 'all' && <select aria-label="Filter venue pelaporan" value={venue}
+          onChange={(event) => {
+            const nextVenue = event.target.value;
+            setVenue(nextVenue); setSelectedFacilitator(null);
+            if (progressScope === 'lo') {
+              const first = data.lo.find((owner) => owner.venue === nextVenue);
+              setLo(first ? ownerKey(first) : '');
+            }
+          }}>
           {data.venues.map((name) => <option key={name}>{name}</option>)}
         </select>}
         {progressScope === 'lo' && <select aria-label="Filter LO pelaporan" value={lo} onChange={(event) => {
           setLo(event.target.value);
-          setVenue(data.lo.find((owner) => ownerKey(owner) === event.target.value)?.venue || '');
           setSelectedFacilitator(null);
         }}>
-          {data.lo.map((owner) => <option key={ownerKey(owner)} value={ownerKey(owner)}>{owner.name} · {owner.venue}</option>)}
+          {!data.lo.some(venueMatch) && <option value="">Belum ada LO di venue ini</option>}
+          {data.lo.filter(venueMatch).map((owner) => <option key={ownerKey(owner)} value={ownerKey(owner)}>{owner.name}</option>)}
         </select>}
       </div>}
       {dataset === 'k3' && <ReportingComparison schools={schools} baseline={data.baseline} stamp={data.stamp} />}

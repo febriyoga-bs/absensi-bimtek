@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import { api } from '../../api.js';
 import { readArrivalWorkbook } from '../../lib/reportingFiles.js';
-import { useVisiblePolling } from '../../lib/poll.js';
 import { fmtFull } from '../../lib/time.js';
 import { SkelCards } from '../../components/Skeleton.jsx';
 import ArrivalBreakdown from '../../components/ArrivalBreakdown.jsx';
@@ -55,7 +54,7 @@ export default function ArrivalRecap() {
       setError('');
     } catch (e) { setError(e.message); }
   }
-  useVisiblePolling(refresh, 30_000);
+  useEffect(() => { refresh(); }, []);
 
   async function save(e) {
     e.preventDefault();
@@ -76,6 +75,7 @@ export default function ArrivalRecap() {
       <div className="page-head">
         <div><h2>Rekap Kehadiran</h2><p className="muted">Kedatangan peserta berdasarkan Excel yang diimpor.</p></div>
         <div className="public-dashboard__tools">
+          <button type="button" className="btn" onClick={refresh}>Muat ulang</button>
           {rows && <p className="muted small public-dashboard__updated" role="status">
             Impor terakhir · {latestImport ? fmtFull(latestImport) : 'Belum ada impor'}
           </p>}

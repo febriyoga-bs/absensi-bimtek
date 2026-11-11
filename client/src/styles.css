@@ -143,6 +143,25 @@ code { background: #eef1f6; padding: 1px 6px; border-radius: 6px; font-size: .92
 .form label { display: grid; gap: 6px; font-weight: 700; font-size: 14px; }
 input, select, textarea { font: inherit; padding: 11px 13px; border: 1.5px solid var(--line); border-radius: var(--radius-sm); background: #fff; width: 100%; color: var(--text); transition: border-color .15s, box-shadow .15s; }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+select:not([multiple]):not([size]) {
+  appearance: none;
+  min-height: 44px;
+  padding: 10px 38px 10px 14px;
+  border-width: 1px;
+  border-radius: 10px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 19px) 50%, calc(100% - 14px) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+select:not(:disabled):hover:not(:focus) { border-color: #a9b9ce; }
+select:focus { box-shadow: 0 0 0 3px var(--accent-soft); }
+select:disabled { background-color: var(--surface-2); color: var(--muted); cursor: not-allowed; }
+@media (forced-colors: active) {
+  select:not([multiple]):not([size]) { appearance: auto; background-image: none; }
+}
 .input-icon { position: relative; display: block; }
 .input-icon > .icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); }
 .input-icon input { padding-left: 44px; font-size: 17px; font-weight: 600; padding-top: 13px; padding-bottom: 13px; }
@@ -641,7 +660,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .scan__arrival-recap { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fff; }
 .scan__arrival-recap .btn { margin-inline-start: auto; }
 .scan__arrival-note { flex-basis: 100%; }
-.tag--arrival { color: #1b3a7a; background: #e8edfb; }
+.tag--arrival { color: var(--ok); background: var(--ok-soft); }
 .scan__unavailable { background: #fff1f0; color: #a12a24; border-color: #efbeb9; }
 .scan__unavailable:hover:not(:disabled) { background: #ffe2df; border-color: #c96861; }
 .arrival-import { margin-bottom: 14px; }
