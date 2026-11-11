@@ -14,7 +14,7 @@ import { getVenueAttendance, getVenueAttendanceDetails } from '../venueAttendanc
 import { getAssignmentAttendance, getReportingSchoolAttendance } from '../assignmentAttendance.js';
 import { getReporting, importReporting } from '../reporting.js';
 import { reportingDates, reportingDays, withReportingDay } from '../reportingDays.js';
-import { getArrivalRecap, importArrivalRecap } from '../arrivalRecap.js';
+import { getArrivalRecap, getArrivalRecapDetails, importArrivalRecap } from '../arrivalRecap.js';
 
 const r = Router();
 
@@ -35,8 +35,10 @@ function scopeDay(req) {
 }
 
 /* ---------- Login (admin utama & LO venue) ---------- */
-const loginLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 20, skipSuccessfulRequests: true,
-  message: { error: 'Terlalu banyak percobaan login gagal. Coba lagi dalam 15 menit.' } });
+const loginLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 80, skipSuccessfulRequests: true,
+  message: { error: 'Terlalu banyak percobaan login dari jaringan ini. Tunggu hingga 15 menit sebelum mencoba lagi.' } });
+const passwordChangeLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 20, skipSuccessfulRequests: true,
+  message: { error: 'Terlalu banyak percobaan ganti kata sandi dari jaringan ini. Tunggu hingga 15 menit sebelum mencoba lagi.' } });
 
 r.post('/login', loginLimiter, ah(async (req, res) => {
   const username = String(req.body?.username || '').trim();
@@ -71,7 +73,10 @@ r.post('/reporting/import', requireSuper, ah(async (req, res) => {
   res.json(await importReporting(req.body?.csv));
 }));
 r.get('/arrival-recap', ah(async (req, res) => {
-  res.json(await getArrivalRecap(req.user));
+  res.json(await getArrivalRecap());
+}));
+r.get('/arrival-recap/:venueId/participants', ah(async (req, res) => {
+  res.json(await getArrivalRecapDetails(req.params.venueId, req.query.group));
 }));
 r.post('/arrival-recap/import', requireSuper, ah(async (req, res) => {
   res.json(await importArrivalRecap(req.body?.rows));
@@ -119,7 +124,7 @@ r.get('/me', ah(async (req, res) => {
 }));
 
 /* ---------- Ganti password akun sendiri (LO) ---------- */
-r.post('/me/password', loginLimiter, ah(async (req, res) => {
+r.post('/me/password', passwordChangeLimiter, ah(async (req, res) => {
   if (req.user.role !== 'lo') {
     throw new HttpError(400, 'Password admin utama diatur lewat variabel ADMIN_PASSWORD di Vercel, bukan dari sini.');
   }
@@ -564,6 +569,18 @@ const assignedToLo = (account, venue, includeOrganizations = false) => `(${accou
   )))`;
 const canCheckInForLo = (account, venue) => assignedToLo(account, venue, true);
 
+const canDeleteAttendance = (account, venue) => `(${account}::int IS NULL OR (
+  a.venue_id=${venue}::int AND (
+    ${assignedToLo(account, venue)} OR (
+      p.role='panitia' AND p.venue_id=${venue}::int AND lower(trim(p.position))='lo' AND EXISTS (
+        SELECT 1 FROM lo_accounts l
+        WHERE l.id=${account}::int AND l.active AND l.venue_id=${venue}::int
+          AND lower(l.username)=lower(p.code)
+      )
+    )
+  )
+))`;
+
 r.get('/scan/participants', ah(async (req, res) => {
   const category = req.query.category || 'sekolah';
   if (typeof category !== 'string' || !Object.hasOwn(scanCategories, category)) {
@@ -830,7 +847,8 @@ r.get('/attendance', ah(async (req, res) => {
       `SELECT a.id, a.status, a.risk_score, a.flags, a.lat, a.lng, a.accuracy_m, a.distance_m,
               a.created_at, a.device_id, a.user_agent, a.ip, a.photo_path, a.venue_id, a.method, a.scanned_by, a.participant_note,
               p.name, p.code, p.role, p.institution, p.position, v.name AS venue_name,
-              ${assignedToLo('$6', '$2')} AS can_verify
+              ${assignedToLo('$6', '$2')} AS can_verify,
+              ${canDeleteAttendance('$6', '$2')} AS can_delete
        FROM attendance a JOIN people p ON p.id=a.person_id LEFT JOIN venues v ON v.id=a.venue_id
        WHERE ${where} AND ($3::text IS NULL OR a.status=$3)
        ORDER BY a.risk_score DESC, a.created_at DESC
@@ -876,6 +894,24 @@ r.patch('/attendance/:id', ah(async (req, res) => {
   res.json(rows[0]);
 }));
 
+r.delete('/attendance/:id', ah(async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1 || id > 2147483647) throw new HttpError(400, 'ID absensi tidak valid.');
+  if (req.body?.confirmation !== 'saya ingin menghapus absen ini') {
+    throw new HttpError(400, 'Ketik persis frasa konfirmasi untuk menghapus absensi.');
+  }
+
+  const { rows: [deleted] } = await q(
+    `DELETE FROM attendance a USING people p
+     WHERE a.id=$1 AND p.id=a.person_id AND ${canDeleteAttendance('$2', '$3')}
+     RETURNING a.photo_path`,
+    [id, req.user.lo, req.user.venue]
+  );
+  if (!deleted) throw new HttpError(404, 'Absensi tidak ditemukan atau tidak dapat Anda hapus.');
+  await deletePhoto(deleted.photo_path);
+  res.sendStatus(204);
+}));
+
 r.get('/attempts', ah(async (req, res) => {
   const v = scopeVenue(req);
   const { rows } = await q(
@@ -909,9 +945,9 @@ r.get('/export', ah(async (req, res) => {
   if (!s) throw new HttpError(404, 'Sesi tidak ditemukan');
   const { rows } = await q(
     `SELECT p.name, p.role, p.institution, p.position, pv.name AS assigned_venue,
-            p.npsn, p.region, p.ruangan, p.provinsi, p.kab_kota, p.ptn,
+            p.npsn, p.provinsi, p.kab_kota, p.ptn,
             a.id AS attendance_id, a.photo_path IS NOT NULL AS has_photo,
-            a.status, a.created_at, av.name AS venue, a.lat, a.lng, a.distance_m, a.accuracy_m, a.flags, a.method, a.participant_note
+            a.status, a.created_at, av.name AS venue, a.flags, a.method, a.participant_note
      FROM people p
      LEFT JOIN venues pv ON pv.id=p.venue_id
      LEFT JOIN attendance a ON a.person_id=p.id AND a.session_id=$1
@@ -928,18 +964,17 @@ r.get('/export', ah(async (req, res) => {
   const esc = (x) => `"${String(x ?? '').replace(/"/g, '""')}"`;
   const safeNote = (note) => note && /^(?:\s*[=+@-]|[\t\r\n])/.test(note) ? "'" + note : note;
   const fmt = (d) => d ? new Date(d).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) : '';
-  const header = ['Nama', 'Peran', 'Instansi / Sekolah', 'Jabatan', 'NPSN', 'Region', 'Ruangan', 'Provinsi',
-    'Kab/Kota', 'PTN', 'Venue Ditetapkan', 'Status Absensi', 'Status Verifikasi', 'Metode',
-    'Waktu (WIB)', 'Venue Absen', 'Latitude', 'Longitude', 'Jarak (m)', 'Akurasi (m)', 'Catatan', 'Catatan peserta', 'URL Foto'];
+  const header = ['Nama', 'Peran', 'Instansi / Sekolah', 'Jabatan', 'NPSN', 'Provinsi',
+    'Kab/Kota', 'PTN', 'Venue Ditetapkan', 'Status Absensi', 'Metode',
+    'Waktu (WIB)', 'Venue Absen', 'Catatan', 'Catatan peserta', 'URL Foto'];
   const host = req.get('host');
   const origin = /^(?:[\w.-]+|\[[0-9a-f:]+\])(?::\d+)?$/i.test(host || '') ? `${req.secure ? 'https' : 'http'}://${host}` : '';
   const lines = rows.map((x) => [
-    x.name, x.role, x.institution, x.position, x.npsn, x.region, x.ruangan, x.provinsi,
+    x.name, x.role, x.institution, x.position, x.npsn, x.provinsi,
     x.kab_kota, x.ptn, x.assigned_venue || 'Semua',
-    ({ valid: 'Sudah absen', review: 'Sudah absen', berhalangan: 'Mundur/Berhalangan Hadir', ditolak: 'Absensi ditolak' })[x.status] || 'Belum absen', x.status || '',
+    ({ valid: 'Sudah absen', review: 'Sudah absen', berhalangan: 'Mundur/Berhalangan Hadir', ditolak: 'Absensi ditolak' })[x.status] || 'Belum absen',
     ({ qr: 'Scan QR (LO)', manual: 'Diabsenkan LO', selfie: 'Selfie + GPS' })[x.method] || '',
-    fmt(x.created_at), x.venue || '', x.lat ?? '', x.lng ?? '',
-    x.distance_m != null ? Math.round(x.distance_m) : '', x.accuracy_m != null ? Math.round(x.accuracy_m) : '',
+    fmt(x.created_at), x.venue || '',
     (x.flags || []).map((f) => f.detail).join('; '),
     safeNote(x.participant_note),
     x.has_photo && origin ? `${origin}/admin/absensi/foto/${x.attendance_id}` : '',

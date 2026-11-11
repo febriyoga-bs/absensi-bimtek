@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { adminToken, api } from '../api.js';
 import Icon from '../components/Icon.jsx';
+import FontIcon from '../components/FontIcon.jsx';
 import BrandMark from '../components/BrandMark.jsx';
 import { dashboardMenu } from '../lib/dashboardMenu.js';
 import { useVisiblePolling } from '../lib/poll.js';
@@ -17,7 +18,7 @@ const workflows = [
 function MenuGuide({ items }) {
   return <ul className="home-menu">
     {items.map(({ to, icon, label, description }) => <li key={to}>
-      <span className="home-menu__icon"><Icon name={icon} size={19} /></span>
+      <span className="home-menu__icon"><FontIcon name={icon} /></span>
       <div><b>{label}</b><small>{description}</small></div>
     </li>)}
   </ul>;

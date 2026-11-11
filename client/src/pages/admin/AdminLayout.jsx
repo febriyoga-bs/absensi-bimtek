@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { api, adminToken, adminUser } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
+import FontIcon from '../../components/FontIcon.jsx';
 import BrandMark from '../../components/BrandMark.jsx';
 import { dashboardMenu } from '../../lib/dashboardMenu.js';
 
@@ -56,7 +57,7 @@ export default function AdminLayout() {
           )}
           {items.map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end} onClick={() => setMenuOpen(false)}>
-              <Icon name={n.icon} size={18} />{(!lo && n.adminLabel) || n.label}
+              <FontIcon name={n.icon} />{(!lo && n.adminLabel) || n.label}
             </NavLink>
           ))}
           <button className="link" onClick={() => { adminToken.clear(); nav('/admin/login'); }}>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
 import { api, adminUrl } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
@@ -8,6 +8,7 @@ import { SkelCards } from '../../components/Skeleton.jsx';
 
 const ST_LABEL = { valid: 'Valid', review: 'Perlu dicek', ditolak: 'Ditolak', berhalangan: 'Mundur/Berhalangan Hadir' };
 const PAGE = 48;
+const DELETE_CONFIRMATION = 'saya ingin menghapus absen ini';
 const dist = (m) => (m == null ? '-' : m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`);
 
 export default function Records() {
@@ -24,6 +25,12 @@ export default function Records() {
   const [zoom, setZoom] = useState(null);
   const [mapPoint, setMapPoint] = useState(null);
   const [exportAll, setExportAll] = useState(false);
+  const deleteDialog = useRef(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [confirmation, setConfirmation] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteNotice, setDeleteNotice] = useState('');
   const sid = params.get('sesi') || '';
   const status = params.get('status') || '';
   const venue = lo ? '' : params.get('venue') || '';
@@ -66,6 +73,34 @@ export default function Records() {
     });
   }
 
+  function openDeleteDialog(record) {
+    setDeleteTarget(record);
+    setConfirmation('');
+    setDeleteError('');
+    setDeleteNotice('');
+    deleteDialog.current.showModal();
+  }
+
+  async function deleteAttendance(event) {
+    event.preventDefault();
+    if (!deleteTarget || deleting || confirmation !== DELETE_CONFIRMATION) return;
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      await api(`/admin/attendance/${deleteTarget.id}`, { method: 'DELETE', admin: true, body: { confirmation } });
+    } catch (error) {
+      setDeleteError(error.message);
+      return;
+    } finally {
+      setDeleting(false);
+    }
+    deleteDialog.current.close();
+    setDeleteNotice(`Absensi ${deleteTarget.name} berhasil dihapus.`);
+    setRows((current) => current.filter((record) => record.id !== deleteTarget.id));
+    if (rows.length === 1 && page > 1) setParam('hal', String(page - 1));
+    else load();
+  }
+
   return (
     <>
       <div className="page-head"><div><h2>Verifikasi Absensi</h2>
@@ -101,6 +136,7 @@ export default function Records() {
         <button className={tab === 'blok' ? 'on' : ''} onClick={() => setTab('blok')}>Percobaan diblokir ({attempts.length})</button>
       </div>
 
+      {tab === 'absen' && deleteNotice && <p className="alert alert--ok" role="status">{deleteNotice}</p>}
       {tab === 'absen' && loading && !rows.length && <div className="grid"><SkelCards n={4} h={200} /></div>}
       {tab === 'absen' && (
         <div className="grid" style={loading && rows.length ? { opacity: 0.5, transition: 'opacity .2s' } : undefined}>
@@ -138,6 +174,7 @@ export default function Records() {
                     {r.status !== 'valid' && <button className="btn btn--sm btn--ok" onClick={() => setStatus(r.id, 'valid')}>Sahkan</button>}
                     {r.status !== 'ditolak' && <button className="btn btn--sm btn--danger" onClick={() => setStatus(r.id, 'ditolak')}>Tolak</button>}
                   </>}
+                  {r.can_delete && <button type="button" className="btn btn--sm btn--danger" disabled={loading} onClick={() => openDeleteDialog(r)}>Hapus absensi</button>}
                 </div>
               </div>
             </div>
@@ -176,6 +213,25 @@ export default function Records() {
         </table>
       )}
 
+      <dialog ref={deleteDialog} className="assignment-dialog" aria-labelledby="delete-attendance-title"
+        aria-describedby="delete-attendance-description" onCancel={(event) => { if (deleting) event.preventDefault(); }}>
+        <header><h3 id="delete-attendance-title">Hapus absensi</h3></header>
+        <p id="delete-attendance-description">Catatan absensi <strong>{deleteTarget?.name}</strong> pada sesi ini akan dihapus permanen.</p>
+        <form className="form" onSubmit={deleteAttendance}>
+          <label>
+            Ketik persis “{DELETE_CONFIRMATION}”
+            <input autoFocus autoComplete="off" autoCapitalize="none" spellCheck={false} required disabled={deleting}
+              value={confirmation} onChange={(event) => setConfirmation(event.target.value)} />
+          </label>
+          {deleteError && <div className="alert alert--err" role="alert">{deleteError}</div>}
+          <div className="row">
+            <button type="button" className="btn" disabled={deleting} onClick={() => deleteDialog.current.close()}>Batal</button>
+            <button type="submit" className="btn btn--danger" disabled={deleting || confirmation !== DELETE_CONFIRMATION}>
+              {deleting ? 'Menghapus…' : 'Hapus absensi'}
+            </button>
+          </div>
+        </form>
+      </dialog>
       {zoom && <div className="modal" onClick={() => setZoom(null)}><img src={zoom} alt="" /></div>}
       <MapModal point={mapPoint} onClose={() => setMapPoint(null)} />
     </>
