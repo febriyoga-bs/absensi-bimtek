@@ -21,6 +21,7 @@ const Scan = lazy(() => import('./pages/admin/Scan.jsx'));
 const LoSelfAttendance = lazy(() => import('./pages/admin/LoSelfAttendance.jsx'));
 const Reporting = lazy(() => import('./pages/admin/Reporting.jsx'));
 const ArrivalRecap = lazy(() => import('./pages/admin/ArrivalRecap.jsx'));
+const PublicDashboard = lazy(() => import('./pages/PublicDashboard.jsx'));
 const AttendancePhoto = lazy(() => import('./pages/admin/AttendancePhoto.jsx'));
 const ChangePassword = lazy(() => import('./pages/admin/ChangePassword.jsx'));
 
@@ -31,6 +32,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <Suspense fallback={<p style={{ padding: 24 }}><Loading /></p>}>
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="/dashboard/:section?" element={<PublicDashboard />} />
         <Route path="/qr/:token" element={<QrCard />} />
         <Route path="/admin/login" element={<Login />} />
         <Route path="/admin" element={<AdminLayout />}>

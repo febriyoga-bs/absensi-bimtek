@@ -597,6 +597,10 @@ r.get('/scan/participants', ah(async (req, res) => {
   const limit = 30;
   const term = String(req.query.q || '').trim().slice(0, 150);
   const assignedOnly = req.user.role === 'lo' && req.query.scope !== 'all';
+  const testSessionId = req.query.session_id == null || req.query.session_id === '' ? null : Number(req.query.session_id);
+  if (testSessionId !== null && (!Number.isInteger(testSessionId) || testSessionId < 1 || testSessionId > 2147483647)) {
+    throw new HttpError(400, 'Sesi uji coba tidak valid.');
+  }
   const { rows: [list] } = await q(
     `WITH matching AS (
       SELECT p.id, p.role, p.code, p.name, p.position, p.phone, p.institution, p.npsn, p.ruangan, p.venue_id, v.name AS venue_name,
@@ -609,19 +613,23 @@ r.get('/scan/participants', ah(async (req, res) => {
         AND ($1='' OR p.name ILIKE '%'||$1||'%' OR p.code ILIKE '%'||$1||'%'
           OR p.institution ILIKE '%'||$1||'%' OR p.npsn ILIKE '%'||$1||'%' OR v.name ILIKE '%'||$1||'%')
     ), filtered AS (
-      SELECT * FROM matching WHERE $8::text='' OR arrival_status IN ('selesai','sudah_tiba')
+      SELECT * FROM matching WHERE $8::text=''
+        OR ($8 IN ('arrived','present') AND arrival_status IN ('selesai','sudah_tiba'))
         OR ($8='present' AND arrival_status='sedang_antre')
+        OR ($8='queued' AND arrival_status='sedang_antre')
+        OR ($8='unrecorded' AND COALESCE(arrival_status,'') NOT IN ('selesai','sudah_tiba','sedang_antre'))
     ), page_rows AS (
       SELECT * FROM filtered ORDER BY name,id LIMIT $3 OFFSET $4
     ), details AS (
       SELECT p.id, p.code, p.name, p.position, p.phone, p.institution, p.npsn, p.ruangan, p.venue_name, p.arrival_status,
         ${canCheckInForLo('$5', '$6')} AS can_check_in,
-        CASE WHEN s.id IS NOT NULL THEN json_build_object('id',s.id,'name',s.name,'type',s.type,'starts_at',s.starts_at) END AS session,
+        CASE WHEN s.id IS NOT NULL THEN json_build_object('id',s.id,'name',s.name,'type',s.type,'starts_at',s.starts_at,'is_test',s.is_test) END AS session,
         CASE WHEN a.id IS NOT NULL THEN json_build_object('at',a.created_at,'status',a.status,'method',a.method) END AS recorded
       FROM page_rows p
       LEFT JOIN LATERAL (
-        SELECT s.id,s.name,s.type,s.starts_at FROM sessions s
-        WHERE NOT s.is_test AND s.role IN ('peserta','semua') AND now() BETWEEN s.starts_at AND s.ends_at
+        SELECT s.id,s.name,s.type,s.starts_at,s.is_test FROM sessions s
+        WHERE (($9::int IS NULL AND NOT s.is_test) OR (s.id=$9 AND s.is_test))
+          AND s.role IN ('peserta','semua') AND now() BETWEEN s.starts_at AND s.ends_at
           AND ${sessionApplies('p.venue_id')}
         ORDER BY s.starts_at,s.id LIMIT 1
       ) s ON true
@@ -631,12 +639,12 @@ r.get('/scan/participants', ah(async (req, res) => {
       (SELECT json_build_object(
         'arrived', count(*) FILTER (WHERE arrival_status IN ('selesai','sudah_tiba')),
         'queued', count(*) FILTER (WHERE arrival_status='sedang_antre'),
-        'unrecorded', count(*) FILTER (WHERE arrival_status IS NULL)
+        'unrecorded', count(*) FILTER (WHERE COALESCE(arrival_status,'') NOT IN ('selesai','sudah_tiba','sedang_antre'))
       ) FROM matching) AS arrival_summary,
       COALESCE((SELECT jsonb_agg(d ORDER BY d.name,d.id) FROM details d),'[]') AS rows,
       COALESCE((SELECT jsonb_agg(jsonb_build_object('id',v.id,'name',v.name) ORDER BY v.name) FROM venues v),'[]') AS venues`,
     [term, venueId, limit, (page - 1) * limit, req.user.lo, req.user.venue, assignedOnly,
-      ['present', 'arrived'].includes(req.query.arrival) ? req.query.arrival : '']);
+      ['present', 'arrived', 'queued', 'unrecorded'].includes(req.query.arrival) ? req.query.arrival : '', testSessionId]);
   res.json({
     total: list.total, limit, venues: list.venues, arrival_summary: list.arrival_summary,
     rows: list.rows.map(({ recorded, phone, ...person }) => ({
@@ -684,7 +692,8 @@ r.post('/scan', requireLo, ah(async (req, res) => {
     throw new HttpError(400, 'Sesi tidak valid.');
   }
   const { rows: [sessionRow] } = await q(
-    `SELECT id, name, type, starts_at FROM sessions s WHERE NOT s.is_test AND role IN ($1,'semua') AND now() BETWEEN starts_at AND ends_at
+    `SELECT id, name, type, starts_at, is_test FROM sessions s WHERE (NOT s.is_test OR $3::int IS NOT NULL)
+     AND role IN ($1,'semua') AND now() BETWEEN starts_at AND ends_at
      AND ${sessionApplies('$2::int')} AND ($3::int IS NULL OR id=$3)
      ORDER BY starts_at, id LIMIT 1`, [person.role, venueId, requestedSession]);
   if (!sessionRow) throw new HttpError(400, 'Tidak ada sesi yang dibuka untuk peserta dan venue ini.', { person: brief });
@@ -727,7 +736,7 @@ r.post('/scan', requireLo, ah(async (req, res) => {
   const { rows: [ins] } = await q(
     `INSERT INTO attendance (person_id, session_id, venue_id, status, flags, method, scanned_by, ip, user_agent, photo_path, participant_note)
      SELECT $1,s.id,$3,$4,$5,$6,$7,$8,$9,$10,$11 FROM sessions s
-     WHERE s.id=$2 AND NOT s.is_test AND now() BETWEEN s.starts_at AND s.ends_at AND ${sessionApplies('$3::int')}
+     WHERE s.id=$2 AND s.is_test=$13::boolean AND now() BETWEEN s.starts_at AND s.ends_at AND ${sessionApplies('$3::int')}
        AND EXISTS (SELECT 1 FROM people p WHERE p.id=$1 AND p.archived_at IS NULL AND ${canCheckInForLo('$12', '$3')})
      ON CONFLICT (person_id, session_id) DO UPDATE SET
        status=EXCLUDED.status, flags=EXCLUDED.flags, method=EXCLUDED.method, scanned_by=EXCLUDED.scanned_by,
@@ -738,7 +747,7 @@ r.post('/scan', requireLo, ah(async (req, res) => {
      RETURNING created_at`,
     [person.id, session.id, venueId, status,
       JSON.stringify(unavailable ? [] : [{ code: 'qr_lo', detail: `${method === 'qr' ? 'Dipindai' : 'Diabsenkan'} oleh ${scannedBy}` }]),
-      method, scannedBy, clientIp(req), String(req.get('user-agent') || '').slice(0, 300), photoPath, note, req.user.lo]
+      method, scannedBy, clientIp(req), String(req.get('user-agent') || '').slice(0, 300), photoPath, note, req.user.lo, session.is_test]
   );
   if (!ins) {
     await deletePhoto(photoPath);

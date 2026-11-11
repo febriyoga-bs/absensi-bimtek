@@ -104,11 +104,12 @@ function ImportReporting({ onSaved }) {
   );
 }
 
-function ReportingView({ data, dataset, account, canImport, refresh }) {
+export function ReportingView({ data, dataset, account, canImport, refresh, publicView = false }) {
   const archiveMatches = dataset === 'k3' && account ? data.lo.filter((row) => nameKey(row.name) === nameKey(account.name)) : [];
   const own = data.own || (archiveMatches.length === 1 ? archiveMatches[0] : null);
   const accountVenue = data.venues.includes(account?.venue?.name) ? account.venue.name : '';
   const [view, setView] = useState('schools');
+  const [progressScope, setProgressScope] = useState('all');
   const [venue, setVenue] = useState(own?.venue || accountVenue);
   const [lo, setLo] = useState(own ? ownerKey(own) : account ? UNASSIGNED : '');
   const [status, setStatus] = useState('');
@@ -121,7 +122,7 @@ function ReportingView({ data, dataset, account, canImport, refresh }) {
   const movementLabel = customBaseline && customBaseline !== data.baseline
     ? `Kirim sejak ${shortDate.format(new Date(customBaseline))}`
     : `Kirim sejak ${datasetNames[dataset]} dimulai`;
-  const [movement, setMovement] = useState(false);
+  const [movement, setMovement] = useState(true);
   const [selectedFacilitator, setSelectedFacilitator] = useState(null);
   const [schoolDetails, setSchoolDetails] = useState(null);
   const query = term.trim().toLowerCase();
@@ -148,7 +149,7 @@ function ReportingView({ data, dataset, account, canImport, refresh }) {
     .filter((s) => matches([s.name, s.npsn, s.city, s.province, facilitators.get(s.facilitator_id)?.name], search))
     .sort((a, b) => (b.wait_days ?? -1) - (a.wait_days ?? -1) || (a.rank || Infinity) - (b.rank || Infinity) || a.name.localeCompare(b.name, 'id'))
     .map((s) => ({ key: s.npsn, cells: [
-      <>{current ? <button type="button" className="reporting-school-link" aria-haspopup="dialog" onClick={() => setSchoolDetails({
+      <>{current && !publicView ? <button type="button" className="reporting-school-link" aria-haspopup="dialog" onClick={() => setSchoolDetails({
         label: 'Bendahara dan Pengawas', subtitle: s.venue, path: `/admin/reporting/school/${s.npsn}`, checkInDays,
       })}>{s.name}</button> : <b>{s.name}</b>}
         <div className="muted small">NPSN {s.npsn} · {s.city || s.province || '—'}</div></>,
@@ -163,6 +164,7 @@ function ReportingView({ data, dataset, account, canImport, refresh }) {
     ...(current ? checkInDays.map((day) => `${day.label} · ${day.shortDate}`) : ['Absensi'])];
   let headers = schoolHeaders;
   let rows = [];
+  let ranking = [];
   if (view === 'schools') rows = schoolRows(schools.filter((s) => (!status || s.status === status)
     && (!attendance || venueStatus(s) === attendance)
     && checkInDays.every((day) => !checkInFilters[day.date] || checkInStatus(s, day) === checkInFilters[day.date])), query);
@@ -183,8 +185,7 @@ function ReportingView({ data, dataset, account, canImport, refresh }) {
       }).sort((a, b) => b.late - a.late || b.pending - a.pending || a.name.localeCompare(b.name, 'id'));
   }
   if (view === 'ranking') {
-    headers = ['Peringkat', 'Nama LO', 'Venue', 'Sudah kirim', 'Cakupan data', 'Capaian', movementLabel];
-    if (hasReports) rows = data.lo.filter(venueMatch).map((owner) => {
+    if (hasReports) ranking = data.lo.filter(venueMatch).map((owner) => {
       const group = byLo.get(ownerKey(owner)) || [];
       const sent = group.filter(submitted).length;
       const known = group.filter((s) => s.status !== 'belum_ada_data').length;
@@ -192,11 +193,8 @@ function ReportingView({ data, dataset, account, canImport, refresh }) {
       return { ...owner, total: group.length, sent, known, change, ratio: percent(sent, group.length) };
     }).filter((r) => r.known > 0).sort((a, b) =>
       (movement && baseline ? b.change - a.change : 0) || b.ratio - a.ratio || b.sent - a.sent || a.name.localeCompare(b.name, 'id'))
-      .map((r, i) => ({ key: ownerKey(r), cells: [i + 1, <><b>{r.name}</b>{own && ownerKey(own) === ownerKey(r) && <span className="reporting-own">Anda</span>}</>,
-        r.venue, r.sent, `${r.known} / ${r.total}`,
-        <div className="reporting-progress"><b>{nf.format(r.ratio)}%</b><progress aria-label={`Capaian ${r.name}`} value={r.ratio} max={100} /></div>,
-        baseline ? r.change : '—'] }))
-      .filter((r) => matches([JSON.parse(r.key)[1]], query));
+      .map((r, i) => ({ ...r, rank: i + 1, key: ownerKey(r) }))
+      .filter((r) => matches([r.name], query) && (!publicView || !lo || ownerKey(r) === lo));
   }
   if (view === 'regions') {
     headers = ['Wilayah', 'Sekolah', 'Belum kirim', 'Menunggu reviu', 'Ditolak', 'Diterima', 'Belum ada data'];
@@ -219,6 +217,34 @@ function ReportingView({ data, dataset, account, canImport, refresh }) {
 
   return (
     <>
+      {publicView && <div className="toolbar filters reporting-scope">
+        <select aria-label="Cakupan progres" value={progressScope} onChange={(event) => {
+          const next = event.target.value;
+          setProgressScope(next); setSelectedFacilitator(null);
+          if (next === 'all') { setVenue(''); setLo(''); }
+          if (next === 'venue') { setVenue(data.venues[0] || ''); setLo(''); }
+          if (next === 'lo') {
+            const first = data.lo[0];
+            setVenue(first?.venue || ''); setLo(first ? ownerKey(first) : '');
+          }
+        }}>
+          <option value="all">Progres seluruh venue</option>
+          <option value="venue">Progres per venue</option>
+          <option value="lo">Progres per LO</option>
+        </select>
+        {progressScope === 'venue' && <select aria-label="Filter venue pelaporan" value={venue}
+          onChange={(event) => { setVenue(event.target.value); setSelectedFacilitator(null); }}>
+          {data.venues.map((name) => <option key={name}>{name}</option>)}
+        </select>}
+        {progressScope === 'lo' && <select aria-label="Filter LO pelaporan" value={lo} onChange={(event) => {
+          setLo(event.target.value);
+          setVenue(data.lo.find((owner) => ownerKey(owner) === event.target.value)?.venue || '');
+          setSelectedFacilitator(null);
+        }}>
+          {data.lo.map((owner) => <option key={ownerKey(owner)} value={ownerKey(owner)}>{owner.name} · {owner.venue}</option>)}
+        </select>}
+      </div>}
+      {dataset === 'k3' && <ReportingComparison schools={schools} baseline={data.baseline} stamp={data.stamp} />}
       <section className="reporting-hero" aria-label="Ringkasan pelaporan">
         <header className="reporting-hero-head">
           <div>
@@ -227,7 +253,7 @@ function ReportingView({ data, dataset, account, canImport, refresh }) {
             <p>{nf.format(schools.length)} sekolah{selectedOwner && ` · ${selectedOwner.venue}`}</p>
             {dataset === 'k3' && <p>{data.title}</p>}
           </div>
-          {dataset === 'current' && <button className="btn btn--sm" onClick={refresh}>Muat ulang</button>}
+          {dataset === 'current' && !publicView && <button className="btn btn--sm" onClick={refresh}>Muat ulang</button>}
         </header>
         <div className="reporting-duo">
           <div><b>{nf.format(counts.get('belum_kirim') || 0)}</b><span>Belum kirim Laporan 50%</span>
@@ -249,7 +275,7 @@ function ReportingView({ data, dataset, account, canImport, refresh }) {
         <div className="reporting-source">{sourceNote}</div>
       </section>
       {canImport && <ImportReporting onSaved={refresh} />}
-      <div className="toolbar filters reporting-scope">
+      {!publicView && <div className="toolbar filters reporting-scope">
         <select aria-label="Filter venue pelaporan" value={venue} onChange={(e) => { setVenue(e.target.value); setLo(''); setSelectedFacilitator(null); }}>
           <option value="">Semua venue</option>
           {data.venues.map((name) => <option key={name}>{name}</option>)}
@@ -259,7 +285,7 @@ function ReportingView({ data, dataset, account, canImport, refresh }) {
           {account && !own && <option value={UNASSIGNED}>Binaan saya</option>}
           {data.lo.filter(venueMatch).map((owner) => <option key={ownerKey(owner)} value={ownerKey(owner)}>{owner.name}{!venue && ` · ${owner.venue}`}</option>)}
         </select>}
-      </div>
+      </div>}
       {lo === UNASSIGNED && <p className="alert alert--warn">Akun ini belum punya pemetaan LO yang cocok pada {datasetNames[dataset]}. Pilih Semua LO untuk melihat daftar lengkap.</p>}
       <h3 className="reporting-section-heading">Alur Laporan 50%</h3>
       <div className="reporting-summary" aria-label="Filter alur laporan 50%">
@@ -273,6 +299,14 @@ function ReportingView({ data, dataset, account, canImport, refresh }) {
       <div className="assignment-tabs reporting-tabs" role="group" aria-label="Tampilan pantau pelaporan">
         {Object.entries(views).map(([key, label]) => <button key={key} className={view === key ? 'on' : ''} aria-pressed={view === key} onClick={() => nextView(key)}>{label}</button>)}
       </div>
+      {view === 'ranking' && <div className="reporting-ranking-head">
+        <h3>Peringkat LO</h3>
+        <span className="muted small">{nf.format(ranking.length)} LO · {nf.format(new Set(ranking.map((row) => row.venue)).size)} venue</span>
+      </div>}
+      {view === 'ranking' && <div className="reporting-ranking-tabs" role="group" aria-label="Urutan peringkat">
+        <button type="button" className={movement ? 'on' : ''} aria-pressed={movement} onClick={() => setMovement(true)}>Pergerakan</button>
+        <button type="button" className={!movement ? 'on' : ''} aria-pressed={!movement} onClick={() => setMovement(false)}>Capaian</button>
+      </div>}
       <div className="toolbar filters">
         <input type="search" aria-label="Cari data pelaporan" placeholder={view === 'schools' ? 'Cari sekolah, NPSN, atau wilayah' : `Cari ${views[view].toLowerCase()}`}
           value={term} onChange={(e) => { setTerm(e.target.value); setSelectedFacilitator(null); }} />
@@ -294,16 +328,13 @@ function ReportingView({ data, dataset, account, canImport, refresh }) {
         {view === 'facilitators' && <select aria-label="Ambang tunggakan" value={threshold} onChange={(e) => setThreshold(Number(e.target.value))}>
           {[1, 2, 3, 7].map((day) => <option key={day} value={day}>Lewat {day} hari</option>)}
         </select>}
-        {view === 'ranking' && <>
-          <select aria-label="Urutan peringkat" value={movement ? 'movement' : 'progress'} onChange={(e) => setMovement(e.target.value === 'movement')}>
-            <option value="progress">Capaian</option><option value="movement">Pergerakan</option>
-          </select>
-          {movement && <input type="date" aria-label="Tanggal acuan pergerakan kiriman" value={baseline} onChange={(e) => setCustomBaseline(e.target.value)} />}
-        </>}
+        {view === 'ranking' && movement && <input type="date" aria-label="Tanggal acuan pergerakan kiriman"
+          value={baseline} onChange={(e) => setCustomBaseline(e.target.value)} />}
       </div>
       {view === 'ranking' && <p className="muted small">Capaian dihitung dari laporan yang sudah dikirim dibanding seluruh sekolah binaan. LO tanpa data monitoring belum masuk peringkat.</p>}
-      <ReportingTable key={JSON.stringify([view, venue, lo, status, attendance, checkInFilters, term, threshold, baseline, movement])}
-        headers={headers} rows={rows} fullWidthColumn={current && view === 'schools' ? 'Kehadiran di venue' : undefined} />
+      {view === 'ranking' ? <ReportingRanking rows={ranking} movement={movement} movementLabel={movementLabel} own={own} />
+        : <ReportingTable key={JSON.stringify([view, venue, lo, status, attendance, checkInFilters, term, threshold])}
+          headers={headers} rows={rows} fullWidthColumn={current && view === 'schools' ? 'Kehadiran di venue' : undefined} />}
       {detail && <section className="card reporting-detail">
         <div className="page-head"><h3>Sekolah binaan {selectedFacilitator.name}</h3>
           <button className="btn btn--sm" onClick={() => setSelectedFacilitator(null)}>Tutup rincian</button></div>

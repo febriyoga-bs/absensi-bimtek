@@ -339,6 +339,19 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .arrival-metric--queued .arrival-metric__value { color: var(--warn); }
 .arrival-metric__label { display: block; font-size: 12px; font-weight: 700; }
 .arrival-venue-import { display: block; margin-top: 12px; }
+.public-dashboard__filters select { width: auto; max-width: 100%; }
+.public-dashboard__table { margin-top: 16px; overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fff; }
+.public-dashboard__table :is(th, td) { text-align: right; font-variant-numeric: tabular-nums; }
+.public-dashboard__table th:first-child { text-align: left; min-width: 135px; }
+.reporting-duo.public-reporting-totals { grid-template-columns: repeat(auto-fit, minmax(min(125px, 100%), 1fr)); }
+.public-reporting-comparison { margin-bottom: 16px; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); }
+.public-reporting-comparison h4 { margin: 0; }
+.reporting-comparison-delta { color: var(--ok); font-size: 12px; font-weight: 700; }
+.public-arrival-metrics > div { padding: 8px; border-radius: 8px; background: var(--surface-2); }
+.public-arrival-metrics dd { margin: 0; }
+.arrival-totals { margin-bottom: 16px; }
+.arrival-totals h3 { margin: 0; font-size: 16px; }
+.arrival-totals .arrival-metric__value { gap: 6px; }
 .arrival-breakdown { width: 100%; margin-top: 12px; border-collapse: collapse; font-size: 12px; }
 .arrival-breakdown caption { text-align: left; font-weight: 700; padding-bottom: 4px; }
 .arrival-breakdown th, .arrival-breakdown td { padding: 6px 4px; border-bottom: 1px solid var(--line); text-align: right; }

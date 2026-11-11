@@ -5,6 +5,8 @@ import { readArrivalWorkbook } from '../../lib/reportingFiles.js';
 import { useVisiblePolling } from '../../lib/poll.js';
 import { fmtFull } from '../../lib/time.js';
 import { SkelCards } from '../../components/Skeleton.jsx';
+import ArrivalBreakdown from '../../components/ArrivalBreakdown.jsx';
+import ArrivalTotals from '../../components/ArrivalTotals.jsx';
 import { arrivalBadge } from './shared.js';
 
 const number = new Intl.NumberFormat('id-ID');
@@ -73,6 +75,7 @@ export default function ArrivalRecap() {
         <div><h2>Rekap Kehadiran</h2><p className="muted">Kedatangan peserta berdasarkan Excel yang diimpor.</p></div>
         <Link className="btn" to="/admin/scan">{user?.role === 'lo' ? 'Absenkan Peserta' : 'Daftar Peserta'}</Link>
       </div>
+      <ArrivalTotals venues={(rows || []).filter((venue) => venue.source_ready)} />
       {user?.role === 'admin' && <details className="card arrival-import">
         <summary>Impor Rekap Kehadiran (.xlsx)</summary>
         <form className="form" onSubmit={save}>
@@ -111,18 +114,7 @@ export default function ArrivalRecap() {
                 <span className="arrival-metric__label">{group.label}</span>
               </button>)}
             </div>}
-            {!!venue.breakdown?.length && <table className="arrival-breakdown">
-              <caption>Rincian Bendahara, Pengawas, dan Dinas</caption>
-              <thead>
-                <tr><th scope="col">Jenis peserta</th><th scope="col">Undangan</th><th scope="col">Tiba</th><th scope="col">Antre</th></tr>
-              </thead>
-              <tbody>
-                {venue.breakdown.map((row) => <tr key={row.position}>
-                  <th scope="row">{row.position}</th>
-                  {groups.map((group) => <td key={group.key}>{number.format(row[group.key])}</td>)}
-                </tr>)}
-              </tbody>
-            </table>}
+            <ArrivalBreakdown rows={venue.breakdown} />
             <small className="muted arrival-venue-import">
               {venue.source_ready ? `Terakhir diimpor ${fmtFull(venue.imported_at)}`
                 : venue.imported_at ? 'Admin Utama perlu mengimpor ulang file Detail Peserta.' : 'Belum ada impor Detail Peserta.'}

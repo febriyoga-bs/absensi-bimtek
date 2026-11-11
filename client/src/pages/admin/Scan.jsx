@@ -73,6 +73,28 @@ export default function Scan() {
   const [revision, setRevision] = useState(0);
   const [pending, setPending] = useState(null);
   const [shot, setShot] = useState(null);
+  const [testSessionId, setTestSessionId] = useState('');
+  const [testSessions, setTestSessions] = useState([]);
+  const [sessionError, setSessionError] = useState('');
+  const [unavailableTarget, setUnavailableTarget] = useState(null);
+  const [unavailableError, setUnavailableError] = useState('');
+  const unavailableDialog = useRef(null);
+
+  useEffect(() => {
+    let current = true;
+    api('/admin/sessions', { admin: true }).then((sessions) => {
+      if (current) {
+        setTestSessions(sessions.filter((session) => session.is_test && session.is_open &&
+          ['peserta', 'semua'].includes(session.role)));
+        setSessionError('');
+      }
+    }).catch((error) => { if (current) setSessionError(error.message); });
+    return () => { current = false; };
+  }, [revision]);
+
+  useEffect(() => {
+    if (unavailableTarget && !unavailableDialog.current.open) unavailableDialog.current.showModal();
+  }, [unavailableTarget]);
 
   async function submit(body) {
     busyRef.current = true;
@@ -99,6 +121,7 @@ export default function Scan() {
     setLoading(true);
     setListError('');
     const params = new URLSearchParams({ category: tab, q: search.trim(), page, venue_id: filterVenue, arrival: filterArrival });
+    if (testSessionId) params.set('session_id', testSessionId);
     if (lo && showAll) params.set('scope', 'all');
     const timer = setTimeout(() => {
       api(`/admin/scan/participants?${params}`, { admin: true })
@@ -107,7 +130,7 @@ export default function Scan() {
         .finally(() => { if (current) setLoading(false); });
     }, search.trim() ? 220 : 0);
     return () => { current = false; clearTimeout(timer); };
-  }, [tab, search, page, filterVenue, filterArrival, lo, showAll, revision]);
+  }, [tab, search, page, filterVenue, filterArrival, lo, showAll, revision, testSessionId]);
 
   function changeTab(next) {
     if (tab === next) return;
@@ -119,7 +142,7 @@ export default function Scan() {
 
   function absenkan(p) {
     setShot({ code: p.code, name: p.name, position: p.position, school: p.institution?.split('; ')[0],
-      sessionId: p.session?.id });
+      sessionId: p.session?.id, sessionName: sessionTitle(p.session), isTest: p.session?.is_test });
   }
 
   async function sendShot(photo, note) {
@@ -134,13 +157,19 @@ export default function Scan() {
     return r;
   }
 
-  async function markUnavailable(p) {
-    const sessionName = sessionTitle(p.session);
-    if (!window.confirm(`Tandai ${p.name} mundur/berhalangan hadir untuk sesi "${sessionName}"?`)) return;
+  async function markUnavailable(event) {
+    event.preventDefault();
+    if (!unavailableTarget || busyRef.current) return;
+    const p = unavailableTarget;
+    setUnavailableError('');
     setPending(p.code);
     const r = await submit({ code: p.code, session_id: p.session.id, unavailable: true });
     setPending(null);
-    if (r.kind !== 'err') setRevision((value) => value + 1);
+    if (r.kind === 'err') setUnavailableError(r.msg);
+    else {
+      unavailableDialog.current.close();
+      setRevision((value) => value + 1);
+    }
   }
 
   // Kamera pemindai hanya aktif pada tab QR.
@@ -194,7 +223,7 @@ export default function Scan() {
       <div className="page-head">
         <div><h2>{lo ? 'Absenkan Peserta' : 'Daftar Peserta'}</h2>
           <p className="muted">
-            {lo ? <>Catat absensi binaan serta peserta Dinas Pendidikan dan BB/BPMP di venue penugasan. Catatan masuk ke sesi resmi yang sedang dibuka{user?.venue && <> di <b>{user.venue.name}</b></>}.</>
+            {lo ? <>Catat absensi binaan serta peserta Dinas Pendidikan dan BB/BPMP di venue penugasan. Pilih sesi resmi atau sesi uji coba yang sedang dibuka{user?.venue && <> di <b>{user.venue.name}</b></>}.</>
               : 'Lihat daftar peserta, status kedatangan, dan absensi per venue. Pencatatan dilakukan oleh LO.'}
           </p></div>
         {tab === 'qr' && (
@@ -216,6 +245,15 @@ export default function Scan() {
         {tab !== 'qr' && (
           <section className="scan__directory">
             <div className="toolbar filters">
+              <select aria-label="Sesi absensi" value={testSessionId} disabled={!!pending || !!shot} onChange={(event) => {
+                setTestSessionId(event.target.value); setLoading(true); setPage(1); setResult(null);
+              }}>
+                <option value="">Sesi resmi yang sedang dibuka</option>
+                {testSessions.map((session) => <option key={session.id} value={session.id}>Uji coba · {sessionTitle(session)}</option>)}
+                {!testSessions.length && <option disabled>Belum ada sesi uji coba yang dibuka</option>}
+                {testSessionId && !testSessions.some((session) => String(session.id) === testSessionId) &&
+                  <option value={testSessionId}>Sesi uji coba dipilih · tidak tersedia</option>}
+              </select>
               {lo && <select aria-label="Cakupan peserta" value={showAll ? 'all' : 'assigned'} onChange={(e) => {
                 setLoading(true); setShowAll(e.target.value === 'all'); setFilterVenue(''); setPage(1);
               }}>
@@ -232,14 +270,17 @@ export default function Scan() {
               <select aria-label="Filter kehadiran dari rekap" value={filterArrival} onChange={(e) => {
                 setLoading(true); setFilterArrival(e.target.value); setPage(1);
               }}>
-                <option value="">Semua status kedatangan</option>
-                <option value="arrived">Sudah tiba (rekap)</option>
-                <option value="present">Sudah tiba atau sedang antre (rekap)</option>
+                <option value="">SEMUA STATUS KEDATANGAN</option>
+                <option value="arrived">SUDAH TIBA</option>
+                <option value="queued">SEDANG ANTRE</option>
+                <option value="unrecorded">BELUM TERDATA</option>
               </select>
               <button type="button" className="btn btn--sm" disabled={loading || !!pending} onClick={() => setRevision((value) => value + 1)}>
                 <Icon name="refresh" size={15} />Muat ulang
               </button>
             </div>
+            {sessionError && <p className="alert alert--warn" role="status">Daftar sesi uji coba gagal dimuat. {sessionError}</p>}
+            {testSessionId && <p className="alert alert--warn" role="status">Mode uji coba aktif. Pencatatan masuk ke sesi uji coba yang dipilih.</p>}
             {listError && <div className="alert alert--err" role="alert">{listError}</div>}
             {!loading && !listError && list?.arrival_summary && (
               <div className="scan__arrival-recap">
@@ -283,7 +324,9 @@ export default function Scan() {
                           {p.venue_name ? <span className="tag tag--venue">{p.venue_name}</span> : '—'}
                           {p.ruangan && <div className="muted small">{formatRoom(p.ruangan)}</div>}
                         </td>
-                        <td role="cell" data-label="Sesi" className="small">{sessionTitle(p.session)}</td>
+                        <td role="cell" data-label="Sesi" className="small">{sessionTitle(p.session)}
+                          {p.session?.is_test && <div><span className="tag tag--venue">Uji coba</span></div>}
+                        </td>
                         <td role="cell" data-label="Kehadiran di venue">
                           <span className={`tag ${arrivalStyle}`}>
                             {arrival}
@@ -296,7 +339,7 @@ export default function Scan() {
                               <button className="btn btn--sm btn--primary" disabled={!p.session || !!pending}
                                 onClick={() => absenkan(p)}>{pending === p.code ? <Spinner size={13} /> : 'Absenkan'}</button>
                               {!p.unavailable && <button className="btn btn--sm btn--danger scan__unavailable" disabled={!p.session || !!pending}
-                                onClick={() => markUnavailable(p)}>Mundur/Berhalangan Hadir</button>}
+                                onClick={() => { setUnavailableError(''); setUnavailableTarget(p); }}>Mundur/Berhalangan Hadir</button>}
                             </div>
                           ) : <span className="muted small">{p.can_check_in ? '—' : organizationTab ? 'Di luar venue' : 'Di luar binaan'}</span>}
                         </td>}
@@ -371,6 +414,24 @@ export default function Scan() {
           </div>
         </div>}
       </div>
+      <dialog ref={unavailableDialog} className="assignment-dialog" aria-labelledby="unavailable-title"
+        onClose={() => setUnavailableTarget(null)} onCancel={(event) => { if (pending) event.preventDefault(); }}>
+        {unavailableTarget && <>
+          <header><h3 id="unavailable-title">Mundur/Berhalangan Hadir</h3></header>
+          <p>Tandai <strong>{unavailableTarget.name}</strong> sebagai mundur atau berhalangan hadir?</p>
+          <p className="muted small">{unavailableTarget.institution}</p>
+          <p><b>{sessionTitle(unavailableTarget.session)}</b>
+            {unavailableTarget.session.is_test && <span className="tag tag--venue">Uji coba</span>}
+          </p>
+          {unavailableError && <p className="alert alert--err" role="alert">{unavailableError}</p>}
+          <form onSubmit={markUnavailable} className="row">
+            <button type="button" className="btn" autoFocus disabled={!!pending} onClick={() => unavailableDialog.current.close()}>Batal</button>
+            <button type="submit" className="btn btn--danger scan__unavailable" disabled={!!pending}>
+              {pending ? 'Menyimpan…' : 'Tandai berhalangan'}
+            </button>
+          </form>
+        </>}
+      </dialog>
       {shot && <LoShot target={shot} user={user} busy={pending === shot.code} onSend={sendShot} onClose={() => setShot(null)} />}
     </>
   );
@@ -386,6 +447,7 @@ function LoShot({ target, user, busy, onSend, onClose }) {
 
   function capture() {
     const lines = [
+      target.sessionName ? `${target.isTest ? 'Uji coba · ' : ''}${target.sessionName}` : '',
       `${target.name}${target.position ? ` (${target.position})` : ''}`,
       target.school || target.code,
       `${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })} WIB${user?.venue ? ' • ' + user.venue.name : ''}`,

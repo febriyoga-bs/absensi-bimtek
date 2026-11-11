@@ -40,6 +40,7 @@ export default function Home() {
         <nav className="topbar" aria-label="Navigasi beranda">
           <span className="brand"><BrandMark size={40} /><span className="brand__text">Dashboard LO<small>Kemendikdasmen</small></span></span>
           <a href="#panduan-menu" className="topbar__link">Panduan menu</a>
+          <Link to="/dashboard/pelaporan" className="topbar__link">Dashboard Publik</Link>
         </nav>
         <div className="hero__body">
           <div className="eyebrow">{info?.organizer || 'Pendampingan Bimtek'}</div>

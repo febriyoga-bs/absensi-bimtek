@@ -20,6 +20,19 @@ function mobileNumber(value) {
   return /^628\d{7,11}$/.test(phone) ? phone : null;
 }
 
+export async function getPublicReporting(dataset) {
+  const data = await getReporting(dataset, { role: 'public' });
+  return {
+    title: data.title, stamp: data.stamp, arrival_stamp: data.arrival_stamp,
+    attendance_stamp: data.attendance_stamp, baseline: data.baseline,
+    check_in_days: data.check_in_days, venues: data.venues,
+    lo: data.lo.map(({ name, venue }) => ({ name, venue })),
+    facilitators: data.facilitators.map(({ id, name, institution, coordinator, venue, lo, room }) =>
+      ({ id, name, institution, coordinator, venue, lo, room })),
+    schools: data.schools,
+  };
+}
+
 export async function getReporting(dataset, user) {
   if (dataset === 'k3') return archive;
   if (dataset !== 'current') throw new HttpError(400, 'Kegiatan pelaporan tidak valid.');

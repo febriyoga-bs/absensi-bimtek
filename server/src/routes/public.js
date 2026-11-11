@@ -6,11 +6,44 @@ import { q, getSettings } from '../db.js';
 import { ah, HttpError, haversine, clientIp } from '../util.js';
 import { requireAdmin, requireLo, signChallenge, verifyChallenge } from '../auth.js';
 import { sanitizeSamples, analyzeLocation, analyzeClientMeta, scoreOf, locate, compactSamples } from '../antifake.js';
-import { reportingDays, withReportingDay } from '../reportingDays.js';
+import { reportingDates, reportingDays, withReportingDay } from '../reportingDays.js';
+import { getPublicReporting } from '../reporting.js';
+import { getVenueAttendance } from '../venueAttendance.js';
+import { getArrivalRecap } from '../arrivalRecap.js';
 
 const r = Router();
 const ROLES = ['peserta', 'panitia'];
 const PUBLIC_SELF_CHECK_IN_ENABLED = false;
+
+r.get('/dashboard/:section', ah(async (req, res) => {
+  const { section } = req.params;
+  const { period } = req.query;
+  let rows;
+  if (section === 'pelaporan') {
+    rows = await getPublicReporting(period ?? 'current');
+  } else if (section === 'absensi') {
+    const day = period ?? reportingDates[0];
+    if (!reportingDates.includes(day)) throw new HttpError(400, 'Hari absensi tidak valid.');
+    rows = (await getVenueAttendance(null, day)).map(({ name: venue, id, ...groups }) => ({
+      venue,
+      breakdown: Object.fromEntries(Object.entries(groups).map(([key, { total, attended }]) =>
+        [key, { target: total, checked_in: attended }])),
+      counts: Object.values(groups).reduce((counts, group) => ({
+        target: counts.target + group.total,
+        checked_in: counts.checked_in + group.attended,
+      }), { target: 0, checked_in: 0 }),
+    }));
+  } else if (section === 'kehadiran') {
+    rows = (await getArrivalRecap()).map(({ name: venue, invited, arrived, queued, source_ready, breakdown }) => ({
+      venue, counts: source_ready ? { invited, arrived, queued } : null,
+      breakdown: breakdown.map(({ position, invited, arrived, queued }) => ({ position, invited, arrived, queued })),
+    }));
+  } else {
+    throw new HttpError(404, 'Ringkasan tidak ditemukan.');
+  }
+  res.set('Cache-Control', 'public, max-age=15, s-maxage=30');
+  res.json(rows);
+}));
 
 if (!PUBLIC_SELF_CHECK_IN_ENABLED) {
   r.post(['/npsn', '/challenge', '/precheck', '/attendance', '/riwayat'], (_req, res) =>

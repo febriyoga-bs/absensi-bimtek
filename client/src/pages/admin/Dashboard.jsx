@@ -6,16 +6,12 @@ import { useVisiblePolling } from '../../lib/poll.js';
 import { checkInDayLabel, fmtDT, sessionTitle } from './shared.js';
 import { Skel, SkelCards } from '../../components/Skeleton.jsx';
 import AttendanceDetailDialog from './AttendanceDetailDialog.jsx';
+import { venueAttendanceGroups as venueGroups } from '../../lib/venueAttendanceGroups.js';
 
 const number = new Intl.NumberFormat('id-ID');
 const sessionStatuses = [
   ['valid', 'Valid', 'circle-check'], ['review', 'Perlu dicek', 'triangle-exclamation'],
   ['rejected', 'Ditolak', 'circle-xmark'], ['unavailable', 'Berhalangan', 'user-slash'], ['blocked', 'Diblokir', 'ban'],
-];
-const venueGroups = [
-  ['bendahara', 'Bendahara (sekolah)'], ['pengawas', 'Pengawas'],
-  ['fasil', 'Fasilitator'], ['dinas', 'Dinas Pendidikan'],
-  ['bpmp', 'BB/BPMP'], ['lo', 'LO'],
 ];
 
 function VenueAttendanceCard({ venue, day, onDetails }) {
