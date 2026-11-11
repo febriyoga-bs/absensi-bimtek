@@ -9,6 +9,7 @@ import { venueAttendanceGroups } from '../lib/venueAttendanceGroups.js';
 import { fmtFull } from '../lib/time.js';
 import { ReportingView } from './admin/Reporting.jsx';
 import './admin/Reporting.css';
+import PublicAttendanceNames from '../components/PublicAttendanceNames.jsx';
 
 const number = new Intl.NumberFormat('id-ID');
 const sections = {
@@ -40,6 +41,7 @@ export default function PublicDashboard() {
   const path = `/dashboard/${section}${period ? `?period=${encodeURIComponent(period)}` : ''}`;
   const [result, setResult] = useState(null);
   const [reload, setReload] = useState(0);
+  const [attendanceSelection, setAttendanceSelection] = useState(null);
   const current = result?.path === path ? result : null;
 
   useEffect(() => {
@@ -122,7 +124,7 @@ export default function PublicDashboard() {
       {section === 'pelaporan' && current?.report && <ReportingView key={period} data={current.report}
         dataset={period} publicView refresh={() => setReload((value) => value + 1)} />}
       {section === 'absensi' && !!rows.length && <div className="stats">
-        {rows.map(({ venue, counts, breakdown }) => {
+        {rows.map(({ id, venue, counts, breakdown }) => {
           const pct = counts.target ? Math.round(counts.checked_in / counts.target * 100) : 0;
           return <article key={venue} className="stat">
             <div className="stat__head"><h4>{venue}</h4></div>
@@ -132,15 +134,18 @@ export default function PublicDashboard() {
             {breakdown && <table className="arrival-breakdown">
               <caption>Rincian absensi</caption>
               <thead><tr><th scope="col">Jenis peserta</th><th scope="col">Target</th><th scope="col">Sudah absen</th></tr></thead>
-              <tbody>{venueAttendanceGroups.map(([key, label]) => <tr key={key}>
+              <tbody>{venueAttendanceGroups.filter(([key]) => ['bendahara','pengawas','fasil','lo'].includes(key)).map(([key, label]) => <tr key={key}>
                 <th scope="row">{label}</th>
-                <td>{number.format(breakdown[key].target)}</td>
-                <td>{number.format(breakdown[key].checked_in)}</td>
+                <td><button type="button" className="link-btn" aria-label={`Target ${label} di ${venue}`}
+                  onClick={() => setAttendanceSelection({ id, venue, group: key, label, period, scope: 'all' })}>{number.format(breakdown[key].target)}</button></td>
+                <td><button type="button" className="link-btn" aria-label={`${label} sudah absen di ${venue}`}
+                  onClick={() => setAttendanceSelection({ id, venue, group: key, label, period, scope: 'checked_in' })}>{number.format(breakdown[key].checked_in)}</button></td>
               </tr>)}</tbody>
             </table>}
           </article>;
         })}
       </div>}
+      {attendanceSelection && <PublicAttendanceNames key={JSON.stringify(attendanceSelection)} selection={attendanceSelection} onClose={() => setAttendanceSelection(null)} />}
       {section === 'kehadiran' && <ArrivalTotals venues={rows.filter(({ counts }) => counts)
         .map(({ counts, breakdown }) => ({ ...counts, breakdown }))} />}
       {section === 'kehadiran' && !!rows.length && <div className="venue-attendance-grid">

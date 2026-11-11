@@ -8,12 +8,24 @@ import { requireAdmin, requireLo, signChallenge, verifyChallenge } from '../auth
 import { sanitizeSamples, analyzeLocation, analyzeClientMeta, scoreOf, locate, compactSamples } from '../antifake.js';
 import { reportingDates, reportingDays, withReportingDay } from '../reportingDays.js';
 import { getPublicReporting } from '../reporting.js';
-import { getVenueAttendance } from '../venueAttendance.js';
+import { getVenueAttendance, getVenueAttendanceDetails } from '../venueAttendance.js';
 import { getArrivalRecap } from '../arrivalRecap.js';
 
 const r = Router();
 const ROLES = ['peserta', 'panitia'];
 const PUBLIC_SELF_CHECK_IN_ENABLED = false;
+const publicAttendanceGroups = ['bendahara','pengawas','fasil','lo'];
+
+r.get('/dashboard/absensi/:venueId/participants', ah(async (req, res) => {
+  const venueId = Number(req.params.venueId);
+  const { group, period, scope = 'all' } = req.query;
+  if (!Number.isInteger(venueId) || venueId < 1 || venueId > 2147483647 || !publicAttendanceGroups.includes(group)
+    || !reportingDates.includes(period) || !['all','checked_in'].includes(scope)) throw new HttpError(400, 'Filter absensi tidak valid.');
+  const entries = await getVenueAttendanceDetails(venueId, group, period);
+  const rows = entries.map((entry) => ({ name: entry.name, institution: entry.institution || '',
+    checked_in: entry.people.some((person) => ['valid','review'].includes(person.status)) }));
+  res.json(scope === 'checked_in' ? rows.filter((row) => row.checked_in) : rows);
+}));
 
 r.get('/dashboard/:section', ah(async (req, res) => {
   const { section } = req.params;
@@ -30,10 +42,10 @@ r.get('/dashboard/:section', ah(async (req, res) => {
         WHERE NOT s.is_test AND (s.starts_at AT TIME ZONE 'Asia/Jakarta')::date=$1::date`, [day]),
     ]);
     rows = { updated_at: latest.updated_at, rows: venues.map(({ name: venue, id, ...groups }) => ({
-      venue,
-      breakdown: Object.fromEntries(Object.entries(groups).map(([key, { total, attended }]) =>
+      venue, id,
+      breakdown: Object.fromEntries(Object.entries(groups).filter(([key]) => publicAttendanceGroups.includes(key)).map(([key, { total, attended }]) =>
         [key, { target: total, checked_in: attended }])),
-      counts: Object.values(groups).reduce((counts, group) => ({
+      counts: Object.entries(groups).filter(([key]) => publicAttendanceGroups.includes(key)).map(([, group]) => group).reduce((counts, group) => ({
         target: counts.target + group.total,
         checked_in: counts.checked_in + group.attended,
       }), { target: 0, checked_in: 0 }),
