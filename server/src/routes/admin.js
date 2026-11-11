@@ -622,6 +622,21 @@ r.get('/scan/participants', ah(async (req, res) => {
       SELECT * FROM filtered ORDER BY name,id LIMIT $3 OFFSET $4
     ), details AS (
       SELECT p.id, p.code, p.name, p.position, p.phone, p.institution, p.npsn, p.ruangan, p.venue_name, p.arrival_status,
+        COALESCE((SELECT jsonb_agg(owner.name ORDER BY owner.name) FROM (
+          SELECT DISTINCT l.id,l.name FROM lo_accounts l
+          WHERE l.active AND l.venue_id=p.venue_id AND (
+            lower(trim(p.position)) IN ('dinas pendidikan','bb/bpmp') OR EXISTS (
+              SELECT 1 FROM assignment_roster roster
+              CROSS JOIN LATERAL jsonb_to_recordset(roster.data->'attendance_assignments'->(l.id::text))
+                AS mapping(code text,name text,position text,npsn text,venue_id int)
+              WHERE roster.id=1 AND mapping.venue_id=p.venue_id
+                AND lower(trim(mapping.position))=lower(trim(p.position))
+                AND ${nameKeySql('mapping.name')}=${nameKeySql('p.name')}
+                AND (lower(mapping.code)=lower(p.code) OR (mapping.npsn IS NOT NULL
+                  AND string_to_array(replace(mapping.npsn,' ',''),';') && string_to_array(replace(p.npsn,' ',''),';')))
+            )
+          )
+        ) owner),'[]'::jsonb) AS assigned_los,
         ${canCheckInForLo('$5', '$6')} AS can_check_in,
         CASE WHEN s.id IS NOT NULL THEN json_build_object('id',s.id,'name',s.name,'type',s.type,'starts_at',s.starts_at,'is_test',s.is_test) END AS session,
         CASE WHEN a.id IS NOT NULL THEN json_build_object('id',a.id,'at',a.created_at,'status',a.status,'method',a.method,
