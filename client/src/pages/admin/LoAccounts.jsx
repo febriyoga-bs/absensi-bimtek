@@ -19,6 +19,7 @@ export default function LoAccounts() {
   const [list, setList] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [loginFilter, setLoginFilter] = useState('all');
+  const [venueFilter, setVenueFilter] = useState('');
   const [loginDate, setLoginDate] = useState('');
   const [loginSort, setLoginSort] = useState('default');
   const [venues, setVenues] = useState([]);
@@ -61,6 +62,7 @@ export default function LoAccounts() {
   }).format(new Date(value));
   const today = wibDate(Date.now());
   const filtered = list.filter((account) => {
+    if (venueFilter && String(account.venue_id) !== venueFilter) return false;
     const last = account.last_login_at;
     if (loginFilter === 'never') return !last;
     if (loginFilter === 'ever') return !!last;
@@ -130,6 +132,12 @@ export default function LoAccounts() {
       </form>
 
       <div className="toolbar">
+        <label>Venue
+          <select value={venueFilter} onChange={(event) => setVenueFilter(event.target.value)}>
+            <option value="">Semua venue</option>
+            {venues.map((venue) => <option key={venue.id} value={venue.id}>{venue.name}{!venue.active ? ' (nonaktif)' : ''}</option>)}
+          </select>
+        </label>
         <label>Login terakhir
           <select value={loginFilter} onChange={(event) => setLoginFilter(event.target.value)}>
             <option value="all">Semua akun</option>
@@ -150,7 +158,7 @@ export default function LoAccounts() {
           </select>
         </label>
         <button type="button" className="btn btn--sm" onClick={load}><Icon name="refresh" size={15} />Muat ulang</button>
-        <button type="button" className="btn btn--sm" onClick={() => { setLoginFilter('all'); setLoginDate(''); setLoginSort('default'); }}>Reset filter</button>
+        <button type="button" className="btn btn--sm" onClick={() => { setVenueFilter(''); setLoginFilter('all'); setLoginDate(''); setLoginSort('default'); }}>Reset filter</button>
       </div>
       {loaded && <p className="muted small" role="status">Menampilkan {filtered.length} dari {list.length} akun LO. Filter menggunakan tanggal login terakhir dalam WIB.</p>}
       <table className="table stack-table" role="table" aria-label="Daftar akun LO">

@@ -70,6 +70,8 @@ Dari **Peserta & Panitia**, buka **Pratinjau Sinkronisasi Absensi** untuk memeri
 
 ## Data peserta (Bendahara & Pengawas)
 
+Impor Rekap Kehadiran menggunakan sheet **Ringkasan** sebagai acuan angka per venue dan peran, serta **Detail Peserta** untuk daftar dan pencocokan profil. Jumlah Pengawas pada Ringkasan adalah akun terdaftar, bukan undangan. Kolom Tiba pada dashboard menghitung yang selesai/sudah tiba di luar antrean; kolom Sudah Tiba pada Ringkasan sumber mencakup antrean, sehingga importer mengurangkan antrean sekali. Jalankan migrasi sebelum men-deploy perubahan importer (`source_summary`). Impor tidak mengganti identitas peserta atau riwayat absensi; profil yang tidak cocok harus diperiksa terpisah.
+
 File **Pemetaan Sekolah** (CSV dari Excel) bisa langsung diimpor di *Peserta & Panitia → Pilih file CSV…*. Formatnya dikenali otomatis:
 
 - **Bendahara**: 1 orang per sekolah, kode `B-<NPSN>`.

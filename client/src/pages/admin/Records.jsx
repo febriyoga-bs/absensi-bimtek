@@ -36,10 +36,11 @@ export default function Records() {
   const [noteNotice, setNoteNotice] = useState('');
   const sid = params.get('sesi') || '';
   const status = params.get('status') || '';
+  const position = params.get('position') || '';
   const venue = lo ? '' : params.get('venue') || '';
   const page = Math.max(Number(params.get('hal')) || 1, 1);
   // ganti filter → kembali ke halaman 1
-  const setParam = (k, v) => setParams({ sesi: sid, status, venue, hal: '1', [k]: v });
+  const setParam = (k, v) => setParams({ sesi: sid, status, venue, position, hal: '1', [k]: v });
   const pages = Math.max(Math.ceil(total / PAGE), 1);
 
   useEffect(() => {
@@ -55,15 +56,16 @@ export default function Records() {
     if (!sid) return;
     const qs = new URLSearchParams({
       session_id: sid, limit: PAGE, offset: (page - 1) * PAGE,
+      ...(position && { position }),
       ...(status && { status }), ...(venue && { venue_id: venue }),
     });
     setLoading(true);
     api(`/admin/attendance?${qs}`, { admin: true })
       .then((d) => { setRows(d.rows); setTotal(d.total); setCounts(d.counts); window.scrollTo({ top: 0 }); })
       .finally(() => setLoading(false));
-    api(`/admin/attempts?session_id=${sid}${venue ? `&venue_id=${venue}` : ''}`, { admin: true }).then(setAttempts);
+    api(`/admin/attempts?session_id=${sid}${venue ? `&venue_id=${venue}` : ''}${position ? `&position=${encodeURIComponent(position)}` : ''}`, { admin: true }).then(setAttempts);
   };
-  useEffect(load, [sid, status, venue, page]);
+  useEffect(load, [sid, status, venue, position, page]);
 
   async function setStatus(id, st) {
     await api(`/admin/attendance/${id}`, { method: 'PATCH', admin: true, body: { status: st } });
@@ -118,6 +120,13 @@ export default function Records() {
             {venues.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
           </select>
         )}
+        <select aria-label="Filter jabatan" value={position} onChange={(e) => setParam('position', e.target.value)}>
+          <option value="">Semua jabatan</option>
+          <option value="lo">LO</option>
+          <option value="bendahara">Bendahara</option>
+          <option value="pengawas">Pengawas</option>
+          <option value="fasil">Fasilitator</option>
+        </select>
         <select value={status} onChange={(e) => setParam('status', e.target.value)}>
           <option value="">Semua status{counts ? ` (${counts.total})` : ''}</option>
           <option value="review">Perlu dicek{counts ? ` (${counts.review})` : ''}</option>
@@ -131,7 +140,7 @@ export default function Records() {
             <option value="false">CSV: Sudah absen</option>
             <option value="true">CSV: Semua peserta</option>
           </select>
-          <a className="btn btn--sm" href={adminUrl(`/export?session_id=${sid}${venue ? `&venue_id=${venue}` : ''}${exportAll ? '&include_all=true' : ''}`)}><Icon name="download" size={15} />Unduh CSV</a>
+          <a className="btn btn--sm" href={adminUrl(`/export?session_id=${sid}${venue ? `&venue_id=${venue}` : ''}${position ? `&position=${encodeURIComponent(position)}` : ''}${exportAll ? '&include_all=true' : ''}`)}><Icon name="download" size={15} />Unduh CSV</a>
         </>}
       </div>
       <div className="tabs">

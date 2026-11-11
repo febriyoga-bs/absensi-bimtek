@@ -63,7 +63,7 @@ export default function ArrivalRecap() {
     setFeedback(null);
     try {
       const data = await readArrivalWorkbook(file);
-      const result = await api('/admin/arrival-recap/import', { admin: true, method: 'POST', body: { rows: data } });
+      const result = await api('/admin/arrival-recap/import', { admin: true, method: 'POST', body: data });
       setFeedback({ result });
       await refresh();
     } catch (e) {
@@ -82,11 +82,12 @@ export default function ArrivalRecap() {
           <Link className="btn" to="/admin/scan">{user?.role === 'lo' ? 'Absenkan Peserta' : 'Daftar Peserta'}</Link>
         </div>
       </div>
+      <p className="muted small">Jumlah Pengawas adalah akun terdaftar, bukan undangan. Angka dari Ringkasan Excel dapat berbeda dari jumlah baris Detail Peserta yang ditampilkan pada daftar.</p>
       <ArrivalTotals venues={(rows || []).filter((venue) => venue.source_ready)} />
       {user?.role === 'admin' && <details className="card arrival-import">
         <summary>Impor Rekap Kehadiran (.xlsx)</summary>
         <form className="form" onSubmit={save}>
-          <p className="muted small">Unggah file Excel yang memuat sheet <b>Detail Peserta</b>. Impor mengganti angka dan daftar pada venue yang tercantum dalam file.</p>
+          <p className="muted small">Unggah Excel dengan sheet <b>Ringkasan</b> dan <b>Detail Peserta</b>. Angka mengikuti Ringkasan; daftar dan pencocokan profil menggunakan Detail Peserta. Jumlah Pengawas adalah akun terdaftar, bukan undangan. Jumlah baris detail dapat berbeda dari Ringkasan.</p>
           <p className="muted small">Status Selesai dan Sudah Tiba ditampilkan sebagai Sudah tiba. Status Sedang Antri ditampilkan sebagai Sedang antre.</p>
           <input type="file" accept=".xlsx" aria-label="File Excel rekap kehadiran" onChange={(e) => { setFile(e.target.files[0]); setFeedback(null); }} disabled={busy} />
           <button type="submit" className="btn btn--primary" disabled={!file || busy}>{busy ? 'Menyimpan…' : 'Impor kehadiran'}</button>

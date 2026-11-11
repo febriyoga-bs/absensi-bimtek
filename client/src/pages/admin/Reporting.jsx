@@ -8,6 +8,7 @@ import { SkelCards } from '../../components/Skeleton.jsx';
 import AttendanceDetailDialog from './AttendanceDetailDialog.jsx';
 import WhatsAppLink from '../../components/WhatsAppLink.jsx';
 import './Reporting.css';
+import AttendanceRanking from './AttendanceRanking.jsx';
 
 const labels = {
   belum_kirim: 'Belum kirim', menunggu_reviu: 'Menunggu reviu', ditolak: 'Ditolak',
@@ -164,6 +165,7 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
     ? `Kirim sejak ${shortDate.format(new Date(customBaseline))}`
     : `Kirim sejak ${datasetNames[dataset]} dimulai`;
   const [movement, setMovement] = useState(true);
+  const [attendanceRanking, setAttendanceRanking] = useState(false);
   const [selectedFacilitator, setSelectedFacilitator] = useState(null);
   const [schoolDetails, setSchoolDetails] = useState(null);
   const query = term.trim().toLowerCase();
@@ -358,11 +360,13 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
       </div>
       {view === 'ranking' && <div className="reporting-ranking-head">
         <h3>Peringkat LO</h3>
-        <span className="muted small">{nf.format(ranking.length)} LO · {nf.format(new Set(ranking.map((row) => row.venue)).size)} venue</span>
+        {!attendanceRanking && <span className="muted small">{nf.format(ranking.length)} LO · {nf.format(new Set(ranking.map((row) => row.venue)).size)} venue</span>}
       </div>}
-      {view === 'ranking' && <div className="reporting-ranking-tabs" role="group" aria-label="Urutan peringkat">
-        <button type="button" className={movement ? 'on' : ''} aria-pressed={movement} onClick={() => setMovement(true)}>Pergerakan</button>
-        <button type="button" className={!movement ? 'on' : ''} aria-pressed={!movement} onClick={() => setMovement(false)}>Capaian</button>
+      {view === 'ranking' && <div className="reporting-ranking-tabs" role="group" aria-label="Urutan peringkat"
+        style={{ gridTemplateColumns: `repeat(${current && !publicView ? 3 : 2}, minmax(0, 1fr))` }}>
+        <button type="button" className={!attendanceRanking && movement ? 'on' : ''} aria-pressed={!attendanceRanking && movement} onClick={() => { setAttendanceRanking(false); setMovement(true); }}>Pergerakan</button>
+        <button type="button" className={!attendanceRanking && !movement ? 'on' : ''} aria-pressed={!attendanceRanking && !movement} onClick={() => { setAttendanceRanking(false); setMovement(false); }}>Capaian</button>
+        {current && !publicView && <button type="button" className={attendanceRanking ? 'on' : ''} aria-pressed={attendanceRanking} onClick={() => setAttendanceRanking(true)}>Absensi</button>}
       </div>}
       <div className={`toolbar filters${view === 'ranking' ? ' reporting-ranking-filters' : ''}`}>
         <input type="search" aria-label="Cari data pelaporan" placeholder={view === 'ranking' ? 'Cari nama LO' : view === 'schools' ? 'Cari sekolah, NPSN, atau wilayah' : `Cari ${views[view].toLowerCase()}`}
@@ -385,11 +389,11 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
         {view === 'facilitators' && <select aria-label="Ambang tunggakan" value={threshold} onChange={(e) => setThreshold(Number(e.target.value))}>
           {[1, 2, 3, 7].map((day) => <option key={day} value={day}>Lewat {day} hari</option>)}
         </select>}
-        {view === 'ranking' && movement && <input type="date" aria-label="Tanggal acuan pergerakan kiriman"
+        {view === 'ranking' && !attendanceRanking && movement && <input type="date" aria-label="Tanggal acuan pergerakan kiriman"
           value={baseline} onChange={(e) => setCustomBaseline(e.target.value)} />}
       </div>
-      {view === 'ranking' && <p className="muted small">Capaian dihitung dari laporan yang sudah dikirim dibanding seluruh sekolah binaan. LO tanpa data monitoring belum masuk peringkat.</p>}
-      {view === 'ranking' ? <ReportingRanking rows={ranking} movement={movement} movementLabel={movementLabel} own={own} />
+      {view === 'ranking' && !attendanceRanking && <p className="muted small">Capaian dihitung dari laporan yang sudah dikirim dibanding seluruh sekolah binaan. LO tanpa data monitoring belum masuk peringkat.</p>}
+      {view === 'ranking' ? (attendanceRanking && current && !publicView ? <AttendanceRanking venue={venue} query={query} /> : <ReportingRanking rows={ranking} movement={movement} movementLabel={movementLabel} own={own} />)
         : <ReportingTable key={JSON.stringify([view, venue, lo, status, attendance, checkInFilters, term, threshold])}
           headers={headers} rows={rows} fullWidthColumn={current && view === 'schools' ? 'Kehadiran di venue' : undefined} />}
       {detail && <section className="card reporting-detail">

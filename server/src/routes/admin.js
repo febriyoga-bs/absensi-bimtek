@@ -79,7 +79,7 @@ r.get('/arrival-recap/:venueId/participants', ah(async (req, res) => {
   res.json(await getArrivalRecapDetails(req.params.venueId, req.query.group));
 }));
 r.post('/arrival-recap/import', requireSuper, ah(async (req, res) => {
-  res.json(await importArrivalRecap(req.body?.rows));
+  res.json(await importArrivalRecap(req.body?.rows, req.body?.summary));
 }));
 
 const publicLoAssignment = ({ account_id, venue_id, ...lo }) => lo;
@@ -848,13 +848,55 @@ for (const [directory, position] of [
 }
 
 /* ---------- Absensi ---------- */
+r.get('/reporting/attendance-ranking', ah(async (req, res) => {
+  const day = req.query.day || null;
+  if (day && (typeof day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day) || !Number.isFinite(Date.parse(day)))) {
+    throw new HttpError(400, 'Tanggal absensi tidak valid.');
+  }
+  const { rows } = await q(`WITH owners AS (
+    SELECT l.id,l.name,l.venue_id,v.name AS venue,
+      count(*) OVER (PARTITION BY l.venue_id,l.name) AS same_name
+    FROM lo_accounts l JOIN venues v ON v.id=l.venue_id
+  )
+  SELECT l.id,l.name,l.venue,
+    count(DISTINCT p.id) FILTER (WHERE lower(trim(p.position)) IN ('bendahara','pengawas'))::int AS participants,
+    count(DISTINCT p.id) FILTER (WHERE lower(trim(p.position)) ~ '^fasil(itator)?($|[[:space:]])')::int AS facilitators,
+    count(DISTINCT p.id)::int AS total
+  FROM owners l
+  LEFT JOIN attendance a ON l.same_name=1 AND a.venue_id=l.venue_id AND a.scanned_by='LO '||l.name
+    AND a.method IN ('manual','qr') AND a.status IN ('valid','review')
+    AND EXISTS (SELECT 1 FROM sessions s WHERE s.id=a.session_id AND NOT s.is_test
+      AND ($1::text IS NULL OR (s.starts_at AT TIME ZONE 'Asia/Jakarta')::date=$1::date))
+  LEFT JOIN people p ON p.id=a.person_id AND p.role='peserta'
+    AND (lower(trim(p.position)) IN ('bendahara','pengawas') OR lower(trim(p.position)) ~ '^fasil(itator)?($|[[:space:]])')
+  GROUP BY l.id,l.name,l.venue
+  ORDER BY total DESC,l.name,l.id`, [day]);
+  res.json(rows);
+}));
+
+const attendancePositions = {
+  lo: "lower(trim(p.position))='lo'",
+  bendahara: "lower(trim(p.position))='bendahara'",
+  pengawas: "lower(trim(p.position))='pengawas'",
+  fasil: "lower(trim(p.position)) ~ '^fasil(itator)?($|[[:space:]])'",
+};
+function attendancePositionFilter(req) {
+  const position = req.query.position;
+  if (!position) return 'true';
+  if (typeof position !== 'string' || !Object.hasOwn(attendancePositions, position)) {
+    throw new HttpError(400, 'Filter jabatan tidak valid.');
+  }
+  return attendancePositions[position];
+}
 /** Daftar absen per sesi, dengan halaman (default 48 per halaman) agar ringan. */
 r.get('/attendance', ah(async (req, res) => {
   const v = scopeVenue(req);
   const status = ['valid', 'review', 'ditolak', 'berhalangan'].includes(req.query.status) ? req.query.status : null;
   const limit = Math.min(Math.max(Number(req.query.limit) || 48, 1), 200);
   const offset = Math.max(Number(req.query.offset) || 0, 0);
-  const where = `a.session_id=$1 AND ($2::int IS NULL OR a.venue_id=$2)`;
+  const positionFilter = attendancePositionFilter(req);
+  const where = `a.session_id=$1 AND ($2::int IS NULL OR a.venue_id=$2)
+    AND EXISTS (SELECT 1 FROM people p WHERE p.id=a.person_id AND ${positionFilter})`;
   const [{ rows }, { rows: [c] }] = await Promise.all([
     q(
       `SELECT a.id, a.status, a.risk_score, a.flags, a.lat, a.lng, a.accuracy_m, a.distance_m,
@@ -943,11 +985,12 @@ r.delete('/attendance/:id', ah(async (req, res) => {
 
 r.get('/attempts', ah(async (req, res) => {
   const v = scopeVenue(req);
+  const positionFilter = attendancePositionFilter(req);
   const { rows } = await q(
     `SELECT l.id, l.reasons, l.lat, l.lng, l.accuracy_m, l.distance_m, l.created_at,
             p.name, p.code, p.role, v.name AS venue_name
      FROM attempt_logs l LEFT JOIN people p ON p.id=l.person_id LEFT JOIN venues v ON v.id=l.venue_id
-     WHERE l.session_id=$1 AND ($2::int IS NULL OR l.venue_id=$2)
+     WHERE l.session_id=$1 AND ($2::int IS NULL OR l.venue_id=$2) AND (${positionFilter})
      ORDER BY l.created_at DESC LIMIT 500`, [req.query.session_id, v]);
   res.json(rows);
 }));
@@ -970,6 +1013,7 @@ r.get('/photo/:id', ah(async (req, res) => {
  */
 r.get('/export', ah(async (req, res) => {
   const v = scopeVenue(req);
+  const positionFilter = attendancePositionFilter(req);
   const { rows: [s] } = await q('SELECT * FROM sessions WHERE id=$1', [req.query.session_id]);
   if (!s) throw new HttpError(404, 'Sesi tidak ditemukan');
   const { rows } = await q(
@@ -981,10 +1025,10 @@ r.get('/export', ah(async (req, res) => {
      LEFT JOIN venues pv ON pv.id=p.venue_id
      LEFT JOIN attendance a ON a.person_id=p.id AND a.session_id=$1
      LEFT JOIN venues av ON av.id=a.venue_id
-     WHERE (a.id IS NOT NULL AND ($6::boolean OR a.status IN ('valid','review')) AND ($4::int IS NULL OR a.venue_id=$4))
+     WHERE (${positionFilter}) AND ((a.id IS NOT NULL AND ($6::boolean OR a.status IN ('valid','review')) AND ($4::int IS NULL OR a.venue_id=$4))
         OR ($6::boolean AND a.id IS NULL AND ($2='semua' OR p.role=$2) AND ${inRosterAt('LEAST(now(), $5::timestamptz)')}
             AND (cardinality(COALESCE($3::int[],'{}'))=0 OR p.venue_id IS NULL OR p.venue_id = ANY($3::int[]))
-            AND ($4::int IS NULL OR p.venue_id IS NULL OR p.venue_id=$4))
+            AND ($4::int IS NULL OR p.venue_id IS NULL OR p.venue_id=$4)))
      ORDER BY p.role, p.name`,
     [s.id, s.role, s.venue_ids, v, s.ends_at, req.query.include_all === 'true']
   );

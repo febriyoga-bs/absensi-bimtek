@@ -30,5 +30,22 @@ export async function readArrivalWorkbook(file) {
   let rows;
   try { rows = await readSheet(file, 'Detail Peserta'); }
   catch { throw new Error('Excel tidak bisa dibaca. Pastikan file .xlsx memiliki sheet Detail Peserta.'); }
-  return pickColumns(rows, ['regional / hotel', 'role', 'nama', 'instansi', 'kedatangan']);
+  const details = pickColumns(rows, ['regional / hotel', 'role', 'nama', 'instansi', 'kedatangan']);
+  let summaryRows;
+  try { summaryRows = await readSheet(file, 'Ringkasan'); }
+  catch { throw new Error('Sheet Ringkasan diperlukan sebagai acuan jumlah undangan dan pengawas terdaftar.'); }
+  const summary = [];
+  let position = null;
+  for (const row of summaryRows) {
+    const section = asText(row[0]);
+    if (['Sekolah', 'Dinas Pendidikan', 'Pengawas'].includes(section)) {
+      position = section === 'Sekolah' ? 'Bendahara' : section;
+      continue;
+    }
+    if (!position || typeof row[0] !== 'number' || !asText(row[1])) continue;
+    const count = (value) => Number.parseInt(String(value ?? '').replace(/\./g, ''), 10);
+    summary.push({ hotel: asText(row[1]), position, invited: count(row[2]), arrived: count(row[7]), queued: count(row[8]) });
+  }
+  if (!summary.length) throw new Error('Rincian peran pada sheet Ringkasan tidak ditemukan.');
+  return { rows: details, summary };
 }

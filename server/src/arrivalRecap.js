@@ -30,13 +30,20 @@ const detailRows = `(
 ) p`;
 
 export async function getArrivalRecap() {
-  const { rows } = await q(`WITH breakdown AS (
+  const { rows } = await q(`WITH detail_breakdown AS (
     SELECT r.venue_id, p.position,
       count(*)::int AS invited,
       count(*) FILTER (WHERE p.arrival_status IN ('selesai','sudah_tiba'))::int AS arrived,
       count(*) FILTER (WHERE p.arrival_status='sedang_antre')::int AS queued
     FROM venue_arrival_recap r CROSS JOIN LATERAL ${detailRows}
     GROUP BY r.venue_id, p.position
+  ), breakdown AS (
+    SELECT d.* FROM detail_breakdown d JOIN venue_arrival_recap r ON r.venue_id=d.venue_id
+    WHERE r.source_summary IS NULL
+    UNION ALL
+    SELECT r.venue_id,b.position,b.invited,b.arrived,b.queued
+    FROM venue_arrival_recap r CROSS JOIN LATERAL jsonb_to_recordset(r.source_summary)
+      AS b(position text,invited int,arrived int,queued int)
   )
   SELECT v.id, v.name, r.imported_at, r.detail_rows IS NOT NULL AS source_ready,
     COALESCE(sum(b.invited),0)::int AS invited,
@@ -66,7 +73,7 @@ export async function getArrivalRecapDetails(rawVenueId, group) {
   return rows;
 }
 
-export async function importArrivalRecap(rows) {
+export async function importArrivalRecap(rows, summary = null) {
   if (!Array.isArray(rows) || !rows.length || rows.length > 20_000 ||
     rows.some((row) => !Array.isArray(row) || row.length !== 5 || row.some((value) => typeof value !== 'string' || value.length > 400))) {
     throw new HttpError(400, 'Data Detail Peserta tidak valid.');
@@ -77,6 +84,25 @@ export async function importArrivalRecap(rows) {
        WHERE role='peserta' AND archived_at IS NULL AND venue_id IS NOT NULL`),
   ]);
   const byVenue = new Map(venues.map((v) => [key(v.name), v]));
+  const resolveVenue = (hotel) => {
+    const hotelKey = key(hotel.split(/\s+[-–—]\s+/).at(-1));
+    return byVenue.get(aliases[hotelKey] || hotelKey);
+  };
+  const summaries = new Map();
+  if (summary !== null) {
+    if (!Array.isArray(summary) || !summary.length || summary.length > 1000) throw new HttpError(400, 'Ringkasan tidak valid.');
+    for (const row of summary) {
+      if (!row || typeof row.hotel !== 'string' || !['Bendahara','Pengawas','Dinas Pendidikan'].includes(row.position)
+        || ['invited','arrived','queued'].some((field) => !Number.isInteger(row[field]) || row[field] < 0 || row[field] > 20000)
+        || row.queued > row.arrived || row.arrived > row.invited) throw new HttpError(400, 'Angka Ringkasan tidak valid.');
+      const venue = resolveVenue(row.hotel);
+      if (!venue) throw new HttpError(400, `Venue Ringkasan tidak ditemukan: ${row.hotel}`);
+      const entries = summaries.get(venue.id) || [];
+      if (entries.some((entry) => entry.position === row.position)) throw new HttpError(400, 'Peran Ringkasan ganda pada venue yang sama.');
+      entries.push({ position: row.position, invited: row.invited, arrived: row.arrived - row.queued, queued: row.queued });
+      summaries.set(venue.id, entries);
+    }
+  }
   const index = new Map();
   for (const p of people) {
     const role = roles[key(p.position)];
@@ -90,8 +116,7 @@ export async function importArrivalRecap(rows) {
   const snapshots = new Map();
   let unmatched = 0;
   for (const [hotel, rawRole, name, institution, rawArrival] of rows) {
-    const hotelKey = key(hotel.split(/\s+[-–—]\s+/).at(-1));
-    const venue = byVenue.get(aliases[hotelKey] || hotelKey);
+    const venue = resolveVenue(hotel);
     if (!venue) throw new HttpError(400, `Venue di Excel tidak ditemukan di aplikasi: ${hotel || '(kosong)'}.`);
     if (!snapshots.has(venue.id)) snapshots.set(venue.id, { venue_id: venue.id, marks: {}, detail_rows: [] });
     const snapshot = snapshots.get(venue.id);
@@ -115,10 +140,14 @@ export async function importArrivalRecap(rows) {
     if (priority[arrival] > (priority[snapshot.marks[id]] || 0)) snapshot.marks[id] = arrival;
   }
   const snapshotsToSave = [...snapshots.values()];
-  await q(`INSERT INTO venue_arrival_recap (venue_id,marks,detail_rows)
-    SELECT venue_id,marks,detail_rows
-    FROM jsonb_to_recordset($1::jsonb) AS v(venue_id int,marks jsonb,detail_rows jsonb) ORDER BY venue_id
-    ON CONFLICT (venue_id) DO UPDATE SET marks=EXCLUDED.marks, detail_rows=EXCLUDED.detail_rows, imported_at=now()`,
+  if (summary !== null && (summaries.size !== snapshots.size || [...summaries].some(([id, entries]) => !snapshots.has(id) || entries.length !== 3))) {
+    throw new HttpError(400, 'Ringkasan dan Detail Peserta harus mencakup venue yang sama dan tiga peran lengkap.');
+  }
+  for (const snapshot of snapshotsToSave) snapshot.source_summary = summaries.get(snapshot.venue_id) || null;
+  await q(`INSERT INTO venue_arrival_recap (venue_id,marks,detail_rows,source_summary)
+    SELECT venue_id,marks,detail_rows,source_summary
+    FROM jsonb_to_recordset($1::jsonb) AS v(venue_id int,marks jsonb,detail_rows jsonb,source_summary jsonb) ORDER BY venue_id
+    ON CONFLICT (venue_id) DO UPDATE SET marks=EXCLUDED.marks, detail_rows=EXCLUDED.detail_rows, source_summary=EXCLUDED.source_summary, imported_at=now()`,
     [JSON.stringify(snapshotsToSave)]);
   const matched = snapshotsToSave.reduce((sum, row) => sum + Object.keys(row.marks).length, 0);
   return { imported: rows.length, matched, unmatched, venues: snapshotsToSave.length };

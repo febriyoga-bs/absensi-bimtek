@@ -192,6 +192,7 @@ CREATE TABLE IF NOT EXISTS venue_arrival_recap (
 );
 ALTER TABLE venue_arrival_recap ENABLE ROW LEVEL SECURITY;
 ALTER TABLE venue_arrival_recap ADD COLUMN IF NOT EXISTS detail_rows JSONB;
+ALTER TABLE venue_arrival_recap ADD COLUMN IF NOT EXISTS source_summary JSONB;
 
 ALTER TABLE people ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
 ALTER TABLE people ADD COLUMN IF NOT EXISTS roster_added_at TIMESTAMPTZ;
