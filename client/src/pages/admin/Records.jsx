@@ -16,6 +16,7 @@ export default function Records() {
   const [params, setParams] = useSearchParams();
   const [sessions, setSessions] = useState([]);
   const [venues, setVenues] = useState([]);
+  const [recorders, setRecorders] = useState([]);
   const { lo } = useOutletContext() || {};
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
@@ -35,12 +36,13 @@ export default function Records() {
   const [noteTarget, setNoteTarget] = useState(null);
   const [noteNotice, setNoteNotice] = useState('');
   const sid = params.get('sesi') || '';
+  const recordedBy = params.get('recorded_by') || '';
   const status = params.get('status') || '';
   const position = params.get('position') || '';
   const venue = lo ? '' : params.get('venue') || '';
   const page = Math.max(Number(params.get('hal')) || 1, 1);
   // ganti filter → kembali ke halaman 1
-  const setParam = (k, v) => setParams({ sesi: sid, status, venue, position, hal: '1', [k]: v });
+  const setParam = (k, v) => setParams({ sesi: sid, status, venue, position, recorded_by: recordedBy, hal: '1', [k]: v });
   const pages = Math.max(Math.ceil(total / PAGE), 1);
 
   useEffect(() => {
@@ -56,16 +58,17 @@ export default function Records() {
     if (!sid) return;
     const qs = new URLSearchParams({
       session_id: sid, limit: PAGE, offset: (page - 1) * PAGE,
+      ...(recordedBy && { recorded_by: recordedBy }),
       ...(position && { position }),
       ...(status && { status }), ...(venue && { venue_id: venue }),
     });
     setLoading(true);
     api(`/admin/attendance?${qs}`, { admin: true })
-      .then((d) => { setRows(d.rows); setTotal(d.total); setCounts(d.counts); window.scrollTo({ top: 0 }); })
+      .then((d) => { setRows(d.rows); setRecorders(d.recorders || []); setTotal(d.total); setCounts(d.counts); window.scrollTo({ top: 0 }); })
       .finally(() => setLoading(false));
     api(`/admin/attempts?session_id=${sid}${venue ? `&venue_id=${venue}` : ''}${position ? `&position=${encodeURIComponent(position)}` : ''}`, { admin: true }).then(setAttempts);
   };
-  useEffect(load, [sid, status, venue, position, page]);
+  useEffect(load, [sid, status, venue, position, recordedBy, page]);
 
   async function setStatus(id, st) {
     await api(`/admin/attendance/${id}`, { method: 'PATCH', admin: true, body: { status: st } });
@@ -120,6 +123,11 @@ export default function Records() {
             {venues.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
           </select>
         )}
+        <select aria-label="Diabsenkan oleh LO" value={recordedBy} onChange={(e) => setParam('recorded_by', e.target.value)}>
+          <option value="">Semua LO pencatat</option>
+          {recordedBy && !recorders.includes(recordedBy) && <option value={recordedBy}>{recordedBy} (tidak ada di sesi/venue ini)</option>}
+          {recorders.map((name) => <option key={name} value={name}>{name}</option>)}
+        </select>
         <select aria-label="Filter jabatan" value={position} onChange={(e) => setParam('position', e.target.value)}>
           <option value="">Semua jabatan</option>
           <option value="lo">LO</option>
@@ -140,7 +148,7 @@ export default function Records() {
             <option value="false">CSV: Sudah absen</option>
             <option value="true">CSV: Semua peserta</option>
           </select>
-          <a className="btn btn--sm" href={adminUrl(`/export?session_id=${sid}${venue ? `&venue_id=${venue}` : ''}${position ? `&position=${encodeURIComponent(position)}` : ''}${exportAll ? '&include_all=true' : ''}`)}><Icon name="download" size={15} />Unduh CSV</a>
+          <a className="btn btn--sm" href={adminUrl(`/export?session_id=${sid}${venue ? `&venue_id=${venue}` : ''}${position ? `&position=${encodeURIComponent(position)}` : ''}${recordedBy ? `&recorded_by=${encodeURIComponent(recordedBy)}` : ''}${exportAll ? '&include_all=true' : ''}`)}><Icon name="download" size={15} />Unduh CSV</a>
         </>}
       </div>
       <div className="tabs">
@@ -150,9 +158,9 @@ export default function Records() {
 
       {tab === 'absen' && noteNotice && <p className="alert alert--ok" role="status">{noteNotice}</p>}
       {tab === 'absen' && deleteNotice && <p className="alert alert--ok" role="status">{deleteNotice}</p>}
-      {tab === 'absen' && loading && !rows.length && <div className="grid"><SkelCards n={4} h={200} /></div>}
+      {tab === 'absen' && loading && !rows.length && <div className="grid attendance-grid"><SkelCards n={4} h={200} /></div>}
       {tab === 'absen' && (
-        <div className="grid" style={loading && rows.length ? { opacity: 0.5, transition: 'opacity .2s' } : undefined}>
+        <div className="grid attendance-grid" style={loading && rows.length ? { opacity: 0.5, transition: 'opacity .2s' } : undefined}>
           {rows.map((r) => (
             <div key={r.id} className={`rec rec--${r.status}`}>
               <div>
@@ -206,6 +214,8 @@ export default function Records() {
       )}
 
       {tab === 'blok' && (
+        <>
+        {recordedBy && <p className="muted small">Filter LO pencatat berlaku untuk absensi masuk dan CSV. Percobaan diblokir tidak memiliki data LO pencatat.</p>}
         <table className="table stack-table" role="table" aria-label="Percobaan absensi diblokir">
           <thead><tr><th>Waktu</th><th>Nama</th><th>Alasan</th><th>Jarak</th><th>Peta</th></tr></thead>
           <tbody>
@@ -226,6 +236,7 @@ export default function Records() {
             {!attempts.length && <tr><td colSpan={5} className="muted">Tidak ada.</td></tr>}
           </tbody>
         </table>
+        </>
       )}
 
       <dialog ref={deleteDialog} className="assignment-dialog" aria-labelledby="delete-attendance-title"

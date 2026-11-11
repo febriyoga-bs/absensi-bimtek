@@ -906,6 +906,7 @@ function attendancePositionFilter(req) {
 /** Daftar absen per sesi, dengan halaman (default 48 per halaman) agar ringan. */
 r.get('/attendance', ah(async (req, res) => {
   const v = scopeVenue(req);
+  const recordedBy = typeof req.query.recorded_by === 'string' ? req.query.recorded_by.trim().slice(0, 300) : '';
   const status = ['valid', 'review', 'ditolak', 'berhalangan'].includes(req.query.status) ? req.query.status : null;
   const limit = Math.min(Math.max(Number(req.query.limit) || 48, 1), 200);
   const offset = Math.max(Number(req.query.offset) || 0, 0);
@@ -922,10 +923,10 @@ r.get('/attendance', ah(async (req, res) => {
               (a.status<>'berhalangan' AND ($6::int IS NULL OR a.venue_id=$2::int)
                 AND ${canCheckInForLo('$6', '$2')}) AS can_edit_note
        FROM attendance a JOIN people p ON p.id=a.person_id LEFT JOIN venues v ON v.id=a.venue_id
-       WHERE ${where} AND ($3::text IS NULL OR a.status=$3)
+       WHERE ${where} AND ($3::text IS NULL OR a.status=$3) AND ($7::text='' OR a.scanned_by=$7)
        ORDER BY a.risk_score DESC, a.created_at DESC
        LIMIT $4 OFFSET $5`,
-      [req.query.session_id, v, status, limit, offset, req.user.lo]
+      [req.query.session_id, v, status, limit, offset, req.user.lo, recordedBy]
     ),
     q(
       `SELECT count(*)::int AS total,
@@ -933,14 +934,19 @@ r.get('/attendance', ah(async (req, res) => {
               count(*) FILTER (WHERE a.status='review')::int AS review,
               count(*) FILTER (WHERE a.status='ditolak')::int AS ditolak,
               count(*) FILTER (WHERE a.status='berhalangan')::int AS berhalangan
-       FROM attendance a WHERE ${where}`,
-      [req.query.session_id, v]
+       FROM attendance a WHERE ${where} AND ($3::text='' OR a.scanned_by=$3)`,
+      [req.query.session_id, v, recordedBy]
     ),
   ]);
   // Signed URL R2 hanya untuk foto di halaman ini (bukan semua foto sesi)
   const out = await Promise.all(rows.map(async ({ photo_path, ...x }) => ({ ...x, photo_url: photo_path ? await photoUrl(photo_path) : null, has_photo: !!photo_path })));
+  const { rows: recorders } = await q(`SELECT DISTINCT a.scanned_by FROM attendance a
+    WHERE a.session_id=$1 AND ($2::int IS NULL OR a.venue_id=$2)
+      AND a.method IN ('manual','qr') AND a.scanned_by IS NOT NULL
+    ORDER BY a.scanned_by`, [req.query.session_id, v]);
   res.json({
     rows: out,
+    recorders: recorders.map((row) => row.scanned_by),
     total: status ? c[status] : c.total,
     counts: c,
     limit,
@@ -1028,6 +1034,7 @@ r.get('/photo/:id', ah(async (req, res) => {
  */
 r.get('/export', ah(async (req, res) => {
   const v = scopeVenue(req);
+  const recordedBy = typeof req.query.recorded_by === 'string' ? req.query.recorded_by.trim().slice(0, 300) : '';
   const positionFilter = attendancePositionFilter(req);
   const { rows: [s] } = await q('SELECT * FROM sessions WHERE id=$1', [req.query.session_id]);
   if (!s) throw new HttpError(404, 'Sesi tidak ditemukan');
@@ -1040,12 +1047,12 @@ r.get('/export', ah(async (req, res) => {
      LEFT JOIN venues pv ON pv.id=p.venue_id
      LEFT JOIN attendance a ON a.person_id=p.id AND a.session_id=$1
      LEFT JOIN venues av ON av.id=a.venue_id
-     WHERE (${positionFilter}) AND ((a.id IS NOT NULL AND ($6::boolean OR a.status IN ('valid','review')) AND ($4::int IS NULL OR a.venue_id=$4))
+     WHERE (${positionFilter}) AND ($7::text='' OR a.scanned_by=$7) AND ((a.id IS NOT NULL AND ($6::boolean OR a.status IN ('valid','review')) AND ($4::int IS NULL OR a.venue_id=$4))
         OR ($6::boolean AND a.id IS NULL AND ($2='semua' OR p.role=$2) AND ${inRosterAt('LEAST(now(), $5::timestamptz)')}
             AND (cardinality(COALESCE($3::int[],'{}'))=0 OR p.venue_id IS NULL OR p.venue_id = ANY($3::int[]))
             AND ($4::int IS NULL OR p.venue_id IS NULL OR p.venue_id=$4)))
      ORDER BY p.role, p.name`,
-    [s.id, s.role, s.venue_ids, v, s.ends_at, req.query.include_all === 'true']
+    [s.id, s.role, s.venue_ids, v, s.ends_at, req.query.include_all === 'true', recordedBy]
   );
   let venueName = '';
   if (v) venueName = (await q('SELECT name FROM venues WHERE id=$1', [v])).rows[0]?.name || '';
