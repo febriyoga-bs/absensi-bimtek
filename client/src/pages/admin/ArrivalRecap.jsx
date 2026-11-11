@@ -29,6 +29,8 @@ export default function ArrivalRecap() {
   const [position, setPosition] = useState('');
   const [arrival, setArrival] = useState('');
   const dialog = useRef(null);
+  const latestImport = rows?.reduce((latest, venue) =>
+    venue.imported_at && (!latest || venue.imported_at > latest) ? venue.imported_at : latest, null);
   const entries = participants?.entries;
   const positions = [...new Set(entries?.map((person) => person.position).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'id'));
   const search = query.trim().toLowerCase();
@@ -73,7 +75,12 @@ export default function ArrivalRecap() {
     <>
       <div className="page-head">
         <div><h2>Rekap Kehadiran</h2><p className="muted">Kedatangan peserta berdasarkan Excel yang diimpor.</p></div>
-        <Link className="btn" to="/admin/scan">{user?.role === 'lo' ? 'Absenkan Peserta' : 'Daftar Peserta'}</Link>
+        <div className="public-dashboard__tools">
+          {rows && <p className="muted small public-dashboard__updated" role="status">
+            Impor terakhir · {latestImport ? fmtFull(latestImport) : 'Belum ada impor'}
+          </p>}
+          <Link className="btn" to="/admin/scan">{user?.role === 'lo' ? 'Absenkan Peserta' : 'Daftar Peserta'}</Link>
+        </div>
       </div>
       <ArrivalTotals venues={(rows || []).filter((venue) => venue.source_ready)} />
       {user?.role === 'admin' && <details className="card arrival-import">
@@ -115,10 +122,9 @@ export default function ArrivalRecap() {
               </button>)}
             </div>}
             <ArrivalBreakdown rows={venue.breakdown} />
-            <small className="muted arrival-venue-import">
-              {venue.source_ready ? `Terakhir diimpor ${fmtFull(venue.imported_at)}`
-                : venue.imported_at ? 'Admin Utama perlu mengimpor ulang file Detail Peserta.' : 'Belum ada impor Detail Peserta.'}
-            </small>
+            {!venue.source_ready && <small className="muted arrival-venue-import">
+              {venue.imported_at ? 'Admin Utama perlu mengimpor ulang file Detail Peserta.' : 'Belum ada impor Detail Peserta.'}
+            </small>}
           </article>
         ))}
       </div>}
