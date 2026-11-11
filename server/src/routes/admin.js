@@ -624,7 +624,9 @@ r.get('/scan/participants', ah(async (req, res) => {
       SELECT p.id, p.code, p.name, p.position, p.phone, p.institution, p.npsn, p.ruangan, p.venue_name, p.arrival_status,
         ${canCheckInForLo('$5', '$6')} AS can_check_in,
         CASE WHEN s.id IS NOT NULL THEN json_build_object('id',s.id,'name',s.name,'type',s.type,'starts_at',s.starts_at,'is_test',s.is_test) END AS session,
-        CASE WHEN a.id IS NOT NULL THEN json_build_object('at',a.created_at,'status',a.status,'method',a.method) END AS recorded
+        CASE WHEN a.id IS NOT NULL THEN json_build_object('id',a.id,'at',a.created_at,'status',a.status,'method',a.method,
+          'participant_note',CASE WHEN ${canCheckInForLo('$5', '$6')} THEN a.participant_note END,
+          'can_edit_note',a.venue_id=$6::int AND ${canCheckInForLo('$5', '$6')}) END AS recorded
       FROM page_rows p
       LEFT JOIN LATERAL (
         SELECT s.id,s.name,s.type,s.starts_at,s.is_test FROM sessions s
@@ -859,7 +861,9 @@ r.get('/attendance', ah(async (req, res) => {
               a.created_at, a.device_id, a.user_agent, a.ip, a.photo_path, a.venue_id, a.method, a.scanned_by, a.participant_note,
               p.name, p.code, p.role, p.institution, p.position, v.name AS venue_name,
               ${assignedToLo('$6', '$2')} AS can_verify,
-              ${canDeleteAttendance('$6', '$2')} AS can_delete
+              ${canDeleteAttendance('$6', '$2')} AS can_delete,
+              (a.status<>'berhalangan' AND ($6::int IS NULL OR a.venue_id=$2::int)
+                AND ${canCheckInForLo('$6', '$2')}) AS can_edit_note
        FROM attendance a JOIN people p ON p.id=a.person_id LEFT JOIN venues v ON v.id=a.venue_id
        WHERE ${where} AND ($3::text IS NULL OR a.status=$3)
        ORDER BY a.risk_score DESC, a.created_at DESC
@@ -892,6 +896,20 @@ async function assertOwnAttendance(req, id) {
   const { rows: [a] } = await q('SELECT venue_id FROM attendance WHERE id=$1', [id]);
   if (!a || a.venue_id !== req.user.venue) throw new HttpError(403, 'Absensi ini bukan dari venue Anda');
 }
+
+r.patch('/attendance/:id/note', ah(async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1 || id > 2147483647) throw new HttpError(400, 'ID absensi tidak valid.');
+  const note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
+  if (!note || note.length > 1000) throw new HttpError(400, 'Catatan wajib diisi, maksimal 1.000 karakter.');
+  const { rows: [updated] } = await q(
+    `UPDATE attendance a SET participant_note=$1 FROM people p
+     WHERE a.id=$2 AND p.id=a.person_id AND a.status<>'berhalangan'
+       AND ($3::int IS NULL OR a.venue_id=$4::int) AND ${canCheckInForLo('$3', '$4')}
+     RETURNING a.id, a.participant_note`, [note, id, req.user.lo, req.user.venue]);
+  if (!updated) throw new HttpError(404, 'Absensi tidak ditemukan atau catatannya tidak dapat Anda ubah.');
+  res.json(updated);
+}));
 
 r.patch('/attendance/:id', ah(async (req, res) => {
   if (!['valid', 'review', 'ditolak'].includes(req.body?.status)) throw new HttpError(400, 'Status tidak valid');

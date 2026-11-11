@@ -8,6 +8,7 @@ import { SkelRows, Spinner } from '../../components/Skeleton.jsx';
 import CameraCapture from '../../components/CameraCapture.jsx';
 import WhatsAppLink from '../../components/WhatsAppLink.jsx';
 import { formatRoom } from '../../lib/room.js';
+import EditAttendanceNote from './EditAttendanceNote.jsx';
 
 // Absenkan lewat scan QR dinonaktifkan sementara. Ubah ke true untuk memunculkan lagi tab "Scan QR"
 // (server juga perlu QR_SCAN_ENABLED = true di server/src/routes/admin.js).
@@ -73,6 +74,8 @@ export default function Scan() {
   const [revision, setRevision] = useState(0);
   const [pending, setPending] = useState(null);
   const [shot, setShot] = useState(null);
+  const [noteTarget, setNoteTarget] = useState(null);
+  const [noteNotice, setNoteNotice] = useState('');
   const [testSessionId, setTestSessionId] = useState('');
   const [testSessions, setTestSessions] = useState([]);
   const [sessionError, setSessionError] = useState('');
@@ -334,6 +337,8 @@ export default function Scan() {
                         </td>
                         <td role="cell" data-label="Status absensi"><span className={`tag ${style}`}>{status}</span></td>
                         {lo && <td role="cell" className="stack-full">
+                          {p.attended?.can_edit_note && <button type="button" className="btn btn--sm"
+                            onClick={() => { setNoteNotice(''); setNoteTarget({ ...p.attended, name: p.name }); }}>Ubah catatan</button>}
                           {p.can_check_in && !p.attended ? (
                             <div className="row scan__row-actions">
                               <button className="btn btn--sm btn--primary" disabled={!p.session || !!pending}
@@ -432,6 +437,9 @@ export default function Scan() {
           </form>
         </>}
       </dialog>
+      {noteNotice && <p className="alert alert--ok" role="status">{noteNotice}</p>}
+      {noteTarget && <EditAttendanceNote key={noteTarget.id} target={noteTarget} onClose={() => setNoteTarget(null)}
+        onSaved={() => { setNoteNotice('Catatan berhasil diperbarui.'); setRevision((value) => value + 1); }} />}
       {shot && <LoShot target={shot} user={user} busy={pending === shot.code} onSend={sendShot} onClose={() => setShot(null)} />}
     </>
   );

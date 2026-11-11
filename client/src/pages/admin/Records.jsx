@@ -5,6 +5,7 @@ import Icon from '../../components/Icon.jsx';
 import { MapModal } from '../../components/MapEmbed.jsx';
 import { fmtDT, FLAG_LABEL, sessionTitle } from './shared.js';
 import { SkelCards } from '../../components/Skeleton.jsx';
+import EditAttendanceNote from './EditAttendanceNote.jsx';
 
 const ST_LABEL = { valid: 'Valid', review: 'Perlu dicek', ditolak: 'Ditolak', berhalangan: 'Mundur/Berhalangan Hadir' };
 const PAGE = 48;
@@ -31,6 +32,8 @@ export default function Records() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const [deleteNotice, setDeleteNotice] = useState('');
+  const [noteTarget, setNoteTarget] = useState(null);
+  const [noteNotice, setNoteNotice] = useState('');
   const sid = params.get('sesi') || '';
   const status = params.get('status') || '';
   const venue = lo ? '' : params.get('venue') || '';
@@ -136,6 +139,7 @@ export default function Records() {
         <button className={tab === 'blok' ? 'on' : ''} onClick={() => setTab('blok')}>Percobaan diblokir ({attempts.length})</button>
       </div>
 
+      {tab === 'absen' && noteNotice && <p className="alert alert--ok" role="status">{noteNotice}</p>}
       {tab === 'absen' && deleteNotice && <p className="alert alert--ok" role="status">{deleteNotice}</p>}
       {tab === 'absen' && loading && !rows.length && <div className="grid"><SkelCards n={4} h={200} /></div>}
       {tab === 'absen' && (
@@ -169,6 +173,8 @@ export default function Records() {
                 )}
                 {r.participant_note && <div className="rec__note small"><b>Catatan</b><div>{r.participant_note}</div></div>}
                 <div className="row">
+                  {r.can_edit_note && <button type="button" className="btn btn--sm" disabled={loading}
+                    onClick={() => { setNoteNotice(''); setNoteTarget(r); }}>Ubah catatan</button>}
                   <span className={`st st--${r.status}`}>{ST_LABEL[r.status]}</span>
                   {r.status !== 'berhalangan' && r.can_verify !== false && <>
                     {r.status !== 'valid' && <button className="btn btn--sm btn--ok" onClick={() => setStatus(r.id, 'valid')}>Sahkan</button>}
@@ -232,6 +238,9 @@ export default function Records() {
           </div>
         </form>
       </dialog>
+      {noteTarget && <EditAttendanceNote key={noteTarget.id} target={noteTarget} onClose={() => setNoteTarget(null)}
+        onSaved={(updated) => { setRows((current) => current.map((row) => row.id === updated.id ? { ...row, ...updated } : row));
+          setNoteNotice('Catatan berhasil diperbarui.'); }} />}
       {zoom && <div className="modal" onClick={() => setZoom(null)}><img src={zoom} alt="" /></div>}
       <MapModal point={mapPoint} onClose={() => setMapPoint(null)} />
     </>

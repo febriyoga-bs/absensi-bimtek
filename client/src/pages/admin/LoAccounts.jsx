@@ -18,6 +18,9 @@ function randomPassword() {
 export default function LoAccounts() {
   const [list, setList] = useState([]);
   const [loaded, setLoaded] = useState(false);
+  const [loginFilter, setLoginFilter] = useState('all');
+  const [loginDate, setLoginDate] = useState('');
+  const [loginSort, setLoginSort] = useState('default');
   const [venues, setVenues] = useState([]);
   const [form, setForm] = useState(blank);
   const [msg, setMsg] = useState(null);
@@ -53,6 +56,25 @@ export default function LoAccounts() {
   }
 
   const loginUrl = `${window.location.origin}/admin/login`;
+  const wibDate = (value) => new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date(value));
+  const today = wibDate(Date.now());
+  const filtered = list.filter((account) => {
+    const last = account.last_login_at;
+    if (loginFilter === 'never') return !last;
+    if (loginFilter === 'ever') return !!last;
+    if (loginFilter === 'today') return !!last && wibDate(last) === today;
+    if (loginFilter === 'date') return !loginDate || (!!last && wibDate(last) === loginDate);
+    return true;
+  });
+  if (loginSort !== 'default') filtered.sort((a, b) => {
+    if (!a.last_login_at && !b.last_login_at) return a.name.localeCompare(b.name, 'id');
+    if (!a.last_login_at) return 1;
+    if (!b.last_login_at) return -1;
+    const delta = new Date(a.last_login_at) - new Date(b.last_login_at);
+    return (loginSort === 'newest' ? -delta : delta) || a.name.localeCompare(b.name, 'id');
+  });
   const copyText = (c) => `Login Dashboard LO — ${c.venue}\n${loginUrl}\nUsername: ${c.username}\nPassword: ${c.password}`;
 
   return (
@@ -107,10 +129,34 @@ export default function LoAccounts() {
         </div>
       </form>
 
+      <div className="toolbar">
+        <label>Login terakhir
+          <select value={loginFilter} onChange={(event) => setLoginFilter(event.target.value)}>
+            <option value="all">Semua akun</option>
+            <option value="never">Belum pernah login</option>
+            <option value="ever">Sudah pernah login</option>
+            <option value="today">Login terakhir hari ini (WIB)</option>
+            <option value="date">Tanggal login terakhir (WIB)</option>
+          </select>
+        </label>
+        {loginFilter === 'date' && <label>Tanggal (WIB)
+          <input type="date" value={loginDate} onChange={(event) => setLoginDate(event.target.value)} />
+        </label>}
+        <label>Urutan login
+          <select value={loginSort} onChange={(event) => setLoginSort(event.target.value)}>
+            <option value="default">Urutan bawaan</option>
+            <option value="newest">Login terbaru dahulu</option>
+            <option value="oldest">Login terlama dahulu</option>
+          </select>
+        </label>
+        <button type="button" className="btn btn--sm" onClick={load}><Icon name="refresh" size={15} />Muat ulang</button>
+        <button type="button" className="btn btn--sm" onClick={() => { setLoginFilter('all'); setLoginDate(''); setLoginSort('default'); }}>Reset filter</button>
+      </div>
+      {loaded && <p className="muted small" role="status">Menampilkan {filtered.length} dari {list.length} akun LO. Filter menggunakan tanggal login terakhir dalam WIB.</p>}
       <table className="table stack-table" role="table" aria-label="Daftar akun LO">
         <thead><tr><th>Nama</th><th>Username</th><th>Venue</th><th>Login terakhir</th><th>Status</th><th></th></tr></thead>
         <tbody>
-          {list.map((l) => (
+          {filtered.map((l) => (
             <tr key={l.id} role="row">
               <td role="cell"><b>{l.name}</b></td>
               <td role="cell" data-label="Username"><code>{l.username}</code></td>
@@ -125,7 +171,7 @@ export default function LoAccounts() {
             </tr>
           ))}
           {!loaded && <SkelRows rows={5} cols={6} />}
-          {loaded && !list.length && <tr><td colSpan={6} className="muted">Belum ada akun LO.</td></tr>}
+          {loaded && !filtered.length && <tr><td colSpan={6} className="muted">{list.length ? 'Tidak ada akun LO yang cocok dengan filter.' : 'Belum ada akun LO.'}</td></tr>}
         </tbody>
       </table>
       <p className="muted small">Link login LO: <code>{loginUrl}</code> → pilih tab <b>LO Venue</b>.</p>
