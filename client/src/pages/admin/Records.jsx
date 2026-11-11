@@ -6,6 +6,7 @@ import { MapModal } from '../../components/MapEmbed.jsx';
 import { fmtDT, FLAG_LABEL, sessionTitle } from './shared.js';
 import { SkelCards } from '../../components/Skeleton.jsx';
 import EditAttendanceNote from './EditAttendanceNote.jsx';
+import { printAttendance } from '../../lib/printAttendance.js';
 
 const ST_LABEL = { valid: 'Valid', review: 'Perlu dicek', ditolak: 'Ditolak', berhalangan: 'Mundur/Berhalangan Hadir' };
 const PAGE = 48;
@@ -17,6 +18,9 @@ export default function Records() {
   const [sessions, setSessions] = useState([]);
   const [venues, setVenues] = useState([]);
   const [recorders, setRecorders] = useState([]);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState('');
+  const [pdfError, setPdfError] = useState('');
   const { lo } = useOutletContext() || {};
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
@@ -79,6 +83,19 @@ export default function Records() {
       const old = rows.find((x) => x.id === id)?.status;
       return old && old !== st ? { ...c, [old]: c[old] - 1, [st]: c[st] + 1 } : c;
     });
+  }
+
+  async function exportPdf() {
+    setPdfBusy(true); setPdfError(''); setPdfProgress('');
+    try {
+      await printAttendance({ filters: { session_id: sid, ...(venue && { venue_id: venue }),
+        ...(status && { status }), ...(position && { position }), ...(recordedBy && { recorded_by: recordedBy }) },
+        title: [sessionTitle(sessions.find((session) => String(session.id) === String(sid))),
+          venue ? venues.find((item) => String(item.id) === String(venue))?.name : 'Semua venue yang dapat diakses',
+          recordedBy || 'Semua LO pencatat', position || 'Semua jabatan', ST_LABEL[status] || 'Semua status'].filter(Boolean).join(' · '),
+        onProgress: setPdfProgress });
+    } catch (error) { setPdfError(error.message); }
+    finally { setPdfBusy(false); }
   }
 
   function openDeleteDialog(record) {
@@ -144,6 +161,9 @@ export default function Records() {
         </select>
         <button className="btn btn--sm" onClick={load}><Icon name="refresh" size={15} />Muat ulang</button>
         {sid && <>
+          <button type="button" className="btn btn--sm" disabled={pdfBusy || loading} onClick={exportPdf}>
+            <Icon name="download" size={15} />{pdfBusy ? `Menyiapkan PDF ${pdfProgress}` : 'Export PDF'}
+          </button>
           <select aria-label="Isi ekspor CSV" value={String(exportAll)} onChange={(e) => setExportAll(e.target.value === 'true')}>
             <option value="false">CSV: Sudah absen</option>
             <option value="true">CSV: Semua peserta</option>
@@ -155,6 +175,7 @@ export default function Records() {
         <button className={tab === 'absen' ? 'on' : ''} onClick={() => setTab('absen')}>Absensi masuk ({total})</button>
         <button className={tab === 'blok' ? 'on' : ''} onClick={() => setTab('blok')}>Percobaan diblokir ({attempts.length})</button>
       </div>
+      {pdfError && <p className="alert alert--err" role="alert">{pdfError}</p>}
 
       {tab === 'absen' && noteNotice && <p className="alert alert--ok" role="status">{noteNotice}</p>}
       {tab === 'absen' && deleteNotice && <p className="alert alert--ok" role="status">{deleteNotice}</p>}
