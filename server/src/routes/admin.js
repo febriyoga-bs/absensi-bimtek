@@ -857,8 +857,22 @@ r.get('/reporting/attendance-ranking', ah(async (req, res) => {
     SELECT l.id,l.name,l.venue_id,v.name AS venue,
       count(*) OVER (PARTITION BY l.venue_id,l.name) AS same_name
     FROM lo_accounts l JOIN venues v ON v.id=l.venue_id
+  ), targets AS (
+    SELECT DISTINCT l.id AS owner_id,p.id AS person_id
+    FROM assignment_roster r
+    CROSS JOIN LATERAL jsonb_each(r.data->'attendance_assignments') entries
+    JOIN owners l ON entries.key=l.id::text
+    CROSS JOIN LATERAL jsonb_to_recordset(entries.value) AS m(code text,name text,position text,npsn text,venue_id int)
+    JOIN people p ON p.venue_id=l.venue_id AND p.venue_id=m.venue_id AND p.role='peserta'
+      AND lower(trim(m.position))=lower(trim(p.position))
+      AND ${nameKeySql('m.name')}=${nameKeySql('p.name')}
+      AND (lower(m.code)=lower(p.code) OR (m.npsn IS NOT NULL
+        AND string_to_array(replace(m.npsn,' ',''),';') && string_to_array(replace(p.npsn,' ',''),';')))
+    WHERE r.id=1 AND p.archived_at IS NULL
+      AND (lower(trim(p.position)) IN ('bendahara','pengawas') OR lower(trim(p.position)) ~ '^fasil(itator)?($|[[:space:]])')
   )
   SELECT l.id,l.name,l.venue,
+    (SELECT count(*)::int FROM targets t WHERE t.owner_id=l.id) AS assigned,
     count(DISTINCT p.id) FILTER (WHERE lower(trim(p.position)) IN ('bendahara','pengawas'))::int AS participants,
     count(DISTINCT p.id) FILTER (WHERE lower(trim(p.position)) ~ '^fasil(itator)?($|[[:space:]])')::int AS facilitators,
     count(DISTINCT p.id)::int AS total
@@ -868,6 +882,7 @@ r.get('/reporting/attendance-ranking', ah(async (req, res) => {
     AND EXISTS (SELECT 1 FROM sessions s WHERE s.id=a.session_id AND NOT s.is_test
       AND ($1::text IS NULL OR (s.starts_at AT TIME ZONE 'Asia/Jakarta')::date=$1::date))
   LEFT JOIN people p ON p.id=a.person_id AND p.role='peserta'
+    AND EXISTS (SELECT 1 FROM targets t WHERE t.owner_id=l.id AND t.person_id=p.id)
     AND (lower(trim(p.position)) IN ('bendahara','pengawas') OR lower(trim(p.position)) ~ '^fasil(itator)?($|[[:space:]])')
   GROUP BY l.id,l.name,l.venue
   ORDER BY total DESC,l.name,l.id`, [day]);
