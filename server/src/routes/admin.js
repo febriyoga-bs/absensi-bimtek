@@ -440,8 +440,10 @@ r.post('/people/import', requireSuper, ah(async (req, res) => {
 }));
 
 /* ---------- Sesi ---------- */
+// Profil Admin Ryan disimpan sebagai panitia, tetapi tidak diwajibkan absen.
 const inRosterAt = (time) => `(p.roster_added_at IS NULL OR p.roster_added_at <= ${time})
-  AND (p.archived_at IS NULL OR p.archived_at > ${time})`;
+  AND (p.archived_at IS NULL OR p.archived_at > ${time})
+  AND NOT (p.role='panitia' AND lower(p.code)='admin.ryan')`;
 
 r.get('/venue-attendance', ah(async (req, res) => {
   res.json(await getVenueAttendance(scopeVenue(req), scopeDay(req)));
@@ -460,7 +462,7 @@ r.get('/venue-attendance/:venueId/:group', ah(async (req, res) => {
  * Rekap per sesi. Untuk LO (atau admin yang memfilter venue) semua angka dihitung
  * hanya untuk venue tsb:
  *  - sesi yang ditampilkan: sesi untuk semua venue, atau yang mencakup venue ini
- *  - "expected": orang yang ditetapkan ke venue ini + orang tanpa venue (bebas)
+ *  - "expected": target absensi yang ditetapkan ke venue ini + target tanpa venue
  */
 r.get('/sessions', ah(async (req, res) => {
   const v = scopeVenue(req);
