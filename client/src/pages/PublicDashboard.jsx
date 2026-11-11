@@ -6,6 +6,7 @@ import FontIcon from '../components/FontIcon.jsx';
 import ArrivalBreakdown from '../components/ArrivalBreakdown.jsx';
 import ArrivalTotals from '../components/ArrivalTotals.jsx';
 import { venueAttendanceGroups } from '../lib/venueAttendanceGroups.js';
+import { ReportingView } from './admin/Reporting.jsx';
 import './admin/Reporting.css';
 
 const number = new Intl.NumberFormat('id-ID');
@@ -13,8 +14,6 @@ const sections = {
   pelaporan: {
     label: 'Pantau Pelaporan', icon: 'chart-line', description: 'Status Laporan 50% sekolah per venue.',
     periods: [['current', 'BIMTEK Tahap 3'], ['k3', 'BIMTEK Tahap 2']],
-    columns: [['belum_kirim', 'Belum kirim'], ['menunggu_reviu', 'Menunggu reviu'], ['ditolak', 'Ditolak'],
-      ['diterima', 'Diterima'], ['belum_ada_data', 'Belum ada data']],
   },
   absensi: {
     label: 'Rekap Absensi', icon: 'clipboard-list', description: 'Absensi resmi peserta dan LO per venue.',
@@ -31,7 +30,7 @@ export default function PublicDashboard() {
   const { section: routeSection } = useParams();
   const requested = routeSection || params.get('bagian');
   const section = Object.hasOwn(sections, requested) ? requested : 'pelaporan';
-  const { label, description, columns } = sections[section];
+  const { label, description, columns = [] } = sections[section];
   const [days, setDays] = useState([]);
   const [menuOpen, setMenuOpen] = useState(false);
   const periods = section === 'absensi' ? days : sections[section].periods;
@@ -51,7 +50,7 @@ export default function PublicDashboard() {
     if (routeSection !== section) return;
     let active = true;
     api(path).then((data) => {
-      if (active) setResult({ path, ...(Array.isArray(data) ? { rows: data } : data) });
+      if (active) setResult({ path, ...(section === 'pelaporan' ? { report: data } : { rows: data }) });
     })
       .catch((error) => { if (active) setResult({ path, error: error.message }); });
     return () => { active = false; };
@@ -63,10 +62,6 @@ export default function PublicDashboard() {
   }
 
   const rows = current?.rows || [];
-  const hasCounts = rows.some((row) => row.counts);
-  const totals = columns.map(([key]) => rows.reduce((sum, row) => sum + (row.counts?.[key] ?? 0), 0));
-  const comparison = current?.comparison;
-  const submissionDelta = comparison ? comparison.submittedInArchive - comparison.submittedBeforeStart : 0;
 
   return <div className="admin">
     <aside className="admin__nav" onKeyDown={(event) => {
@@ -113,39 +108,8 @@ export default function PublicDashboard() {
       {!current && <p className="muted" role="status">Memuat ringkasan…</p>}
       {current?.error && <p className="alert alert--err" role="alert">{current.error}</p>}
       {current?.rows && !rows.length && <p className="muted">Belum ada data pada bagian ini.</p>}
-      {section === 'pelaporan' && comparison && <div className="stats public-reporting-comparison">
-        <article className="stat">
-          <div className="stat__head"><h4>Sebelum acara dimulai</h4></div>
-          <div className="stat__big">{number.format(comparison.submittedBeforeStart)}<small> sekolah sudah kirim</small></div>
-          <div className="muted small">Tanggal kirim sebelum {new Date(comparison.baseline + 'T00:00:00+07:00').toLocaleDateString('id-ID', {
-            day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta',
-          })}.</div>
-        </article>
-        <article className="stat">
-          <div className="stat__head"><h4>Ringkasan akhir yang tersedia</h4></div>
-          <div className="stat__big">{number.format(comparison.submittedInArchive)}<small> sekolah sudah kirim</small></div>
-          <small className="reporting-comparison-delta">
-            {submissionDelta > 0 ? '+' : ''}{number.format(submissionDelta)} sekolah sejak sebelum acara
-          </small>
-          <div className="muted small">Arsip {comparison.stamp}.</div>
-        </article>
-      </div>}
-      {section === 'pelaporan' && hasCounts && <div className="reporting-hero">
-        <div className="reporting-hero-head"><div><div className="reporting-eyebrow">{periods.find(([value]) => value === period)?.[1]}</div>
-          <h3>Alur Laporan 50%</h3></div></div>
-        <div className="reporting-duo public-reporting-totals">{columns.map(([key, title], index) =>
-          <div key={key}><b>{number.format(totals[index])}</b><span>{title}</span></div>)}</div>
-      </div>}
-      {section === 'pelaporan' && !!rows.length && <div className="public-dashboard__table">
-        <table className="table">
-          <thead><tr><th scope="col">Venue</th>{columns.map(([key, title]) => <th key={key} scope="col">{title}</th>)}</tr></thead>
-          <tbody>{rows.map(({ venue, counts }) => <tr key={venue}>
-            <th scope="row">{venue}</th>
-            {counts ? columns.map(([key]) => <td key={key}>{number.format(counts[key] ?? 0)}</td>)
-              : <td colSpan={columns.length} className="muted">Belum ada data impor</td>}
-          </tr>)}</tbody>
-        </table>
-      </div>}
+      {section === 'pelaporan' && current?.report && <ReportingView key={period} data={current.report}
+        dataset={period} publicView refresh={() => setReload((value) => value + 1)} />}
       {section === 'absensi' && !!rows.length && <div className="stats">
         {rows.map(({ venue, counts, breakdown }) => {
           const pct = counts.target ? Math.round(counts.checked_in / counts.target * 100) : 0;

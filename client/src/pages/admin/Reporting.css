@@ -5,6 +5,26 @@
   --report-border: #e2e8f2;
   min-width: 0;
 }
+.reporting-ranking-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; }
+.reporting-ranking-head h3 { margin: 0; font-family: Georgia, serif; font-size: 24px; }
+.reporting-ranking-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; padding: 5px;
+  border-radius: 999px; margin: 12px 0; background: var(--report-track); }
+.reporting-ranking-tabs button { min-height: 44px; border: 0; border-radius: 999px; background: transparent;
+  color: var(--muted); font: inherit; font-weight: 700; cursor: pointer; }
+.reporting-ranking-tabs button.on { background: var(--report-navy); color: #fff; }
+.reporting-ranking-filters input[type="search"] { flex: 1 1 100%; width: 100%; }
+.reporting-ranking { max-height: 520px; overflow-y: auto; padding: 18px; border: 1px solid var(--report-border);
+  border-radius: 22px; background: #fff; scrollbar-gutter: stable; }
+.reporting-ranking ol { list-style: none; padding: 0; margin: 0; display: grid; gap: 22px; }
+.reporting-ranking-name { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.reporting-ranking-name b { overflow-wrap: anywhere; }
+.reporting-ranking-name strong { flex: none; font-variant-numeric: tabular-nums; }
+.reporting-ranking progress { display: block; width: 100%; height: 10px; margin: 8px 0; border: 0; border-radius: 999px;
+  overflow: hidden; appearance: none; background: var(--report-track); accent-color: #475bcb; }
+.reporting-ranking progress::-webkit-progress-bar { background: var(--report-track); border-radius: 999px; }
+.reporting-ranking progress::-webkit-progress-value { background: #475bcb; border-radius: 999px; }
+.reporting-ranking progress::-moz-progress-bar { background: #475bcb; border-radius: 999px; }
+.reporting-ranking p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
 .reporting-datasets {
   display: inline-grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

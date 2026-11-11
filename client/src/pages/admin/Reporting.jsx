@@ -69,6 +69,47 @@ function ReportingTable({ headers, rows, fullWidthColumn }) {
   );
 }
 
+function ReportingRanking({ rows, movement, movementLabel, own }) {
+  const maxMovement = Math.max(1, ...rows.map((row) => row.change));
+  return <section className="reporting-ranking" aria-label="Daftar peringkat LO" tabIndex={0}>
+    {rows.length ? <ol>
+      {rows.map((row) => <li key={row.key}>
+        <div className="reporting-ranking-name">
+          <b>{row.rank}. {row.name}{own && ownerKey(own) === row.key && <span className="reporting-own">Anda</span>}</b>
+          <strong>{movement ? `+${nf.format(row.change)}` : `${nf.format(row.ratio)}%`}</strong>
+        </div>
+        <progress aria-label={`${movement ? 'Pergerakan' : 'Capaian'} ${row.name}`}
+          value={movement ? row.change : row.ratio} max={movement ? maxMovement : 100} />
+        <p>{movement ? `${nf.format(row.change)} sekolah ${movementLabel.replace(/^Kirim/, 'kirim')} · ` : ''}
+          Total {nf.format(row.sent)}/{nf.format(row.total)} sudah kirim · {row.venue}
+        </p>
+        {row.known < row.total && <small className="muted">
+          Data monitoring tersedia untuk {nf.format(row.known)} dari {nf.format(row.total)} sekolah
+        </small>}
+      </li>)}
+    </ol> : <p className="muted">Tidak ada LO yang cocok dengan filter.</p>}
+  </section>;
+}
+
+function ReportingComparison({ schools, baseline, stamp }) {
+  const before = schools.filter((school) => school.submitted_on && school.submitted_on < baseline).length;
+  const final = schools.filter(submitted).length;
+  const delta = final - before;
+  return <div className="stats public-reporting-comparison">
+    <article className="stat">
+      <div className="stat__head"><h4>Sebelum acara dimulai</h4></div>
+      <div className="stat__big">{nf.format(before)}<small> sekolah sudah kirim</small></div>
+      <div className="muted small">Tanggal kirim sebelum {shortDate.format(new Date(baseline + 'T00:00:00+07:00'))}.</div>
+    </article>
+    <article className="stat">
+      <div className="stat__head"><h4>Ringkasan akhir yang tersedia</h4></div>
+      <div className="stat__big">{nf.format(final)}<small> sekolah sudah kirim</small></div>
+      <small className="reporting-comparison-delta">{delta > 0 ? '+' : ''}{nf.format(delta)} sekolah sejak sebelum acara</small>
+      <div className="muted small">Arsip {stamp}.</div>
+    </article>
+  </div>;
+}
+
 function ImportReporting({ onSaved }) {
   const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -307,8 +348,8 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
         <button type="button" className={movement ? 'on' : ''} aria-pressed={movement} onClick={() => setMovement(true)}>Pergerakan</button>
         <button type="button" className={!movement ? 'on' : ''} aria-pressed={!movement} onClick={() => setMovement(false)}>Capaian</button>
       </div>}
-      <div className="toolbar filters">
-        <input type="search" aria-label="Cari data pelaporan" placeholder={view === 'schools' ? 'Cari sekolah, NPSN, atau wilayah' : `Cari ${views[view].toLowerCase()}`}
+      <div className={`toolbar filters${view === 'ranking' ? ' reporting-ranking-filters' : ''}`}>
+        <input type="search" aria-label="Cari data pelaporan" placeholder={view === 'ranking' ? 'Cari nama LO' : view === 'schools' ? 'Cari sekolah, NPSN, atau wilayah' : `Cari ${views[view].toLowerCase()}`}
           value={term} onChange={(e) => { setTerm(e.target.value); setSelectedFacilitator(null); }} />
         {view === 'schools' && <>
           <select aria-label="Status laporan" value={status} onChange={(e) => setStatus(e.target.value)}>

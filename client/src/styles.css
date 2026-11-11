@@ -340,10 +340,6 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .arrival-metric__label { display: block; font-size: 12px; font-weight: 700; }
 .arrival-venue-import { display: block; margin-top: 12px; }
 .public-dashboard__filters select { width: auto; max-width: 100%; }
-.public-dashboard__table { margin-top: 16px; overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fff; }
-.public-dashboard__table :is(th, td) { text-align: right; font-variant-numeric: tabular-nums; }
-.public-dashboard__table th:first-child { text-align: left; min-width: 135px; }
-.reporting-duo.public-reporting-totals { grid-template-columns: repeat(auto-fit, minmax(min(125px, 100%), 1fr)); }
 .public-reporting-comparison { margin-bottom: 16px; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); }
 .public-reporting-comparison h4 { margin: 0; }
 .reporting-comparison-delta { color: var(--ok); font-size: 12px; font-weight: 700; }
