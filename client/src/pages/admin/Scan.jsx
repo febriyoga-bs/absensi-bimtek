@@ -285,9 +285,9 @@ export default function Scan() {
             {!loading && !listError && list?.arrival_summary && (
               <div className="scan__arrival-recap">
                 <b>Rekap Kehadiran</b>
-                <span className="tag tag--arrival">{number.format(list.arrival_summary.arrived)} sudah tiba</span>
-                <span className="tag tag--venue">{number.format(list.arrival_summary.queued)} sedang antre</span>
-                <span className="tag tag--off">{number.format(list.arrival_summary.unrecorded)} belum terdata</span>
+                <span className="tag tag--arrival">{number.format(list.arrival_summary.arrived)} SUDAH TIBA</span>
+                <span className="tag tag--venue">{number.format(list.arrival_summary.queued)} SEDANG ANTRE</span>
+                <span className="tag tag--off">{number.format(list.arrival_summary.unrecorded)} BELUM TERDATA</span>
                 <Link className="btn btn--sm" to="/admin/kehadiran">Buka rekap</Link>
                 {list.arrival_summary.unrecorded > 0 && !list.arrival_summary.arrived && !list.arrival_summary.queued &&
                   <span className="scan__arrival-note muted small">Belum ada data kedatangan dari rekap Excel yang cocok dengan daftar ini.</span>}
@@ -329,7 +329,7 @@ export default function Scan() {
                         </td>
                         <td role="cell" data-label="Kehadiran di venue">
                           <span className={`tag ${arrivalStyle}`}>
-                            {arrival}
+                            {arrival.toUpperCase()}
                           </span>
                         </td>
                         <td role="cell" data-label="Status absensi"><span className={`tag ${style}`}>{status}</span></td>

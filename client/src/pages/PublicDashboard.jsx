@@ -6,6 +6,7 @@ import FontIcon from '../components/FontIcon.jsx';
 import ArrivalBreakdown from '../components/ArrivalBreakdown.jsx';
 import ArrivalTotals from '../components/ArrivalTotals.jsx';
 import { venueAttendanceGroups } from '../lib/venueAttendanceGroups.js';
+import { fmtFull } from '../lib/time.js';
 import { ReportingView } from './admin/Reporting.jsx';
 import './admin/Reporting.css';
 
@@ -50,7 +51,7 @@ export default function PublicDashboard() {
     if (routeSection !== section) return;
     let active = true;
     api(path).then((data) => {
-      if (active) setResult({ path, ...(section === 'pelaporan' ? { report: data } : { rows: data }) });
+      if (active) setResult({ path, ...(section === 'pelaporan' ? { report: data } : data) });
     })
       .catch((error) => { if (active) setResult({ path, error: error.message }); });
     return () => { active = false; };
@@ -62,6 +63,11 @@ export default function PublicDashboard() {
   }
 
   const rows = current?.rows || [];
+  const sourceStamp = section === 'pelaporan' ? current?.report?.stamp : current?.updated_at;
+  const updateLabel = section === 'pelaporan' ? 'Monitoring terakhir' : section === 'kehadiran' ? 'Impor terakhir' : 'Absensi terakhir';
+  const updateTime = sourceStamp
+    ? section === 'pelaporan' && period === 'k3' ? sourceStamp : fmtFull(sourceStamp)
+    : section === 'absensi' ? 'Belum ada absensi' : 'Belum ada data';
 
   return <div className="admin">
     <aside className="admin__nav" onKeyDown={(event) => {
@@ -91,6 +97,10 @@ export default function PublicDashboard() {
     <main className={`admin__main${section === 'pelaporan' ? ' reporting-page' : ' attendance-dashboard'}`}>
       <div className="page-head">
         <div><h2 id="public-dashboard-title">{label}</h2><p className="muted">{description}</p></div>
+        <div className="public-dashboard__tools">
+        {current && !current.error && <p className="muted small public-dashboard__updated" role="status">
+          {updateLabel} · {updateTime}
+        </p>}
         <div className="row public-dashboard__filters">
           {section === 'absensi' && !!periods?.length && <select value={period} aria-label="Periode" onChange={(event) =>
             setParams({ periode: event.target.value })}>
@@ -99,6 +109,7 @@ export default function PublicDashboard() {
           <button className="btn btn--sm" type="button" onClick={() => { setResult(null); setReload((value) => value + 1); }}>
             <FontIcon name="rotate" /> Muat ulang
           </button>
+        </div>
         </div>
       </div>
       {section === 'pelaporan' && <div className="reporting-datasets" role="group" aria-label="Tahap Bimtek">

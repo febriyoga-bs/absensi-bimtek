@@ -137,6 +137,7 @@ async function parseReporting(csv) {
 
 export async function importReporting(csv) {
   const { entries, official, skipped } = await parseReporting(csv);
+  if (!entries.length) throw new HttpError(400, 'Tidak ada NPSN di CSV yang cocok dengan pemetaan Tahap 3.');
   const { rows: [result] } = await q(`WITH incoming AS (
     SELECT * FROM jsonb_to_recordset($1::jsonb) AS i(npsn text,status text,submitted_on date,progress numeric,
       facilitator text,facilitator_phone text,supervisor text,supervisor_phone text)
@@ -148,8 +149,11 @@ export async function importReporting(csv) {
     SELECT i.npsn FROM incoming i LEFT JOIN known k USING (npsn) WHERE k.npsn IS NULL
   ), saved AS (
     INSERT INTO school_reporting(npsn,status,submitted_on,progress)
-    SELECT i.npsn,i.status,i.submitted_on,i.progress FROM incoming i JOIN known k USING (npsn)
-    WHERE $2::boolean OR NOT EXISTS (SELECT 1 FROM unknown) ORDER BY i.npsn
+    SELECT k.npsn,COALESCE(i.status,'belum_kirim'),i.submitted_on,i.progress
+    FROM known k LEFT JOIN incoming i USING (npsn)
+    WHERE ($2::boolean OR i.npsn IS NOT NULL)
+      AND ($2::boolean OR NOT EXISTS (SELECT 1 FROM unknown))
+    ORDER BY k.npsn
     ON CONFLICT (npsn) DO UPDATE SET status=EXCLUDED.status, submitted_on=EXCLUDED.submitted_on,
       progress=EXCLUDED.progress, updated_at=now()
     RETURNING npsn
@@ -172,9 +176,11 @@ export async function importReporting(csv) {
     RETURNING p.id
   )
   SELECT (SELECT count(*)::int FROM saved) AS updated, (SELECT count(*)::int FROM unknown) AS skipped,
+    CASE WHEN $2::boolean THEN (SELECT count(*)::int FROM known k LEFT JOIN incoming i USING(npsn) WHERE i.npsn IS NULL)
+      ELSE 0 END AS defaulted,
     (SELECT count(*)::int FROM contacts_saved) AS contacts_updated,
     ARRAY(SELECT npsn FROM unknown ORDER BY npsn LIMIT 10) AS unknown`, [JSON.stringify(entries), official]);
   if (!official && result.unknown.length) throw new HttpError(400, `NPSN tidak ada di pemetaan Pelaporan 3 (${result.unknown.join(', ')}). Periksa CSV lalu coba lagi.`);
   if (!result.updated) throw new HttpError(400, 'Tidak ada NPSN di CSV yang cocok dengan pemetaan Tahap 3.');
-  return { updated: result.updated, skipped: skipped + result.skipped, contacts_updated: result.contacts_updated };
+  return { updated: result.updated, skipped: skipped + result.skipped, contacts_updated: result.contacts_updated, defaulted: result.defaulted };
 }

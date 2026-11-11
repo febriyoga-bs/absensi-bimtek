@@ -24,7 +24,12 @@ r.get('/dashboard/:section', ah(async (req, res) => {
   } else if (section === 'absensi') {
     const day = period ?? reportingDates[0];
     if (!reportingDates.includes(day)) throw new HttpError(400, 'Hari absensi tidak valid.');
-    rows = (await getVenueAttendance(null, day)).map(({ name: venue, id, ...groups }) => ({
+    const [venues, { rows: [latest] }] = await Promise.all([
+      getVenueAttendance(null, day),
+      q(`SELECT max(a.created_at) AS updated_at FROM attendance a JOIN sessions s ON s.id=a.session_id
+        WHERE NOT s.is_test AND (s.starts_at AT TIME ZONE 'Asia/Jakarta')::date=$1::date`, [day]),
+    ]);
+    rows = { updated_at: latest.updated_at, rows: venues.map(({ name: venue, id, ...groups }) => ({
       venue,
       breakdown: Object.fromEntries(Object.entries(groups).map(([key, { total, attended }]) =>
         [key, { target: total, checked_in: attended }])),
@@ -32,12 +37,17 @@ r.get('/dashboard/:section', ah(async (req, res) => {
         target: counts.target + group.total,
         checked_in: counts.checked_in + group.attended,
       }), { target: 0, checked_in: 0 }),
-    }));
+    })) };
   } else if (section === 'kehadiran') {
-    rows = (await getArrivalRecap()).map(({ name: venue, invited, arrived, queued, source_ready, breakdown }) => ({
+    const venues = await getArrivalRecap();
+    rows = {
+      updated_at: venues.reduce((latest, venue) =>
+        venue.imported_at && (!latest || venue.imported_at > latest) ? venue.imported_at : latest, null),
+      rows: venues.map(({ name: venue, invited, arrived, queued, source_ready, breakdown }) => ({
       venue, counts: source_ready ? { invited, arrived, queued } : null,
       breakdown: breakdown.map(({ position, invited, arrived, queued }) => ({ position, invited, arrived, queued })),
-    }));
+      })),
+    };
   } else {
     throw new HttpError(404, 'Ringkasan tidak ditemukan.');
   }

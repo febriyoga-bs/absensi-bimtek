@@ -120,10 +120,10 @@ function ImportReporting({ onSaved }) {
     setBusy(true);
     setFeedback(null);
     try {
-      const { updated, skipped, contacts_updated: contacts } = await api('/admin/reporting/import', {
+      const { updated, skipped, contacts_updated: contacts, defaulted } = await api('/admin/reporting/import', {
         admin: true, method: 'POST', body: { csv: await readMonitoringCsv(file) },
       });
-      setFeedback({ message: `${nf.format(updated)} status sekolah disimpan.${skipped ? ` ${nf.format(skipped)} NPSN di luar pemetaan Tahap 3 dilewati.` : ''}${contacts ? ` ${nf.format(contacts)} kontak dilengkapi.` : ''}` });
+      setFeedback({ message: `${nf.format(updated)} status sekolah disimpan.${defaulted ? ` ${nf.format(defaulted)} sekolah di luar CSV ditandai Belum kirim.` : ''}${skipped ? ` ${nf.format(skipped)} NPSN di luar pemetaan Tahap 3 dilewati.` : ''}${contacts ? ` ${nf.format(contacts)} kontak dilengkapi.` : ''}` });
       onSaved();
     } catch (e) {
       setFeedback({ error: true, message: e.message });
@@ -135,7 +135,7 @@ function ImportReporting({ onSaved }) {
     <details className="card reporting-import">
       <summary>Impor status BIMTEK TAHAP 3</summary>
       <form className="form" onSubmit={save}>
-        <p className="muted small">Unggah CSV Monitoring Laporan 50% untuk memperbarui status reviu, tanggal kirim, dan capaian fisik berdasarkan NPSN. Nomor fasilitator dan pengawas ditambahkan jika identitasnya cocok dan profil belum memiliki nomor.</p>
+        <p className="muted small">Unggah CSV Monitoring Laporan 50% lengkap untuk memperbarui status reviu, tanggal kirim, dan capaian fisik berdasarkan NPSN. Sekolah pemetaan Tahap 3 yang tidak tercantum ditandai Belum kirim. Nomor fasilitator dan pengawas ditambahkan jika identitasnya cocok dan profil belum memiliki nomor.</p>
         <p className="muted small">Format ringkas dengan kolom <code>npsn</code>, <code>status</code>, <code>tanggal_kirim</code> dan <code>progres_fisik</code> juga bisa dipakai.</p>
         <input type="file" accept=".csv,text/csv" aria-label="File CSV monitoring" disabled={busy} onChange={(e) => setFile(e.target.files[0])} />
         <button className="btn btn--primary" disabled={!file || busy}>{busy ? 'Menyimpan…' : 'Simpan status dari CSV'}</button>
@@ -182,6 +182,9 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
   const present = schools.filter((s) => ['sudah_tiba', 'sedang_antre'].includes(venueStatus(s))).length;
   const waiting = schools.filter((s) => s.status === 'menunggu_reviu');
   const overdue = (rows) => rows.filter((s) => s.status === 'menunggu_reviu' && s.wait_days > threshold).length;
+  const scopedFacilitators = data.facilitators.filter(scope);
+  const problematicFacilitators = scopedFacilitators.filter((facilitator) =>
+    overdue(byFacilitator.get(facilitator.id) || []) > 0).length;
   const counts = new Map([...grouped(schools, (s) => s.status)].map(([key, group]) => [key, group.length]));
   const hasReports = data.schools.some((s) => s.status !== 'belum_ada_data');
   const nextView = (key) => { setView(key); setTerm(''); setSelectedFacilitator(null); };
@@ -304,7 +307,13 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
         </div>
         <div className="reporting-highlights">
           <div><b>{nf.format(schools.filter(submitted).length)}</b><small>Sudah kirim</small></div>
-          <div><b>{nf.format(present)}</b><small>Sudah tiba atau sedang antre</small></div>
+          <div><b>{nf.format(problematicFacilitators)} / {nf.format(scopedFacilitators.length)}</b>
+            <small>Fasilitator bermasalah</small>
+            <small>Minimal satu laporan menunggu reviu lebih dari {threshold} hari</small>
+          </div>
+          <div><b>{nf.format(present)} / {nf.format(schools.length)}</b><small>Sekolah hadir di venue ({nf.format(percent(present, schools.length))}%)</small>
+            <small>Sudah tiba atau sedang antre</small>
+          </div>
           <div><b>{nf.format(counts.get('diterima') || 0)}</b><small>Laporan diterima</small></div>
         </div>
         {checkInDays.length > 0 && <div className="reporting-day-summary">
@@ -405,7 +414,7 @@ export default function Reporting() {
     <div className="reporting-page">
       <div className="page-head"><div><h2>Pantau Pelaporan</h2><p className="muted">Pantau Laporan 50%, antrean reviu, dan kehadiran sekolah.</p></div></div>
       <div className="reporting-datasets" role="group" aria-label="Kegiatan pelaporan">
-        {Object.entries(datasetNames).map(([key, label]) => <button key={key} className={dataset === key ? 'on' : ''} aria-pressed={dataset === key}
+        {Object.entries(datasetNames).filter(([key]) => !lo || key === 'current').map(([key, label]) => <button key={key} className={dataset === key ? 'on' : ''} aria-pressed={dataset === key}
           onClick={() => { if (key !== dataset) { setDataset(key); setData(null); setError(''); } }}>{label}</button>)}
       </div>
       {error && <p className="alert alert--err" role="alert">{error} <button className="btn btn--sm" onClick={refresh}>Coba lagi</button></p>}
