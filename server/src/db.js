@@ -15,7 +15,7 @@ const serverless = !!process.env.VERCEL;
 export const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.PGSSL === 'true' ? { rejectUnauthorized: false } : undefined,
-  max: Number(process.env.PG_POOL_MAX || (serverless ? 3 : 10)),
+  max: Number(process.env.PG_POOL_MAX || (serverless ? 5 : 10)),
   idleTimeoutMillis: serverless ? 5_000 : 30_000,
   connectionTimeoutMillis: 10_000,
 });

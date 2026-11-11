@@ -602,13 +602,41 @@ r.get('/scan/participants', ah(async (req, res) => {
     throw new HttpError(400, 'Sesi uji coba tidak valid.');
   }
   const { rows: [list] } = await q(
-    `WITH matching AS (
+    `WITH active_owners AS MATERIALIZED (
+      SELECT id,name,venue_id FROM lo_accounts WHERE active
+    ), mappings AS MATERIALIZED (
+      SELECT l.id AS account_id,l.name AS lo_name,m.venue_id,lower(m.code) AS code,
+        lower(trim(m.position)) AS position,${nameKeySql('m.name')} AS name_key,
+        string_to_array(replace(m.npsn,' ',''),';') AS school_ids
+      FROM assignment_roster roster
+      CROSS JOIN LATERAL jsonb_each(roster.data->'attendance_assignments') entries
+      JOIN active_owners l ON entries.key=l.id::text
+      CROSS JOIN LATERAL jsonb_to_recordset(entries.value)
+        AS m(code text,name text,position text,npsn text,venue_id int)
+      WHERE roster.id=1 AND m.venue_id=l.venue_id
+    ), assigned_people AS MATERIALIZED (
+      SELECT DISTINCT p.id,m.account_id,m.lo_name
+      FROM people p JOIN mappings m ON p.venue_id=m.venue_id
+        AND lower(trim(p.position))=m.position AND ${nameKeySql('p.name')}=m.name_key
+        AND (lower(p.code)=m.code OR (m.school_ids IS NOT NULL
+          AND m.school_ids && string_to_array(replace(p.npsn,' ',''),';')))
+      WHERE p.role='peserta' AND p.archived_at IS NULL
+      UNION
+      SELECT p.id,l.id,l.name FROM people p JOIN active_owners l ON p.venue_id=l.venue_id
+      WHERE p.role='peserta' AND p.archived_at IS NULL AND lower(trim(p.position)) IN ('dinas pendidikan','bb/bpmp')
+    ), assignments AS MATERIALIZED (
+      SELECT id,jsonb_agg(lo_name ORDER BY lo_name) AS assigned_los,
+        bool_or(account_id=$5::int) AS owned FROM assigned_people GROUP BY id
+    ), matching AS (
       SELECT p.id, p.role, p.code, p.name, p.position, p.phone, p.institution, p.npsn, p.ruangan, p.venue_id, v.name AS venue_name,
-        arrival.marks->>p.id::text AS arrival_status
+        arrival.marks->>p.id::text AS arrival_status,
+        COALESCE(assignment.assigned_los,'[]'::jsonb) AS assigned_los,
+        ($5::int IS NULL OR (p.venue_id=$6::int AND COALESCE(assignment.owned,false))) AS can_check_in
       FROM people p LEFT JOIN venues v ON v.id=p.venue_id
       LEFT JOIN venue_arrival_recap arrival ON arrival.venue_id=p.venue_id
+      LEFT JOIN assignments assignment ON assignment.id=p.id
       WHERE p.role='peserta' AND p.archived_at IS NULL AND (${scanCategories[category]})
-        AND (NOT $7::boolean OR ${canCheckInForLo('$5', '$6')})
+        AND (NOT $7::boolean OR ($5::int IS NULL OR (p.venue_id=$6::int AND COALESCE(assignment.owned,false))))
         AND ($2::int IS NULL OR p.venue_id=$2)
         AND ($1='' OR p.name ILIKE '%'||$1||'%' OR p.code ILIKE '%'||$1||'%'
           OR p.institution ILIKE '%'||$1||'%' OR p.npsn ILIKE '%'||$1||'%' OR v.name ILIKE '%'||$1||'%')
@@ -622,26 +650,11 @@ r.get('/scan/participants', ah(async (req, res) => {
       SELECT * FROM filtered ORDER BY name,id LIMIT $3 OFFSET $4
     ), details AS (
       SELECT p.id, p.code, p.name, p.position, p.phone, p.institution, p.npsn, p.ruangan, p.venue_name, p.arrival_status,
-        COALESCE((SELECT jsonb_agg(owner.name ORDER BY owner.name) FROM (
-          SELECT DISTINCT l.id,l.name FROM lo_accounts l
-          WHERE l.active AND l.venue_id=p.venue_id AND (
-            lower(trim(p.position)) IN ('dinas pendidikan','bb/bpmp') OR EXISTS (
-              SELECT 1 FROM assignment_roster roster
-              CROSS JOIN LATERAL jsonb_to_recordset(roster.data->'attendance_assignments'->(l.id::text))
-                AS mapping(code text,name text,position text,npsn text,venue_id int)
-              WHERE roster.id=1 AND mapping.venue_id=p.venue_id
-                AND lower(trim(mapping.position))=lower(trim(p.position))
-                AND ${nameKeySql('mapping.name')}=${nameKeySql('p.name')}
-                AND (lower(mapping.code)=lower(p.code) OR (mapping.npsn IS NOT NULL
-                  AND string_to_array(replace(mapping.npsn,' ',''),';') && string_to_array(replace(p.npsn,' ',''),';')))
-            )
-          )
-        ) owner),'[]'::jsonb) AS assigned_los,
-        ${canCheckInForLo('$5', '$6')} AS can_check_in,
+        p.assigned_los,p.can_check_in,
         CASE WHEN s.id IS NOT NULL THEN json_build_object('id',s.id,'name',s.name,'type',s.type,'starts_at',s.starts_at,'is_test',s.is_test) END AS session,
         CASE WHEN a.id IS NOT NULL THEN json_build_object('id',a.id,'at',a.created_at,'status',a.status,'method',a.method,
-          'participant_note',CASE WHEN ${canCheckInForLo('$5', '$6')} THEN a.participant_note END,
-          'can_edit_note',a.venue_id=$6::int AND ${canCheckInForLo('$5', '$6')}) END AS recorded
+          'participant_note',CASE WHEN p.can_check_in THEN a.participant_note END,
+          'can_edit_note',a.venue_id=$6::int AND p.can_check_in) END AS recorded
       FROM page_rows p
       LEFT JOIN LATERAL (
         SELECT s.id,s.name,s.type,s.starts_at,s.is_test FROM sessions s
