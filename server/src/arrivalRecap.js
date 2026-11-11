@@ -14,8 +14,20 @@ const sourcePositions = {
   bendahara: 'Bendahara', pengawas: 'Pengawas', dinaspendidikan: 'Dinas Pendidikan',
   fasilitator: 'Fasilitator', bbpmp: 'BB/BPMP',
 };
-const detailRows = `jsonb_to_recordset(r.detail_rows)
-  AS p(id int, name text, position text, institution text, arrival_status text)`;
+const detailRows = `(
+  SELECT DISTINCT ON (school, CASE WHEN school IS NULL THEN id END)
+    id, name, position, institution, arrival_status
+  FROM (
+    SELECT source.*, CASE WHEN position='Bendahara' THEN
+      NULLIF(regexp_replace(lower(trim(institution)), '[[:space:]]+', ' ', 'g'), '')
+    END AS school
+    FROM jsonb_to_recordset(r.detail_rows)
+      AS source(id int, name text, position text, institution text, arrival_status text)
+  ) entries
+  ORDER BY school, CASE WHEN school IS NULL THEN id END,
+    array_position(ARRAY['selesai','sudah_tiba','sedang_antre'], arrival_status) NULLS LAST,
+    id DESC
+) p`;
 
 export async function getArrivalRecap() {
   const { rows } = await q(`WITH breakdown AS (
