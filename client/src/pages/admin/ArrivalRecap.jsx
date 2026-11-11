@@ -23,11 +23,21 @@ export default function ArrivalRecap() {
   const [feedback, setFeedback] = useState(null);
   const [selection, setSelection] = useState(null);
   const [participants, setParticipants] = useState(null);
+  const [query, setQuery] = useState('');
+  const [position, setPosition] = useState('');
+  const [arrival, setArrival] = useState('');
   const dialog = useRef(null);
+  const entries = participants?.entries;
+  const positions = [...new Set(entries?.map((person) => person.position).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'id'));
+  const search = query.trim().toLowerCase();
+  const visibleEntries = entries?.filter((person) =>
+    (!position || person.position === position) &&
+    (!arrival || arrivalBadge(person.arrival_status)[0] === arrival) &&
+    [person.name, person.institution].some((value) => (value || '').toLowerCase().includes(search)));
 
   useEffect(() => {
     if (!selection) return;
-    dialog.current.showModal();
+    if (!dialog.current.open) dialog.current.showModal();
     let current = true;
     api(`/admin/arrival-recap/${selection.venue.id}/participants?group=${selection.group.key}`, { admin: true })
       .then((entries) => { if (current) setParticipants({ entries }); })
@@ -121,21 +131,40 @@ export default function ArrivalRecap() {
         ))}
       </div>}
       <dialog ref={dialog} className="assignment-dialog" aria-labelledby="arrival-detail-title"
-        onClose={() => setSelection(null)}>
+        onClose={() => { setSelection(null); setQuery(''); setPosition(''); setArrival(''); }}>
         {selection && <>
           <header>
             <div>
               <h3 id="arrival-detail-title">{selection.group.title}</h3>
               <p className="muted small">{selection.venue.name}</p>
-              {participants?.entries && <span className="assignment-detail-count">{number.format(participants.entries.length)} peserta</span>}
+              {entries && <span className="assignment-detail-count" role="status">
+                {visibleEntries.length !== entries.length ? `${number.format(visibleEntries.length)} dari ` : ''}
+                {number.format(entries.length)} peserta
+              </span>}
             </div>
             <form method="dialog"><button className="btn btn--sm" autoFocus>Tutup</button></form>
           </header>
+          {!!entries?.length && <div className="arrival-detail-filters" role="group" aria-label="Filter peserta">
+            <input type="search" aria-label="Cari nama atau instansi" placeholder="Cari nama atau instansi"
+              value={query} onChange={(e) => setQuery(e.target.value)} />
+            <select aria-label="Jenis peserta" value={position} onChange={(e) => setPosition(e.target.value)}>
+              <option value="">Semua jenis peserta</option>
+              {positions.map((item) => <option key={item}>{item}</option>)}
+            </select>
+            {selection.group.key === 'invited' && <select aria-label="Status kedatangan" value={arrival} onChange={(e) => setArrival(e.target.value)}>
+              <option value="">Semua status kedatangan</option>
+              <option>Sudah tiba</option>
+              <option>Sedang antre</option>
+              <option>Belum terdata</option>
+            </select>}
+          </div>}
           {!participants && <p className="muted" role="status">Memuat daftar peserta…</p>}
           {participants?.error && <p className="alert alert--err" role="alert">{participants.error}</p>}
-          {participants?.entries?.length === 0 && <p className="muted">Belum ada peserta dalam daftar ini.</p>}
-          {!!participants?.entries?.length && <ol>
-            {participants.entries.map((person) => {
+          {visibleEntries?.length === 0 && <p className="muted">
+            {entries.length ? 'Tidak ada peserta yang cocok dengan filter.' : 'Belum ada peserta dalam daftar ini.'}
+          </p>}
+          {!!visibleEntries?.length && <ol>
+            {visibleEntries.map((person) => {
               const [label, style] = arrivalBadge(person.arrival_status);
               return <li key={person.id}>
                 <b>{person.name}</b>

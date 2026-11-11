@@ -2,12 +2,14 @@ import { useState } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { api, adminToken, adminUser } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
+import FontIcon from '../../components/FontIcon.jsx';
 import BrandMark from '../../components/BrandMark.jsx';
 
 export default function Login() {
   const [mode, setMode] = useState('lo'); // 'lo' | 'admin'
   const [username, setUsername] = useState('');
   const [pw, setPw] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   const nav = useNavigate();
@@ -27,7 +29,7 @@ export default function Login() {
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   }
 
-  const switchMode = (m) => { setMode(m); setErr(null); setPw(''); };
+  const switchMode = (m) => { setMode(m); setErr(null); setPw(''); setShowPassword(false); };
 
   return (
     <div className="login">
@@ -47,10 +49,19 @@ export default function Login() {
               autoFocus autoCapitalize="none" autoComplete="username" placeholder="mis. LO1.Febriyoga" /></span>
           </label>
         )}
-        <label>Kata sandi
-          <span className="input-icon"><Icon name="key" /><input type="password" value={pw} onChange={(e) => setPw(e.target.value)}
-            autoFocus={mode === 'admin'} autoComplete="current-password" /></span>
-        </label>
+        <div className="login-password">
+          <label htmlFor="login-password">Kata sandi</label>
+          <span className="input-icon">
+            <Icon name="key" />
+            <input id="login-password" type={showPassword ? 'text' : 'password'} value={pw} onChange={(e) => setPw(e.target.value)}
+              autoFocus={mode === 'admin'} autoComplete="current-password" autoCapitalize="none" spellCheck={false} />
+            <button type="button" className="login-password__toggle" aria-controls="login-password"
+              aria-label={showPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
+              onClick={() => setShowPassword((visible) => !visible)}>
+              <FontIcon name={showPassword ? 'eye-slash' : 'eye'} />
+            </button>
+          </span>
+        </div>
         {err && <div className="alert alert--err"><Icon name="alert" size={18} />{err}</div>}
         <button className="btn btn--primary btn--lg" disabled={busy || !pw || (mode === 'lo' && !username.trim())}>
           {busy ? 'Masuk…' : 'Masuk'}

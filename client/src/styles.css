@@ -144,8 +144,13 @@ code { background: #eef1f6; padding: 1px 6px; border-radius: 6px; font-size: .92
 input, select, textarea { font: inherit; padding: 11px 13px; border: 1.5px solid var(--line); border-radius: var(--radius-sm); background: #fff; width: 100%; color: var(--text); transition: border-color .15s, box-shadow .15s; }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
 .input-icon { position: relative; display: block; }
-.input-icon .icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+.input-icon > .icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); }
 .input-icon input { padding-left: 44px; font-size: 17px; font-weight: 600; padding-top: 13px; padding-bottom: 13px; }
+.login-password { display: grid; gap: 6px; }
+.login-password input { padding-right: 54px; }
+.login-password__toggle { position: absolute; inset: 0 3px 0 auto; margin: auto 0; display: grid; place-items: center;
+  width: 44px; height: 44px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 16px; cursor: pointer; }
+.login-password__toggle:hover { color: var(--accent); background: var(--surface-2); }
 .check { grid-template-columns: auto 1fr !important; align-items: start; font-weight: 400 !important; }
 .check input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--accent); }
 
@@ -521,6 +526,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .assignment-dialog header h3, .assignment-dialog header p { margin: 0; }
 .assignment-dialog header p { margin-top: 4px; }
 .assignment-dialog header button { min-height: 44px; }
+.arrival-detail-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(215px, 100%), 1fr)); gap: 8px; margin: 12px 0 4px; }
+.arrival-detail-filters input { grid-column: 1 / -1; }
 .assignment-detail-count { display: inline-block; padding: 2px 8px; margin-top: 6px; background: var(--accent-soft); color: var(--brand); border-radius: 6px; font-size: 12px; font-weight: 700; }
 .attendance-detail-tabs { margin-top: 12px; }
 .attendance-detail-tabs button { flex: 1; justify-content: center; }
