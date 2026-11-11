@@ -29,8 +29,8 @@ function VenueAttendanceCard({ venue, day, onDetails }) {
         <span className="kpi__icon"><FontIcon name="location-dot" /></span>
         <div>
           <h4>{venue.name}</h4>
-          <div className="muted small"><b>{number.format(attended)}</b> dari {number.format(total)} peserta sudah absen</div>
-          <div className="muted small">{number.format(venue.lo.total)} LO tercatat terpisah</div>
+          <div className="muted small"><b>{number.format(attended + venue.lo.attended)}</b> dari {number.format(total + venue.lo.total)} orang sudah absen</div>
+          <div className="muted small">{number.format(total)} peserta dan {number.format(venue.lo.total)} LO</div>
         </div>
       </header>
       <div className="venue-attendance__groups">
@@ -129,19 +129,9 @@ export default function Dashboard() {
       </div>
 
       <div className={`dashboard-overview${lo || venueId ? ' dashboard-overview--single' : ''}`}>
-      <section className="venue-attendance-section" aria-labelledby="venue-attendance-title">
-        <h3 id="venue-attendance-title">Ringkasan per venue</h3>
-        <p className="muted small">{selectedDay ? `Ringkasan ${checkInDayLabel(selectedDay)}.` : 'Akumulasi semua sesi resmi.'} Setiap profil dengan absensi valid atau perlu dicek dihitung sekali per venue.</p>
-        {summaryError && <p className="alert alert--warn" role="status">Ringkasan venue gagal diperbarui.</p>}
-        {!venueAttendance && !summaryError && <div className="stats"><SkelCards n={2} h={190} /></div>}
-        {venueAttendance && !shownVenues.length && <p className="muted">Belum ada venue untuk ditampilkan.</p>}
-        <div className="venue-attendance-grid">
-          {shownVenues.map((venue) => <VenueAttendanceCard key={venue.id} venue={venue} day={selectedDay} onDetails={setDetails} />)}
-        </div>
-      </section>
       <section className="dashboard-sessions" aria-labelledby="dashboard-sessions-title">
       <h3 id="dashboard-sessions-title">Absensi per sesi</h3>
-      <p className="muted small">Progres dan verifikasi setiap sesi resmi.</p>
+      <p className="muted small">Lihat jumlah yang sudah absen dibandingkan target tiap sesi.</p>
       {loading && <div className="stats"><SkelCards n={3} h={170} /></div>}
       {!loading && !sessions.length && <p className="muted">Belum ada sesi{!lo && <> — <Link to="/admin/sesi">buat sesi</Link></>}.</p>}
       <div className="stats">
@@ -177,6 +167,16 @@ export default function Dashboard() {
           );
         })}
       </div>
+      </section>
+      <section className="venue-attendance-section" aria-labelledby="venue-attendance-title">
+        <h3 id="venue-attendance-title">Ringkasan per venue</h3>
+        <p className="muted small">{selectedDay ? `Ringkasan ${checkInDayLabel(selectedDay)}.` : 'Gabungan semua sesi resmi.'} Setiap orang dihitung sekali per venue.</p>
+        {summaryError && <p className="alert alert--warn" role="status">Ringkasan venue gagal diperbarui.</p>}
+        {!venueAttendance && !summaryError && <div className="stats"><SkelCards n={2} h={190} /></div>}
+        {venueAttendance && !shownVenues.length && <p className="muted">Belum ada venue untuk ditampilkan.</p>}
+        <div className="venue-attendance-grid">
+          {shownVenues.map((venue) => <VenueAttendanceCard key={venue.id} venue={venue} day={selectedDay} onDetails={setDetails} />)}
+        </div>
       </section>
       </div>
       <AttendanceDetailDialog details={details} onClose={() => setDetails(null)} />

@@ -284,8 +284,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(330px, 100%), 1fr)); gap: 16px; }
 .venue-attendance-section { margin-bottom: 22px; }
 .dashboard-filters select { width: auto; max-width: 100%; }
-.dashboard-overview { display: grid; gap: 18px; }
+.dashboard-overview { display: grid; gap: 26px; }
 .dashboard-overview > section { min-width: 0; margin: 0; }
+.dashboard-overview--single .venue-attendance-grid { grid-template-columns: minmax(0, 1fr); }
+.dashboard-overview--single .dashboard-sessions .stats { grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr)); }
 .dashboard-sessions > h3 { font-size: 18px; margin: 0 0 4px; }
 .dashboard-sessions > p { margin: 0 0 12px; }
 .attendance-dashboard .venue-attendance__label { display: flex; align-items: baseline; justify-content: space-between; gap: 5px; text-decoration: none; }
@@ -300,10 +302,6 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .dashboard-statuses [data-status="valid"] .icon { color: var(--ok); }
 .dashboard-statuses [data-status="review"] .icon { color: var(--warn); }
 .dashboard-statuses :is([data-status="rejected"], [data-status="blocked"]) .icon { color: var(--err); }
-@media (min-width: 1180px) {
-  .dashboard-overview--single { grid-template-columns: minmax(300px, .85fr) minmax(0, 1.7fr); align-items: start; }
-  .dashboard-overview--single .venue-attendance-grid { grid-template-columns: minmax(0, 1fr); }
-}
 .venue-attendance-section h3 { margin: 0 0 4px; font-size: 18px; }
 .venue-attendance-section > p { margin: 0 0 12px; }
 .venue-attendance-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 12px; }
@@ -312,6 +310,12 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .venue-attendance__head h4 { margin: 0; font-size: 15px; line-height: 1.35; overflow-wrap: anywhere; }
 .venue-attendance__head b { color: var(--accent); }
 .venue-attendance__groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin: 12px 0 0; }
+@media (min-width: 740px) {
+  .dashboard-overview--single .venue-attendance__groups { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (min-width: 1300px) {
+  .dashboard-overview--single .venue-attendance__groups { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
 .venue-attendance__groups > button { min-height: 44px; padding: 8px 9px; border: 1px solid transparent; border-radius: 8px;
   background: var(--surface-2); color: var(--text); font: inherit; text-align: left; overflow-wrap: anywhere; cursor: pointer; }
 .venue-attendance__groups > button:hover, .venue-attendance__groups > button:focus-visible { border-color: var(--accent); background: var(--accent-soft); }
