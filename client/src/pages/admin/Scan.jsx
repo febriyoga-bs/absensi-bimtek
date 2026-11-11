@@ -66,6 +66,8 @@ export default function Scan() {
   const [search, setSearch] = useState('');
   const [filterVenue, setFilterVenue] = useState('');
   const [filterArrival, setFilterArrival] = useState('');
+  const [filterLo, setFilterLo] = useState('');
+  const [filterAttendance, setFilterAttendance] = useState('');
   const [showAll, setShowAll] = useState(false);
   const [page, setPage] = useState(1);
   const [list, setList] = useState(null);
@@ -123,7 +125,8 @@ export default function Scan() {
     let current = true;
     setLoading(true);
     setListError('');
-    const params = new URLSearchParams({ category: tab, q: search.trim(), page, venue_id: filterVenue, arrival: filterArrival });
+    const params = new URLSearchParams({ category: tab, q: search.trim(), page, venue_id: filterVenue, arrival: filterArrival,
+      lo_id: filterLo, attendance: filterAttendance });
     if (testSessionId) params.set('session_id', testSessionId);
     if (lo && showAll) params.set('scope', 'all');
     const timer = setTimeout(() => {
@@ -133,7 +136,7 @@ export default function Scan() {
         .finally(() => { if (current) setLoading(false); });
     }, search.trim() ? 220 : 0);
     return () => { current = false; clearTimeout(timer); };
-  }, [tab, search, page, filterVenue, filterArrival, lo, showAll, revision, testSessionId]);
+  }, [tab, search, page, filterVenue, filterArrival, filterLo, filterAttendance, lo, showAll, revision, testSessionId]);
 
   function changeTab(next) {
     if (tab === next) return;
@@ -270,6 +273,25 @@ export default function Scan() {
                 <option value="">Semua venue</option>
                 {list?.venues.map((venue) => <option key={venue.id} value={venue.id}>{venue.name}</option>)}
               </select>}
+              <select aria-label="Filter LO bertugas" value={filterLo} onChange={(e) => {
+                setLoading(true); setFilterLo(e.target.value); setPage(1);
+              }}>
+                <option value="">Semua LO bertugas</option>
+                {filterLo && !list?.owners?.some((owner) => String(owner.id) === filterLo) &&
+                  <option value={filterLo}>LO dipilih (di luar venue)</option>}
+                {list?.owners?.map((owner) => <option key={owner.id} value={owner.id}>{owner.name}</option>)}
+              </select>
+              <select aria-label="Filter status absensi" value={filterAttendance} onChange={(e) => {
+                setLoading(true); setFilterAttendance(e.target.value); setPage(1);
+              }}>
+                <option value="">Semua status absensi</option>
+                <option value="checked_in">Sudah absen</option>
+                <option value="not_checked_in">Belum absen</option>
+                <option value="review">Perlu dicek</option>
+                <option value="ditolak">Ditolak</option>
+                <option value="berhalangan">Mundur/Berhalangan Hadir</option>
+                <option value="no_session">Belum ada sesi</option>
+              </select>
               <select aria-label="Filter kehadiran dari rekap" value={filterArrival} onChange={(e) => {
                 setLoading(true); setFilterArrival(e.target.value); setPage(1);
               }}>

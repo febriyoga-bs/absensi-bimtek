@@ -597,6 +597,12 @@ r.get('/scan/participants', ah(async (req, res) => {
   const limit = 30;
   const term = String(req.query.q || '').trim().slice(0, 150);
   const assignedOnly = req.user.role === 'lo' && req.query.scope !== 'all';
+  const ownerId = req.query.lo_id == null || req.query.lo_id === '' ? null : Number(req.query.lo_id);
+  const attendanceFilter = req.query.attendance || '';
+  if ((ownerId !== null && (!Number.isInteger(ownerId) || ownerId < 1 || ownerId > 2147483647))
+    || !['','checked_in','not_checked_in','review','ditolak','berhalangan','no_session'].includes(attendanceFilter)) {
+    throw new HttpError(400, 'Filter LO atau status absensi tidak valid.');
+  }
   const testSessionId = req.query.session_id == null || req.query.session_id === '' ? null : Number(req.query.session_id);
   if (testSessionId !== null && (!Number.isInteger(testSessionId) || testSessionId < 1 || testSessionId > 2147483647)) {
     throw new HttpError(400, 'Sesi uji coba tidak valid.');
@@ -629,23 +635,37 @@ r.get('/scan/participants', ah(async (req, res) => {
         bool_or(account_id=$5::int) AS owned FROM assigned_people GROUP BY id
     ), matching AS (
       SELECT p.id, p.role, p.code, p.name, p.position, p.phone, p.institution, p.npsn, p.ruangan, p.venue_id, v.name AS venue_name,
-        arrival.marks->>p.id::text AS arrival_status,
+        arrival.marks->>p.id::text AS arrival_status,selected_session.id AS selected_session_id,selected_session.status AS selected_status,
         COALESCE(assignment.assigned_los,'[]'::jsonb) AS assigned_los,
         ($5::int IS NULL OR (p.venue_id=$6::int AND COALESCE(assignment.owned,false))) AS can_check_in
       FROM people p LEFT JOIN venues v ON v.id=p.venue_id
       LEFT JOIN venue_arrival_recap arrival ON arrival.venue_id=p.venue_id
       LEFT JOIN assignments assignment ON assignment.id=p.id
+      LEFT JOIN LATERAL (
+        SELECT s.id,a.status FROM sessions s
+        LEFT JOIN attendance a ON a.session_id=s.id AND a.person_id=p.id
+        WHERE (($9::int IS NULL AND NOT s.is_test) OR (s.id=$9 AND s.is_test))
+          AND s.role IN ('peserta','semua') AND now() BETWEEN s.starts_at AND s.ends_at
+          AND ${sessionApplies('p.venue_id')}
+        ORDER BY s.starts_at,s.id LIMIT 1
+      ) selected_session ON true
       WHERE p.role='peserta' AND p.archived_at IS NULL AND (${scanCategories[category]})
         AND (NOT $7::boolean OR ($5::int IS NULL OR (p.venue_id=$6::int AND COALESCE(assignment.owned,false))))
         AND ($2::int IS NULL OR p.venue_id=$2)
+        AND ($10::int IS NULL OR EXISTS (SELECT 1 FROM assigned_people ap WHERE ap.id=p.id AND ap.account_id=$10))
         AND ($1='' OR p.name ILIKE '%'||$1||'%' OR p.code ILIKE '%'||$1||'%'
           OR p.institution ILIKE '%'||$1||'%' OR p.npsn ILIKE '%'||$1||'%' OR v.name ILIKE '%'||$1||'%')
     ), filtered AS (
-      SELECT * FROM matching WHERE $8::text=''
+      SELECT * FROM matching WHERE ($8::text=''
         OR ($8 IN ('arrived','present') AND arrival_status IN ('selesai','sudah_tiba'))
         OR ($8='present' AND arrival_status='sedang_antre')
         OR ($8='queued' AND arrival_status='sedang_antre')
-        OR ($8='unrecorded' AND COALESCE(arrival_status,'') NOT IN ('selesai','sudah_tiba','sedang_antre'))
+        OR ($8='unrecorded' AND COALESCE(arrival_status,'') NOT IN ('selesai','sudah_tiba','sedang_antre')))
+        AND ($11::text=''
+          OR ($11='checked_in' AND selected_status IN ('valid','review'))
+          OR ($11='not_checked_in' AND selected_session_id IS NOT NULL AND selected_status IS NULL)
+          OR ($11 IN ('review','ditolak','berhalangan') AND selected_status=$11)
+          OR ($11='no_session' AND selected_session_id IS NULL))
     ), page_rows AS (
       SELECT * FROM filtered ORDER BY name,id LIMIT $3 OFFSET $4
     ), details AS (
@@ -672,11 +692,13 @@ r.get('/scan/participants', ah(async (req, res) => {
         'unrecorded', count(*) FILTER (WHERE COALESCE(arrival_status,'') NOT IN ('selesai','sudah_tiba','sedang_antre'))
       ) FROM matching) AS arrival_summary,
       COALESCE((SELECT jsonb_agg(d ORDER BY d.name,d.id) FROM details d),'[]') AS rows,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object('id',l.id,'name',l.name) ORDER BY l.name) FROM active_owners l
+        WHERE ($2::int IS NULL OR l.venue_id=$2)),'[]') AS owners,
       COALESCE((SELECT jsonb_agg(jsonb_build_object('id',v.id,'name',v.name) ORDER BY v.name) FROM venues v),'[]') AS venues`,
     [term, venueId, limit, (page - 1) * limit, req.user.lo, req.user.venue, assignedOnly,
-      ['present', 'arrived', 'queued', 'unrecorded'].includes(req.query.arrival) ? req.query.arrival : '', testSessionId]);
+      ['present', 'arrived', 'queued', 'unrecorded'].includes(req.query.arrival) ? req.query.arrival : '', testSessionId, ownerId, attendanceFilter]);
   res.json({
-    total: list.total, limit, venues: list.venues, arrival_summary: list.arrival_summary,
+    total: list.total, limit, venues: list.venues, owners: list.owners, arrival_summary: list.arrival_summary,
     rows: list.rows.map(({ recorded, phone, ...person }) => ({
       ...person,
       session: withReportingDay(person.session),
