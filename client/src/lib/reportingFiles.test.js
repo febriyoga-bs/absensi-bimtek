@@ -23,6 +23,20 @@ test('compact status CSV remains unchanged', async () => {
   assert.equal(await readMonitoringCsv(csvFile(text)), text);
 });
 
+test('monitoring with an L8 indicator takes precedence over progress detection', async () => {
+  const csv = await readMonitoringCsv(csvFile('NPSN,Status Reviu,Tanggal Kirim,Capaian Saat Ini (%),L8 Capaian 50% Terkirim\n12345678,diterima_fasil,12/11/2026,75,Sudah'));
+  assert.match(csv, /status reviu/);
+  assert.match(csv, /diterima_fasil/);
+  assert.doesNotMatch(csv, /l8 capaian/i);
+});
+
+test('monitoring with both complete schemas still preserves review outcomes', async () => {
+  const csv = await readMonitoringCsv(csvFile('NPSN,Status Reviu,Tanggal Kirim,Capaian Saat Ini (%),Capaian (%),L7 Capaian 50% Terisi,L8 Capaian 50% Terkirim,R6 Capaian 50% Direviu\n12345678,dikembalikan_fasil,12/11/2026,75,75,Sudah,Sudah,Sudah'));
+  assert.match(csv, /dikembalikan_fasil/);
+  assert.match(csv, /tanggal kirim/);
+  assert.doesNotMatch(csv, /l8 capaian/i);
+});
+
 test('incomplete progress files fail before upload', async () => {
   await assert.rejects(readMonitoringCsv(csvFile('NPSN,L8 Capaian 50% Terkirim\n12345678,Sudah')), /Kolom CSV Progres Laporan Sekolah tidak lengkap/);
 });

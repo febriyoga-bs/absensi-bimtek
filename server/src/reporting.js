@@ -143,7 +143,7 @@ async function parseReporting(csv) {
 export async function importReporting(csv) {
   if (typeof csv !== 'string' || csv.length > 2_000_000) throw new HttpError(400, 'CSV yang diproses melebihi batas ukuran.');
   const header = typeof csv === 'string' ? parseRows(csv)[0]?.map((name) => name.trim().toLowerCase()) : [];
-  if (header?.includes('l8 capaian 50% terkirim')) return importProgressCsv(csv);
+  if (!header?.includes('status reviu') && header?.includes('l8 capaian 50% terkirim')) return importProgressCsv(csv);
   const { entries, official, skipped } = await parseReporting(csv);
   if (!entries.length) throw new HttpError(400, 'Tidak ada NPSN di CSV yang cocok dengan pemetaan Tahap 3.');
   const { rows: [result] } = await q(`WITH incoming AS (
