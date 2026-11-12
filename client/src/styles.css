@@ -731,6 +731,12 @@ select:disabled { background-color: var(--surface-2); color: var(--muted); curso
 .scan-column-picker summary::-webkit-details-marker { display: none; }
 .scan-column-options { display: grid; gap: 10px; padding: 14px; margin-top: 8px; background: #fff; border: 1px solid var(--line); border-radius: var(--radius-sm); }
 .scan-column-options .check { margin: 0; }
+.import-progress-status { display: flex; gap: 14px; align-items: flex-start; padding: 16px 0; }
+.import-progress-status .spinner { flex-shrink: 0; }
+.import-result-summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 16px; }
+.import-result-summary dt { color: var(--muted); }
+.import-result-summary dd { margin: 0; font-weight: 700; }
+.import-progress-dialog .alert ul { padding-left: 18px; }
 .scan-table [hidden], #scan-filters[hidden] { display: none !important; }
 .tag--arrival { color: var(--ok); background: var(--ok-soft); }
 .scan__unavailable { background: #fff1f0; color: #a12a24; border-color: #efbeb9; }

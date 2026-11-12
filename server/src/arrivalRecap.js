@@ -14,6 +14,15 @@ const sourcePositions = {
   bendahara: 'Bendahara', pengawas: 'Pengawas', dinaspendidikan: 'Dinas Pendidikan',
   fasilitator: 'Fasilitator', bbpmp: 'BB/BPMP',
 };
+export function validateArrivalSummaryRow(row) {
+  if (!row || typeof row.hotel !== 'string' || !row.hotel.trim() || !['Bendahara','Pengawas','Dinas Pendidikan'].includes(row.position)
+    || ['invited','arrived','queued'].some((field) => !Number.isInteger(row[field]) || row[field] < 0 || row[field] > 20000)
+    || row.queued > row.arrived) {
+    throw new HttpError(400, `Ringkasan tidak valid: ${row?.hotel || 'venue kosong'} / ${row?.position || 'peran kosong'}. Periksa angka undangan, tiba, dan antre; antre tidak boleh melebihi tiba.`);
+  }
+  return row.arrived > row.invited
+    ? `${row.hotel} / ${row.position}: ${row.arrived} sudah tiba (termasuk antre), melebihi ${row.invited} undangan/akun. Angka sumber dipertahankan; perlu diperiksa.` : null;
+}
 const detailRows = `(
   SELECT DISTINCT ON (school, CASE WHEN school IS NULL THEN id END)
     id, name, position, institution, arrival_status
@@ -89,12 +98,12 @@ export async function importArrivalRecap(rows, summary = null) {
     return byVenue.get(aliases[hotelKey] || hotelKey);
   };
   const summaries = new Map();
+  const warnings = [];
   if (summary !== null) {
     if (!Array.isArray(summary) || !summary.length || summary.length > 1000) throw new HttpError(400, 'Ringkasan tidak valid.');
     for (const row of summary) {
-      if (!row || typeof row.hotel !== 'string' || !['Bendahara','Pengawas','Dinas Pendidikan'].includes(row.position)
-        || ['invited','arrived','queued'].some((field) => !Number.isInteger(row[field]) || row[field] < 0 || row[field] > 20000)
-        || row.queued > row.arrived || row.arrived > row.invited) throw new HttpError(400, 'Angka Ringkasan tidak valid.');
+      const warning = validateArrivalSummaryRow(row);
+      if (warning) warnings.push(warning);
       const venue = resolveVenue(row.hotel);
       if (!venue) throw new HttpError(400, `Venue Ringkasan tidak ditemukan: ${row.hotel}`);
       const entries = summaries.get(venue.id) || [];
@@ -172,5 +181,6 @@ export async function importArrivalRecap(rows, summary = null) {
     ON CONFLICT (venue_id) DO UPDATE SET marks=EXCLUDED.marks, detail_rows=EXCLUDED.detail_rows, source_summary=EXCLUDED.source_summary, representatives=EXCLUDED.representatives, imported_at=now()`,
     [JSON.stringify(snapshotsToSave)]);
   const matched = snapshotsToSave.reduce((sum, row) => sum + Object.keys(row.marks).length, 0);
-  return { imported: rows.length, matched, unmatched, venues: snapshotsToSave.length };
+  return { imported: rows.length, matched, unmatched, venues: snapshotsToSave.length, warnings,
+    representatives: snapshotsToSave.reduce((sum, snapshot) => sum + Object.keys(snapshot.representatives).length, 0) };
 }
