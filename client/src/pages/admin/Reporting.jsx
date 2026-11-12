@@ -184,6 +184,9 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
   const venueMatch = (row) => !venue || venue === row.venue;
   const scope = (row) => venueMatch(row) && (!lo || lo === ownerKey({ venue: row.venue, name: row.lo }));
   const schools = data.schools.filter(scope);
+  const sentCount = schools.filter(submitted).length;
+  const readyCount = schools.filter((school) => school.status === 'belum_kirim' && school.progress != null && school.progress >= 50).length;
+  const belowThresholdCount = schools.filter((school) => school.status === 'belum_kirim' && (school.progress == null || school.progress < 50)).length;
   const byFacilitator = grouped(schools, (row) => row.facilitator_id);
   const byLo = grouped(data.schools, (row) => ownerKey({ name: row.lo, venue: row.venue }));
   const facilitators = new Map(data.facilitators.map((f) => [f.id, f]));
@@ -321,13 +324,15 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
           {dataset === 'current' && !publicView && <button className="btn btn--sm" onClick={refresh}>Muat ulang</button>}
         </header>
         <div className="reporting-duo">
-          <div><b>{nf.format(counts.get('belum_kirim') || 0)}</b><span>Belum kirim Laporan 50%</span>
+          <div><b>{nf.format(readyCount)}</b><span>Siap kirim, belum diajukan</span>
+            <small>{nf.format(belowThresholdCount)} sekolah belum tercatat mencapai 50% fisik</small>
             {noData > 0 && <small>{nf.format(noData)} sekolah belum memiliki data monitoring</small>}</div>
           <div><b>{nf.format(waiting.length)}</b><span>Menunggu reviu fasilitator</span>
             <small>{nf.format(overdue(waiting))} melewati {threshold} hari</small></div>
         </div>
         <div className="reporting-highlights">
-          <div><b>{nf.format(schools.filter(submitted).length)}</b><small>Sudah kirim</small></div>
+          <div><b>{nf.format(sentCount + readyCount)}</b><small>Sudah kirim atau siap kirim</small>
+            <small>{nf.format(sentCount)} sudah kirim + {nf.format(readyCount)} siap kirim, belum diajukan</small></div>
           <div><b>{nf.format(problematicFacilitators)} / {nf.format(scopedFacilitators.length)}</b>
             <small>Fasilitator bermasalah</small>
             <small>Minimal satu laporan menunggu reviu lebih dari {threshold} hari</small>

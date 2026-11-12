@@ -12,11 +12,19 @@ export default function AttendanceRanking({ venue, query }) {
   useEffect(() => {
     let current = true;
     api('/admin/sessions', { admin: true })
-      .then((data) => { if (current) { setSessions(data.filter((s) => !s.is_test)); setSessionError(''); } })
+      .then((data) => { if (current) {
+        const official = data.filter((s) => !s.is_test);
+        const ordered = [...official].sort((a, b) => new Date(b.starts_at) - new Date(a.starts_at) || b.id - a.id);
+        const preferred = ordered.find((s) => s.is_open) || ordered[0];
+        setSessions(official);
+        setSessionId((selected) => official.some((s) => String(s.id) === selected) ? selected : preferred ? String(preferred.id) : '');
+        setSessionError('');
+      } })
       .catch((err) => { if (current) setSessionError(err.message); });
     return () => { current = false; };
   }, [revision]);
   useEffect(() => {
+    if (!sessionId) return;
     let current = true;
     setResult(null); setError('');
     api(`/admin/reporting/attendance-ranking${sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : ''}`, { admin: true })
@@ -31,16 +39,17 @@ export default function AttendanceRanking({ venue, query }) {
     .filter((row) => row.name.toLowerCase().includes(query));
   return <section aria-label="Peringkat absensi LO">
     <div className="toolbar">
-      <label>Sesi<select value={sessionId} onChange={(event) => setSessionId(event.target.value)}>
-        <option value="">Semua sesi resmi</option>
+      <label>Sesi<select value={sessionId} disabled={!sessions.length} onChange={(event) => setSessionId(event.target.value)}>
+        {!sessionId && <option value="">{sessionError ? 'Daftar sesi gagal dimuat' : 'Memuat sesi resmi…'}</option>}
         {sessions.map((session) => <option key={session.id} value={session.id}>{sessionTitle(session)} ({session.role})</option>)}
       </select></label>
       <button type="button" className="btn btn--sm" onClick={() => setRevision((value) => value + 1)}>Muat ulang</button>
     </div>
     {sessionError && <p className="alert alert--err" role="alert">Daftar sesi gagal dimuat. {sessionError}</p>}
+    {!sessionId && !sessionError && sessions.length === 0 && <p className="muted">Menunggu daftar sesi resmi. Klik Muat ulang jika belum tersedia.</p>}
     <p className="muted small">Progres = binaan yang diabsenkan LO pada sesi pilihan ÷ binaan yang hadir di venue. Hadir berdasarkan rekap Sudah tiba/Selesai/Sedang antre atau bukti absensi resmi Valid/Perlu dicek, lintas sesi. Setiap orang dihitung sekali, termasuk Bendahara, Pengawas, dan Fasilitator. Absensi mandiri tidak dihitung sebagai pekerjaan LO; status ditolak dan berhalangan tidak dihitung.</p>
     {error && <p className="alert alert--err" role="alert">{error}</p>}
-    {!result && !error && <p role="status">Memuat peringkat absensi…</p>}
+    {sessionId && !result && !error && <p role="status">Memuat peringkat absensi…</p>}
     {result && <div className="reporting-ranking" tabIndex={0}>
       {rows.length ? <ol>{rows.map((row) => <li key={row.id}>
         <div className="reporting-ranking-name"><b>{row.rank}. {row.name}</b>
