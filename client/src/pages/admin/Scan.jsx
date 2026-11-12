@@ -70,6 +70,7 @@ export default function Scan() {
   const [filterVenue, setFilterVenue] = useState('');
   const [filterArrival, setFilterArrival] = useState('');
   const [filterLo, setFilterLo] = useState('');
+  const [filterFacilitator, setFilterFacilitator] = useState('');
   const [filterAttendance, setFilterAttendance] = useState('');
   const [sort, setSort] = useState('name');
   const [direction, setDirection] = useState('asc');
@@ -131,7 +132,7 @@ export default function Scan() {
     setLoading(true);
     setListError('');
     const params = new URLSearchParams({ category: tab, q: search.trim(), page, venue_id: filterVenue, arrival: filterArrival,
-      lo_id: filterLo, attendance: filterAttendance, sort, direction });
+      lo_id: filterLo, attendance: filterAttendance, facilitator: tab === 'sekolah' ? filterFacilitator : '', sort, direction });
     if (testSessionId) params.set('session_id', testSessionId);
     if (lo && showAll) params.set('scope', 'all');
     const timer = setTimeout(() => {
@@ -141,7 +142,7 @@ export default function Scan() {
         .finally(() => { if (current) setLoading(false); });
     }, search.trim() ? 220 : 0);
     return () => { current = false; clearTimeout(timer); };
-  }, [tab, search, page, filterVenue, filterArrival, filterLo, filterAttendance, sort, direction, lo, showAll, revision, testSessionId]);
+  }, [tab, search, page, filterVenue, filterArrival, filterLo, filterFacilitator, filterAttendance, sort, direction, lo, showAll, revision, testSessionId]);
 
   function changeTab(next) {
     if (tab === next) return;
@@ -287,6 +288,13 @@ export default function Scan() {
                   <option value={filterLo}>LO dipilih (di luar venue)</option>}
                 {list?.owners?.map((owner) => <option key={owner.id} value={owner.id}>{owner.name}</option>)}
               </select>
+              {tab === 'sekolah' && <select aria-label="Filter fasilitator" value={filterFacilitator} onChange={(e) => {
+                setLoading(true); setFilterFacilitator(e.target.value); setPage(1);
+              }}>
+                <option value="">Semua fasilitator</option>
+                {filterFacilitator && !list?.facilitators?.includes(filterFacilitator) && <option value={filterFacilitator}>{filterFacilitator} (di luar filter saat ini)</option>}
+                {list?.facilitators?.map((name) => <option key={name} value={name}>{name}</option>)}
+              </select>}
               <select aria-label="Filter status absensi" value={filterAttendance} onChange={(e) => {
                 setLoading(true); setFilterAttendance(e.target.value); setPage(1);
               }}>
@@ -328,7 +336,7 @@ export default function Scan() {
               {loading ? 'Memuat daftar peserta…' : `${number.format(list?.total || 0)} peserta`}
             </p>
             <div className="assignment-table">
-              <table className="table stack-table" role="table" aria-label={`Daftar ${categories[tab].label}`} aria-busy={loading}>
+              <table className="table stack-table scan-table" role="table" aria-label={`Daftar ${categories[tab].label}`} aria-busy={loading}>
                 <thead role="rowgroup"><tr role="row">
                   {headers.map((name, index) => (
                     <th key={name} scope="col" role="columnheader"

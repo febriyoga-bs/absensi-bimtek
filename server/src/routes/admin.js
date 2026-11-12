@@ -599,6 +599,8 @@ r.get('/scan/participants', ah(async (req, res) => {
   const assignedOnly = req.user.role === 'lo' && req.query.scope !== 'all';
   const ownerId = req.query.lo_id == null || req.query.lo_id === '' ? null : Number(req.query.lo_id);
   const attendanceFilter = req.query.attendance || '';
+  const facilitatorFilter = req.query.facilitator || '';
+  if (typeof facilitatorFilter !== 'string' || facilitatorFilter.length > 400) throw new HttpError(400, 'Filter fasilitator tidak valid.');
   const sortColumns = {
     name: "lower(COALESCE(representative->>'name',name))",
     institution: 'lower(institution)', venue: 'lower(venue_name)',
@@ -652,6 +654,12 @@ r.get('/scan/participants', ah(async (req, res) => {
     ), assignments AS MATERIALIZED (
       SELECT id,jsonb_agg(lo_name ORDER BY lo_name) AS assigned_los,
         bool_or(account_id=$5::int) AS owned FROM assigned_people GROUP BY id
+    ), school_facilitators AS MATERIALIZED (
+      SELECT school.npsn,school.name,school.venue,school.facilitator
+      FROM assignment_roster roster
+      CROSS JOIN LATERAL jsonb_to_recordset(roster.data->'schools')
+        AS school(npsn text,name text,venue text,facilitator text)
+      WHERE roster.id=1
     ), matching AS (
       SELECT p.id, p.role, p.code, p.name, p.position, p.phone, p.institution, p.npsn, p.ruangan, p.venue_id, v.name AS venue_name,
         arrival.marks->>p.id::text AS arrival_status,arrival.representatives->p.id::text AS representative,
@@ -687,12 +695,9 @@ r.get('/scan/participants', ah(async (req, res) => {
           OR ($11='not_checked_in' AND selected_session_id IS NOT NULL AND selected_status IS NULL)
           OR ($11 IN ('review','ditolak','berhalangan') AND selected_status=$11)
           OR ($11='no_session' AND selected_session_id IS NULL))
-    ), school_facilitators AS MATERIALIZED (
-      SELECT school.npsn,school.name,school.venue,school.facilitator
-      FROM assignment_roster roster
-      CROSS JOIN LATERAL jsonb_to_recordset(roster.data->'schools')
-        AS school(npsn text,name text,venue text,facilitator text)
-      WHERE roster.id=1
+        AND ($12::text='' OR EXISTS (SELECT 1 FROM school_facilitators school
+          WHERE school.venue=matching.venue_name AND school.facilitator=$12
+            AND school.npsn=ANY(string_to_array(replace(matching.npsn,' ',''),';'))))
     ), page_rows AS (
       SELECT *,row_number() OVER (ORDER BY ${order}) AS sort_order
       FROM filtered ORDER BY ${order} LIMIT $3 OFFSET $4
@@ -730,13 +735,18 @@ r.get('/scan/participants', ah(async (req, res) => {
         'unrecorded', count(*) FILTER (WHERE COALESCE(arrival_status,'') NOT IN ('selesai','sudah_tiba','sedang_antre'))
       ) FROM matching) AS arrival_summary,
       COALESCE((SELECT jsonb_agg(d ORDER BY d.sort_order) FROM details d),'[]') AS rows,
+      COALESCE((SELECT jsonb_agg(names.facilitator ORDER BY names.facilitator) FROM (
+        SELECT DISTINCT school.facilitator FROM school_facilitators school JOIN matching person
+          ON school.venue=person.venue_name AND school.npsn=ANY(string_to_array(replace(person.npsn,' ',''),';'))
+        WHERE nullif(trim(school.facilitator),'') IS NOT NULL
+      ) names),'[]'::jsonb) AS facilitators,
       COALESCE((SELECT jsonb_agg(jsonb_build_object('id',l.id,'name',l.name) ORDER BY l.name) FROM active_owners l
         WHERE ($2::int IS NULL OR l.venue_id=$2)),'[]') AS owners,
       COALESCE((SELECT jsonb_agg(jsonb_build_object('id',v.id,'name',v.name) ORDER BY v.name) FROM venues v),'[]') AS venues`,
     [term, venueId, limit, (page - 1) * limit, req.user.lo, req.user.venue, assignedOnly,
-      ['present', 'arrived', 'queued', 'unrecorded'].includes(req.query.arrival) ? req.query.arrival : '', testSessionId, ownerId, attendanceFilter]);
+      ['present', 'arrived', 'queued', 'unrecorded'].includes(req.query.arrival) ? req.query.arrival : '', testSessionId, ownerId, attendanceFilter, facilitatorFilter]);
   res.json({
-    total: list.total, limit, venues: list.venues, owners: list.owners, arrival_summary: list.arrival_summary,
+    total: list.total, limit, venues: list.venues, owners: list.owners, facilitators: list.facilitators, arrival_summary: list.arrival_summary,
     rows: list.rows.map(({ recorded, phone, sort_order, ...person }) => ({
       ...person,
       session: withReportingDay(person.session),
@@ -965,23 +975,34 @@ r.get('/reporting/attendance-ranking', ah(async (req, res) => {
   ), presence AS MATERIALIZED (
     SELECT DISTINCT a.person_id,a.venue_id FROM attendance a JOIN sessions s ON s.id=a.session_id
     WHERE NOT s.is_test AND a.status IN ('valid','review')
-  ), presence_counts AS (
-    SELECT t.owner_id,count(*)::int AS present
+  ), presence_flags AS MATERIALIZED (
+    SELECT t.owner_id,t.person_id,
+      (COALESCE(arrival.marks->>t.person_id::text IN ('selesai','sudah_tiba','sedang_antre'),false) OR evidence.person_id IS NOT NULL) AS present
     FROM targets t JOIN owners owner ON owner.id=t.owner_id
     LEFT JOIN venue_arrival_recap arrival ON arrival.venue_id=owner.venue_id
     LEFT JOIN presence evidence ON evidence.person_id=t.person_id AND evidence.venue_id=owner.venue_id
-    WHERE arrival.marks->>t.person_id::text IN ('selesai','sudah_tiba','sedang_antre') OR evidence.person_id IS NOT NULL
-    GROUP BY t.owner_id
+  ), presence_counts AS (
+    SELECT owner_id,count(*) FILTER (WHERE present)::int AS present FROM presence_flags GROUP BY owner_id
+  ), work AS MATERIALIZED (
+    SELECT DISTINCT ON (a.scanned_by,a.venue_id,a.person_id) a.*
+    FROM attendance a JOIN sessions s ON s.id=a.session_id
+    WHERE NOT s.is_test AND ($1::int IS NULL OR s.id=$1)
+      AND a.method IN ('manual','qr') AND a.status IN ('valid','review','berhalangan')
+    ORDER BY a.scanned_by,a.venue_id,a.person_id,CASE WHEN a.status='berhalangan' THEN 1 ELSE 0 END,a.created_at DESC
   )
   SELECT l.id,l.name,l.venue,
     (SELECT count(*)::int FROM targets t WHERE t.owner_id=l.id) AS assigned,
     COALESCE((SELECT present FROM presence_counts pc WHERE pc.owner_id=l.id),0) AS present,
-    count(DISTINCT p.id) FILTER (WHERE lower(trim(p.position)) IN ('bendahara','pengawas'))::int AS participants,
-    count(DISTINCT p.id) FILTER (WHERE lower(trim(p.position)) ~ '^fasil(itator)?($|[[:space:]])')::int AS facilitators,
-    count(DISTINCT p.id)::int AS total
+    count(DISTINCT p.id) FILTER (WHERE a.status<>'berhalangan' AND lower(trim(p.position)) IN ('bendahara','pengawas'))::int AS participants,
+    count(DISTINCT p.id) FILTER (WHERE a.status<>'berhalangan' AND lower(trim(p.position)) ~ '^fasil(itator)?($|[[:space:]])')::int AS facilitators,
+    count(DISTINCT p.id) FILTER (WHERE a.status<>'berhalangan')::int AS total,
+    count(DISTINCT p.id) FILTER (WHERE a.status='berhalangan')::int AS unavailable,
+    count(DISTINCT p.id) FILTER (WHERE a.status='berhalangan' AND EXISTS (
+      SELECT 1 FROM presence_flags pf WHERE pf.owner_id=l.id AND pf.person_id=p.id AND NOT pf.present
+    ))::int AS unavailable_absent
   FROM owners l
-  LEFT JOIN attendance a ON l.same_name=1 AND a.venue_id=l.venue_id AND a.scanned_by='LO '||l.name
-    AND a.method IN ('manual','qr') AND a.status IN ('valid','review')
+  LEFT JOIN work a ON l.same_name=1 AND a.venue_id=l.venue_id AND a.scanned_by='LO '||l.name
+    AND a.method IN ('manual','qr') AND a.status IN ('valid','review','berhalangan')
     AND EXISTS (SELECT 1 FROM sessions s WHERE s.id=a.session_id AND NOT s.is_test
       AND ($1::int IS NULL OR s.id=$1))
   LEFT JOIN people p ON p.id=a.person_id AND p.role='peserta'

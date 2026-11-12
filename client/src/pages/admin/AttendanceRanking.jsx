@@ -33,7 +33,11 @@ export default function AttendanceRanking({ venue, query }) {
     return () => { current = false; };
   }, [sessionId, revision]);
   const rows = (result || []).filter((row) => !venue || row.venue === venue)
-    .map((row) => ({ ...row, ratio: row.present ? row.total * 100 / row.present : null }))
+    .map((row) => {
+      const completed = row.total + row.unavailable;
+      const target = row.present + row.unavailable_absent;
+      return { ...row, completed, target, ratio: target ? completed * 100 / target : null };
+    })
     .sort((a, b) => (b.ratio ?? -1) - (a.ratio ?? -1) || b.total - a.total || a.name.localeCompare(b.name, 'id'))
     .map((row, i) => ({ ...row, rank: i + 1 }))
     .filter((row) => row.name.toLowerCase().includes(query));
@@ -47,15 +51,15 @@ export default function AttendanceRanking({ venue, query }) {
     </div>
     {sessionError && <p className="alert alert--err" role="alert">Daftar sesi gagal dimuat. {sessionError}</p>}
     {!sessionId && !sessionError && sessions.length === 0 && <p className="muted">Menunggu daftar sesi resmi. Klik Muat ulang jika belum tersedia.</p>}
-    <p className="muted small">Progres = binaan yang diabsenkan LO pada sesi pilihan ÷ binaan yang hadir di venue. Hadir berdasarkan rekap Sudah tiba/Selesai/Sedang antre atau bukti absensi resmi Valid/Perlu dicek, lintas sesi. Setiap orang dihitung sekali, termasuk Bendahara, Pengawas, dan Fasilitator. Absensi mandiri tidak dihitung sebagai pekerjaan LO; status ditolak dan berhalangan tidak dihitung.</p>
+    <p className="muted small">Progres mencakup binaan yang diabsenkan dan yang dicatat Mundur/Berhalangan Hadir oleh LO pada sesi pilihan. Target mencakup binaan hadir serta binaan berhalangan yang sudah dicatat, tanpa hitung ganda. Hadir berdasarkan rekap kedatangan atau bukti absensi resmi lintas sesi. Absensi mandiri dan status ditolak tidak dihitung sebagai pekerjaan LO.</p>
     {error && <p className="alert alert--err" role="alert">{error}</p>}
     {sessionId && !result && !error && <p role="status">Memuat peringkat absensi…</p>}
     {result && <div className="reporting-ranking" tabIndex={0}>
       {rows.length ? <ol>{rows.map((row) => <li key={row.id}>
         <div className="reporting-ranking-name"><b>{row.rank}. {row.name}</b>
-          <strong>{row.total}/{row.present} sudah diabsenkan{row.ratio == null ? '' : ` (${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(row.ratio)}%)`}</strong></div>
-        <progress aria-label={`${row.total} dari ${row.present} sudah diabsenkan oleh ${row.name}`} value={row.ratio ?? 0} max={100} />
-        <p>{row.present}/{row.assigned} peserta/fasilitator hadir di venue · {row.participants} peserta dan {row.facilitators} fasilitator sudah diabsenkan · {row.venue}</p>
+          <strong>{row.completed}/{row.target} sudah dicatat{row.ratio == null ? '' : ` (${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(row.ratio)}%)`}</strong></div>
+        <progress aria-label={`${row.completed} dari ${row.target} sudah dicatat oleh ${row.name}`} value={row.ratio ?? 0} max={100} />
+        <p>{row.present}/{row.assigned} peserta/fasilitator hadir di venue · {row.participants} peserta dan {row.facilitators} fasilitator sudah diabsenkan · {row.unavailable} mundur/berhalangan hadir · {row.venue}</p>
       </li>)}</ol> : <p className="muted">Tidak ada LO yang cocok dengan filter.</p>}
     </div>}
   </section>;

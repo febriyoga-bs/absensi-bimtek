@@ -114,7 +114,7 @@
 .reporting-summary button[aria-pressed="true"] { border-color: var(--report-navy); background: #e8edfb; }
 .reporting-page :is([data-status="menunggu_reviu"], [data-status="sedang_antre"]) { --report-status: #c88723; --report-status-bg: #fdf1dd; }
 .reporting-page [data-status="ditolak"] { --report-status: #b34e3c; --report-status-bg: #fbe9e5; }
-.reporting-page [data-status="diterima"] { --report-status: #1b3a7a; --report-status-bg: #e8edfb; }
+.reporting-page [data-status="diterima"] { --report-status: var(--ok); --report-status-bg: var(--ok-soft); --report-status-text: var(--ok); }
 .reporting-page [data-status="sudah_tiba"] { --report-status: var(--ok); --report-status-bg: var(--ok-soft); --report-status-text: var(--ok); }
 .reporting-page [data-status="sudah_absen"] { --report-status-bg: var(--ok-soft); --report-status-text: var(--ok); }
 .reporting-tag, .reporting-own {

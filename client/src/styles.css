@@ -671,6 +671,55 @@ select:disabled { background-color: var(--surface-2); color: var(--muted); curso
 .scan__directory { min-width: 0; }
 .scan__directory .toolbar { margin-top: 0; }
 .scan__directory .tag { white-space: normal; }
+.scan__directory .tag { white-space: nowrap; }
+.admin .toolbar { align-items: end; gap: 10px; }
+.admin .toolbar > label { display: flex; flex-direction: column; gap: 5px; min-width: 0; font-size: 12px; font-weight: 600; color: var(--muted); }
+.admin .toolbar :is(input, select) { min-height: 44px; max-width: 100%; }
+.admin .toolbar > label :is(input, select) { width: 100%; }
+.admin .toolbar > .btn { min-height: 44px; flex: 0 0 auto; }
+.admin .page-head > div { min-width: 0; }
+.admin .page-head p { line-height: 1.6; }
+.admin .tabs { gap: 4px; overflow-x: auto; }
+.admin .tabs > button { flex-shrink: 0; white-space: nowrap; }
+.assignment-table { max-width: 100%; overscroll-behavior-x: contain; }
+.assignment-dialog header > div { min-width: 0; }
+.assignment-dialog header > :is(button, form) { flex-shrink: 0; }
+.reporting-ranking-name { flex-wrap: wrap; gap: 6px 16px; }
+@media (min-width: 901px) {
+  .admin .toolbar > :is(input, select) { flex: 0 1 240px; width: 240px; min-width: 180px; }
+  .admin .toolbar > input[type="search"] { flex-basis: 280px; width: 280px; }
+  .admin .toolbar > label { flex: 0 1 240px; }
+  .scan__directory .toolbar { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); align-items: stretch; }
+  .scan__directory .toolbar > :is(input, select, button) { min-width: 0; width: 100%; }
+  .scan__directory .scan-table { min-width: 1980px; table-layout: fixed; font-size: 13px; }
+  .scan-table :is(th,td) { vertical-align: top; padding: 14px 12px; line-height: 1.55; overflow-wrap: break-word; }
+  .scan-table th { white-space: nowrap; }
+  .scan-table :is(th,td):first-child { width: 240px; }
+  .scan-table :is(th,td):nth-child(2) { width: 260px; }
+  .scan-table :is(th,td):nth-child(3) { width: 190px; }
+  .scan-table :is(th,td):nth-child(4) { width: 180px; }
+  .scan-table :is(th,td):nth-child(5) { width: 220px; }
+  .scan-table :is(th,td):nth-child(6) { width: 240px; }
+  .scan-table :is(th,td):nth-child(7) { width: 190px; }
+  .scan-table :is(th,td):nth-child(8) { width: 160px; }
+  .scan-table :is(th,td):nth-child(9) { width: 160px; }
+  .scan-table :is(th,td):nth-child(10) { width: 220px; }
+  .scan-table .scan__row-actions { display: flex; flex-direction: column; align-items: stretch; }
+  .scan-table .scan__row-actions .btn { width: 100%; flex: none; white-space: nowrap; }
+  .admin__main > .stack-table { display: block; max-width: 100%; overflow-x: auto; }
+}
+@media (max-width: 900px) {
+  .admin .toolbar > label { flex: 1 1 180px; }
+  .scan-table .scan__row-actions { align-items: stretch; }
+  .scan-table .scan__row-actions > .btn { flex: 1 1 180px; }
+  .scan__directory .tag { max-width: 100%; white-space: normal; }
+}
+@media (max-width: 540px) {
+  .admin .toolbar > :is(input, select, label) { flex: 1 1 100%; width: 100%; }
+  .admin .toolbar > .btn { flex: 1 1 auto; }
+  .reporting-ranking-name { align-items: flex-start; }
+  .reporting-ranking-name > strong { width: 100%; text-align: left; }
+}
 .scan__arrival-recap { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fff; }
 .scan__arrival-recap .btn { margin-inline-start: auto; }
 .scan__arrival-note { flex-basis: 100%; }
