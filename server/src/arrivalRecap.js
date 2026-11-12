@@ -114,11 +114,12 @@ export async function importArrivalRecap(rows, summary = null) {
     index.get(id).push(p);
   }
   const snapshots = new Map();
+  const proposals = [];
   let unmatched = 0;
   for (const [hotel, rawRole, name, institution, rawArrival] of rows) {
     const venue = resolveVenue(hotel);
     if (!venue) throw new HttpError(400, `Venue di Excel tidak ditemukan di aplikasi: ${hotel || '(kosong)'}.`);
-    if (!snapshots.has(venue.id)) snapshots.set(venue.id, { venue_id: venue.id, marks: {}, detail_rows: [] });
+    if (!snapshots.has(venue.id)) snapshots.set(venue.id, { venue_id: venue.id, marks: {}, representatives: {}, detail_rows: [] });
     const snapshot = snapshots.get(venue.id);
     const arrival = states[key(rawArrival)];
     const role = roles[key(rawRole)];
@@ -132,22 +133,43 @@ export async function importArrivalRecap(rows, summary = null) {
     let matches = index.get(`${venue.id}:${role}:${identity}`) || [];
     if (matches.length > 1 && institution) matches = matches.filter((p) =>
       p.institution?.split(';').some((part) => schoolKey(part) === schoolKey(institution)));
+    // A substitute may have a different name, but must match exactly one
+    // profile for the same school/organization, role, and venue.
+    if (!matches.length && schoolKey(institution) && !['-', '(belum ada)'].includes(institution.trim().toLowerCase())) {
+      matches = people.filter((p) => p.venue_id === venue.id && roles[key(p.position)] === role &&
+        p.institution?.split(';').some((part) => schoolKey(part) === schoolKey(institution)));
+    }
     if (matches.length !== 1) {
       unmatched++;
       continue;
     }
-    const id = matches[0].id;
+    proposals.push({ snapshot, person: matches[0], name, arrival });
+  }
+  const namesByProfile = new Map();
+  for (const { person, name } of proposals) {
+    if (!namesByProfile.has(person.id)) namesByProfile.set(person.id, new Set());
+    namesByProfile.get(person.id).add(key(name));
+  }
+  for (const { snapshot, person, name, arrival } of proposals) {
+    // Do not choose a representative when the source lists different attendees
+    // against the same profile. These entries still need a manual check.
+    if (namesByProfile.get(person.id).size !== 1) { unmatched++; continue; }
+    const id = person.id;
     if (priority[arrival] > (priority[snapshot.marks[id]] || 0)) snapshot.marks[id] = arrival;
+    const plainName = (value) => key(String(value).split(',')[0].replace(/\s+(?:s\.?pd|s\.?t|m\.?pd|m\.?t)\.?$/i, ''));
+    if (key(name) && name.trim() !== '-' && plainName(name) !== plainName(person.name)) {
+      snapshot.representatives[id] = { name: name.trim(), original_name: person.name };
+    }
   }
   const snapshotsToSave = [...snapshots.values()];
   if (summary !== null && (summaries.size !== snapshots.size || [...summaries].some(([id, entries]) => !snapshots.has(id) || entries.length !== 3))) {
     throw new HttpError(400, 'Ringkasan dan Detail Peserta harus mencakup venue yang sama dan tiga peran lengkap.');
   }
   for (const snapshot of snapshotsToSave) snapshot.source_summary = summaries.get(snapshot.venue_id) || null;
-  await q(`INSERT INTO venue_arrival_recap (venue_id,marks,detail_rows,source_summary)
-    SELECT venue_id,marks,detail_rows,source_summary
-    FROM jsonb_to_recordset($1::jsonb) AS v(venue_id int,marks jsonb,detail_rows jsonb,source_summary jsonb) ORDER BY venue_id
-    ON CONFLICT (venue_id) DO UPDATE SET marks=EXCLUDED.marks, detail_rows=EXCLUDED.detail_rows, source_summary=EXCLUDED.source_summary, imported_at=now()`,
+  await q(`INSERT INTO venue_arrival_recap (venue_id,marks,detail_rows,source_summary,representatives)
+    SELECT venue_id,marks,detail_rows,source_summary,representatives
+    FROM jsonb_to_recordset($1::jsonb) AS v(venue_id int,marks jsonb,detail_rows jsonb,source_summary jsonb,representatives jsonb) ORDER BY venue_id
+    ON CONFLICT (venue_id) DO UPDATE SET marks=EXCLUDED.marks, detail_rows=EXCLUDED.detail_rows, source_summary=EXCLUDED.source_summary, representatives=EXCLUDED.representatives, imported_at=now()`,
     [JSON.stringify(snapshotsToSave)]);
   const matched = snapshotsToSave.reduce((sum, row) => sum + Object.keys(row.marks).length, 0);
   return { imported: rows.length, matched, unmatched, venues: snapshotsToSave.length };

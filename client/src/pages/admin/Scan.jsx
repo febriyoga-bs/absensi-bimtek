@@ -9,6 +9,7 @@ import CameraCapture from '../../components/CameraCapture.jsx';
 import WhatsAppLink from '../../components/WhatsAppLink.jsx';
 import { formatRoom } from '../../lib/room.js';
 import EditAttendanceNote from './EditAttendanceNote.jsx';
+import { personName } from '../../lib/personName.js';
 
 // Absenkan lewat scan QR dinonaktifkan sementara. Ubah ke true untuk memunculkan lagi tab "Scan QR"
 // (server juga perlu QR_SCAN_ENABLED = true di server/src/routes/admin.js).
@@ -147,7 +148,8 @@ export default function Scan() {
   }
 
   function absenkan(p) {
-    setShot({ code: p.code, name: p.name, position: p.position, school: p.institution?.split('; ')[0],
+    setShot({ code: p.code, name: p.representative ? personName(p.representative.name) : p.name,
+      originalName: p.representative ? p.name : null, position: p.position, school: p.institution?.split('; ')[0],
       sessionId: p.session?.id, sessionName: sessionTitle(p.session), isTest: p.session?.is_test });
   }
 
@@ -340,7 +342,10 @@ export default function Scan() {
                     const [arrival, arrivalStyle] = arrivalBadge(p.arrival_status);
                     return (
                       <tr key={p.id} role="row">
-                        <td role="cell"><b>{p.name}</b><WhatsAppLink name={p.name} phone={p.phone} />
+                        <td role="cell"><b>{p.representative ? personName(p.representative.name) : p.name}</b>
+                          {p.representative && <><span className="tag tag--venue">Diwakilkan</span>
+                            <div className="muted small">Mewakili {personName(p.name)}</div></>}
+                          {!p.representative && <WhatsAppLink name={p.name} phone={p.phone} />}
                           <div className="muted small">{[p.position, p.code].filter(Boolean).join(' · ')}</div></td>
                         <td role="cell" data-label="Sekolah / Instansi" className="cell-clamp">{p.institution || '—'}
                           {p.npsn && <div className="muted small">NPSN {p.npsn}</div>}
@@ -485,6 +490,7 @@ function LoShot({ target, user, busy, onSend, onClose }) {
     const lines = [
       target.sessionName ? `${target.isTest ? 'Uji coba · ' : ''}${target.sessionName}` : '',
       `${target.name}${target.position ? ` (${target.position})` : ''}`,
+      target.originalName ? `Diwakilkan · Mewakili ${personName(target.originalName)}` : '',
       target.school || target.code,
       `${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })} WIB${user?.venue ? ' • ' + user.venue.name : ''}`,
       `Diabsenkan oleh ${user?.name || 'LO'}`,
@@ -510,7 +516,8 @@ function LoShot({ target, user, busy, onSend, onClose }) {
       <div className="lo-shot__card">
         <div className="lo-shot__head">
           <Icon name="camera" size={22} />
-          <span><b>Foto {target.name}</b><small>{[target.position, target.school].filter(Boolean).join(' · ') || 'Arahkan kamera ke wajah peserta'}</small></span>
+          <span><b>Foto {target.name}</b>{target.originalName && <small>Diwakilkan · Mewakili {personName(target.originalName)}</small>}
+            <small>{[target.position, target.school].filter(Boolean).join(' · ') || 'Arahkan kamera ke wajah peserta'}</small></span>
           <button type="button" className="btn btn--sm" onClick={onClose} disabled={busy} aria-label="Tutup"><Icon name="x" size={16} /></button>
         </div>
         <div className="viewfinder">

@@ -138,3 +138,6 @@
   .reporting-summary { grid-template-columns: minmax(0, 1fr); }
   .reporting-tabs button { flex: 1 1 40%; }
 }
+.reporting-clickable-row { cursor: pointer; }
+.reporting-clickable-row:hover { background: #eef3fc; }
+.reporting-clickable-row:focus-visible { outline: 2px solid #2563eb; outline-offset: -2px; }

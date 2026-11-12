@@ -635,7 +635,8 @@ r.get('/scan/participants', ah(async (req, res) => {
         bool_or(account_id=$5::int) AS owned FROM assigned_people GROUP BY id
     ), matching AS (
       SELECT p.id, p.role, p.code, p.name, p.position, p.phone, p.institution, p.npsn, p.ruangan, p.venue_id, v.name AS venue_name,
-        arrival.marks->>p.id::text AS arrival_status,selected_session.id AS selected_session_id,selected_session.status AS selected_status,
+        arrival.marks->>p.id::text AS arrival_status,arrival.representatives->p.id::text AS representative,
+        selected_session.id AS selected_session_id,selected_session.status AS selected_status,
         COALESCE(assignment.assigned_los,'[]'::jsonb) AS assigned_los,
         ($5::int IS NULL OR (p.venue_id=$6::int AND COALESCE(assignment.owned,false))) AS can_check_in
       FROM people p LEFT JOIN venues v ON v.id=p.venue_id
@@ -654,7 +655,8 @@ r.get('/scan/participants', ah(async (req, res) => {
         AND ($2::int IS NULL OR p.venue_id=$2)
         AND ($10::int IS NULL OR EXISTS (SELECT 1 FROM assigned_people ap WHERE ap.id=p.id AND ap.account_id=$10))
         AND ($1='' OR p.name ILIKE '%'||$1||'%' OR p.code ILIKE '%'||$1||'%'
-          OR p.institution ILIKE '%'||$1||'%' OR p.npsn ILIKE '%'||$1||'%' OR v.name ILIKE '%'||$1||'%')
+          OR p.institution ILIKE '%'||$1||'%' OR p.npsn ILIKE '%'||$1||'%' OR v.name ILIKE '%'||$1||'%'
+          OR arrival.representatives->p.id::text->>'name' ILIKE '%'||$1||'%')
     ), filtered AS (
       SELECT * FROM matching WHERE ($8::text=''
         OR ($8 IN ('arrived','present') AND arrival_status IN ('selesai','sudah_tiba'))
@@ -670,7 +672,7 @@ r.get('/scan/participants', ah(async (req, res) => {
       SELECT * FROM filtered ORDER BY name,id LIMIT $3 OFFSET $4
     ), details AS (
       SELECT p.id, p.code, p.name, p.position, p.phone, p.institution, p.npsn, p.ruangan, p.venue_name, p.arrival_status,
-        p.assigned_los,p.can_check_in,
+        p.assigned_los,p.can_check_in,p.representative,
         CASE WHEN s.id IS NOT NULL THEN json_build_object('id',s.id,'name',s.name,'type',s.type,'starts_at',s.starts_at,'is_test',s.is_test) END AS session,
         CASE WHEN a.id IS NOT NULL THEN json_build_object('id',a.id,'at',a.created_at,'status',a.status,'method',a.method,
           'participant_note',CASE WHEN p.can_check_in THEN a.participant_note END,
@@ -899,9 +901,13 @@ for (const [directory, position] of [
 
 /* ---------- Absensi ---------- */
 r.get('/reporting/attendance-ranking', ah(async (req, res) => {
-  const day = req.query.day || null;
-  if (day && (typeof day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day) || !Number.isFinite(Date.parse(day)))) {
-    throw new HttpError(400, 'Tanggal absensi tidak valid.');
+  const sessionId = req.query.session_id == null || req.query.session_id === '' ? null : Number(req.query.session_id);
+  if (sessionId !== null && (!Number.isInteger(sessionId) || sessionId < 1 || sessionId > 2147483647)) {
+    throw new HttpError(400, 'Sesi absensi tidak valid.');
+  }
+  if (sessionId !== null) {
+    const { rows: sessions } = await q('SELECT id FROM sessions WHERE id=$1 AND NOT is_test', [sessionId]);
+    if (!sessions.length) throw new HttpError(400, 'Sesi resmi tidak ditemukan.');
   }
   const { rows } = await q(`WITH owners AS (
     SELECT l.id,l.name,l.venue_id,v.name AS venue,
@@ -930,12 +936,12 @@ r.get('/reporting/attendance-ranking', ah(async (req, res) => {
   LEFT JOIN attendance a ON l.same_name=1 AND a.venue_id=l.venue_id AND a.scanned_by='LO '||l.name
     AND a.method IN ('manual','qr') AND a.status IN ('valid','review')
     AND EXISTS (SELECT 1 FROM sessions s WHERE s.id=a.session_id AND NOT s.is_test
-      AND ($1::text IS NULL OR (s.starts_at AT TIME ZONE 'Asia/Jakarta')::date=$1::date))
+      AND ($1::int IS NULL OR s.id=$1))
   LEFT JOIN people p ON p.id=a.person_id AND p.role='peserta'
     AND EXISTS (SELECT 1 FROM targets t WHERE t.owner_id=l.id AND t.person_id=p.id)
     AND (lower(trim(p.position)) IN ('bendahara','pengawas') OR lower(trim(p.position)) ~ '^fasil(itator)?($|[[:space:]])')
   GROUP BY l.id,l.name,l.venue
-  ORDER BY total DESC,l.name,l.id`, [day]);
+  ORDER BY total DESC,l.name,l.id`, [sessionId]);
   res.json(rows);
 }));
 

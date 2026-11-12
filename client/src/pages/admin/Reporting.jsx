@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { api } from '../../api.js';
 import { formatRoom } from '../../lib/room.js';
@@ -58,8 +58,13 @@ function ReportingTable({ headers, rows, fullWidthColumn }) {
       {rows.length ? <div className="assignment-table">
         <table className="table stack-table" role="table" aria-label="Rincian pelaporan">
           <thead role="rowgroup"><tr role="row">{headers.map((heading) => <th key={heading} scope="col" role="columnheader">{heading}</th>)}</tr></thead>
-          <tbody role="rowgroup">{rows.slice((active - 1) * PAGE_SIZE, active * PAGE_SIZE).map(({ key, cells }) => (
-            <tr key={key} role="row">{cells.map((value, i) => (
+          <tbody role="rowgroup">{rows.slice((active - 1) * PAGE_SIZE, active * PAGE_SIZE).map(({ key, cells, onOpen, name }) => (
+            <tr key={key} role="row" className={onOpen ? 'reporting-clickable-row' : undefined}
+              tabIndex={onOpen ? 0 : undefined} aria-label={onOpen ? `Lihat sekolah binaan ${name}` : undefined}
+              onClick={onOpen ? (event) => { if (!event.target.closest('button,a,input,select,textarea')) onOpen(); } : undefined}
+              onKeyDown={onOpen ? (event) => {
+                if (event.target === event.currentTarget && ['Enter',' '].includes(event.key)) { event.preventDefault(); onOpen(); }
+              } : undefined}>{cells.map((value, i) => (
               <td key={headers[i]} role="cell" className={headers[i] === fullWidthColumn ? 'stack-full' : undefined}
                 data-label={i ? headers[i] : undefined}>{value ?? '—'}</td>
             ))}</tr>
@@ -167,6 +172,13 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
   const [movement, setMovement] = useState(true);
   const [attendanceRanking, setAttendanceRanking] = useState(false);
   const [selectedFacilitator, setSelectedFacilitator] = useState(null);
+  const facilitatorDetail = useRef(null);
+  useEffect(() => {
+    if (selectedFacilitator && facilitatorDetail.current) {
+      facilitatorDetail.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      facilitatorDetail.current.focus({ preventScroll: true });
+    }
+  }, [selectedFacilitator]);
   const [schoolDetails, setSchoolDetails] = useState(null);
   const query = term.trim().toLowerCase();
   const venueMatch = (row) => !venue || venue === row.venue;
@@ -222,10 +234,10 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
         const late = overdue(group);
         const pending = group.filter((s) => s.status === 'menunggu_reviu').length;
         const unsent = group.filter((s) => s.status === 'belum_kirim').length;
-        return { key: f.id, late, pending, name: f.name, cells: [
+        return { key: f.id, late, pending, name: f.name, onOpen: () => setSelectedFacilitator({ ...f }), cells: [
           <><b>{f.name}</b><WhatsAppLink name={f.name} phone={f.phone} /><div className="muted small">{[f.institution, f.coordinator].filter(Boolean).join(' · ')}</div></>,
           <>{f.venue}<div className="muted small">{[formatRoom(f.room), f.lo].filter(Boolean).join(' · ')}</div></>,
-          <button className="btn btn--sm" onClick={() => setSelectedFacilitator(f)} aria-label={`Lihat sekolah ${f.name}`}>{group.length}</button>,
+          <button className="btn btn--sm" onClick={() => setSelectedFacilitator({ ...f })} aria-label={`Lihat sekolah ${f.name}`}>{group.length}</button>,
           unsent, pending, late,
         ] };
       }).sort((a, b) => b.late - a.late || b.pending - a.pending || a.name.localeCompare(b.name, 'id'));
@@ -396,7 +408,7 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
       {view === 'ranking' ? (attendanceRanking && current && !publicView ? <AttendanceRanking venue={venue} query={query} /> : <ReportingRanking rows={ranking} movement={movement} movementLabel={movementLabel} own={own} />)
         : <ReportingTable key={JSON.stringify([view, venue, lo, status, attendance, checkInFilters, term, threshold])}
           headers={headers} rows={rows} fullWidthColumn={current && view === 'schools' ? 'Kehadiran di venue' : undefined} />}
-      {detail && <section className="card reporting-detail">
+      {detail && <section ref={facilitatorDetail} tabIndex={-1} className="card reporting-detail" aria-label={`Sekolah binaan ${selectedFacilitator.name}`}>
         <div className="page-head"><h3>Sekolah binaan {selectedFacilitator.name}</h3>
           <button className="btn btn--sm" onClick={() => setSelectedFacilitator(null)}>Tutup rincian</button></div>
         <ReportingTable key={selectedFacilitator.id} headers={schoolHeaders} rows={schoolRows(detail)}

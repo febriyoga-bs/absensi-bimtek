@@ -60,7 +60,7 @@ export default function Dashboard() {
   const [venues, setVenues] = useState(null);
   const [venueId, setVenueId] = useState(''); // filter venue (admin utama)
   const [days, setDays] = useState([]);
-  const [day, setDay] = useState('');
+  const [day, setDay] = useState(null);
   const [venueAttendance, setVenueAttendance] = useState(null);
   const [summaryError, setSummaryError] = useState(false);
   const [sessionsError, setSessionsError] = useState(false);
@@ -69,27 +69,40 @@ export default function Dashboard() {
 
   useEffect(() => {
     api('/admin/venues', { admin: true }).then(setVenues);
-    api('/info').then((info) => setDays(info.check_in_days || [])).catch(() => {});
+    api('/info').then((info) => {
+      const available = info.check_in_days || [];
+      const today = new Intl.DateTimeFormat('sv-SE', {
+        timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(new Date());
+      setDays(available);
+      const dates = available.map((item) => item.date).sort();
+      // Default to today's reporting day, otherwise the nearest past day.
+      // An empty selection remains an explicit choice to combine all days.
+      setDay(dates.includes(today) ? today : dates.filter((date) => date <= today).at(-1) || dates[0] || '');
+    }).catch(() => { setSessionsError(true); setSummaryError(true); });
   }, []);
 
   const dayQs = day ? `?day=${day}` : '';
   const qs = `?official=1${day ? `&day=${day}` : ''}${!lo && venueId ? `&venue_id=${venueId}` : ''}`;
   useEffect(() => {
+    if (day === null) return;
     let active = true;
     setSessionsError(false);
     api(`/admin/sessions${qs}`, { admin: true })
       .then((rows) => { if (active) setSessions(rows); })
       .catch(() => { if (active) setSessionsError(true); });
     return () => { active = false; };
-  }, [qs, revision]);
+  }, [qs, revision, day]);
   useEffect(() => {
+    if (day === null) return;
     let active = true;
     setSummaryError(false);
+    setVenueAttendance(null);
     api(`/admin/venue-attendance${dayQs}`, { admin: true })
       .then((rows) => { if (active) setVenueAttendance(rows); })
       .catch(() => { if (active) setSummaryError(true); });
     return () => { active = false; };
-  }, [dayQs, revision]);
+  }, [dayQs, revision, day]);
 
   const open = sessions.filter((s) => s.is_open);
   const sum = (k) => open.reduce((a, s) => a + s[k], 0);
@@ -177,7 +190,7 @@ export default function Dashboard() {
       </section>
       <section className="venue-attendance-section" aria-labelledby="venue-attendance-title">
         <h3 id="venue-attendance-title">Ringkasan per venue</h3>
-        <p className="muted small">{selectedDay ? `Ringkasan ${checkInDayLabel(selectedDay)}.` : 'Gabungan semua sesi resmi.'} Setiap orang dihitung sekali per venue.</p>
+        <p className="muted small">{day === null ? 'Menentukan hari absensi…' : selectedDay ? `Ringkasan ${checkInDayLabel(selectedDay)}.` : 'Gabungan semua sesi resmi.'} Setiap orang dihitung sekali per venue.</p>
         {summaryError && <p className="alert alert--warn" role="status">Ringkasan venue gagal diperbarui.</p>}
         {!venueAttendance && !summaryError && <div className="stats"><SkelCards n={2} h={190} /></div>}
         {venueAttendance && !shownVenues.length && <p className="muted">Belum ada venue untuk ditampilkan.</p>}
