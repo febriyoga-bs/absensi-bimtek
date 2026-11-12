@@ -1,0 +1,834 @@
+
+<script>
+var D = JSON.parse(document.getElementById('data').textContent);
+var H = D.dict.hotel, P = D.dict.prov, RU = D.dict.ruang,
+    FN = D.dict.fasil, PT = D.dict.ptn, KO = D.dict.koor;
+
+/* Kode status pada kolom ke-9 sekolah dan ke-4 binaan luar K3. */
+var BELUM = -1, TERIMA = 0, TOLAK = 1, PROSES = 2;
+var STAT = {};
+STAT[BELUM]  = {t:'Belum 50% fisik',  k:'p-belum',  c:'var(--s-belum)'};
+STAT[PROSES] = {t:'Menunggu reviu',  k:'p-tunggu', c:'var(--s-tunggu)'};
+STAT[TOLAK]  = {t:'Ditolak',         k:'p-tolak',  c:'var(--s-tolak)'};
+STAT[TERIMA] = {t:'Diterima',        k:'p-terima', c:'var(--s-terima)'};
+/* SIAP bukan status dari berkas, melainkan turunan: sekolah yang belum
+   mengirim TAPI capaian fisiknya sudah menembus 50 persen, jadi sebenarnya
+   sudah boleh mengajukan. Dipisahkan supaya LO tidak menagih sekolah yang
+   memang belum bisa mengajukan apa pun. Sekolah tanpa angka capaian berarti
+   tidak ada di Monitoring Laporan 50, yang hanya memuat sekolah >= 50%. */
+var SIAP = -9;
+STAT[SIAP] = {t:'Siap kirim, belum diajukan', k:'p-siap', c:'var(--s-siap)'};
+var URUT = [SIAP, BELUM, PROSES, TOLAK, TERIMA];
+function statSek(x){ return x[8] === BELUM ? (x[10] != null ? SIAP : BELUM) : x[8]; }
+
+/* Kehadiran sekolah di lokasi Bimtek, kolom ke-16. Kode sama dengan dasbor
+   LO ABT2 Tahap 3. Seluruh bagian ini hanya hidup bila dataset membawa
+   D.hadirStamp; tanpa itu kartunya kembali ke peringkat capaian. */
+var HADIR = {
+  '3':  {t:'Sudah tiba',       k:'h-tiba'},
+  '2':  {t:'Sedang antri',     k:'h-antri'},
+  '1':  {t:'Bersedia hadir',   k:'h-sedia'},
+  '0':  {t:'Belum konfirmasi', k:'h-belum'},
+  '-3': {t:'Berhalangan',      k:'h-halangan'},
+  '-1': {t:'Tidak terdata',    k:'h-kosong'}
+};
+var HADIR_URUT = [3, 2, 1, 0, -3, -1];
+function adaHadir(){ return !!D.hadirStamp; }
+/* "Sudah di lokasi" mencakup yang sudah tiba dan yang sedang antri. */
+function diLokasi(x){ return x.length > 15 && (x[15] === 3 || x[15] === 2); }
+function pilHadir(x){
+  if(!adaHadir() || x.length < 16) return '';
+  var h = HADIR[String(x[15])];
+  return h ? '<span class="pil '+h.k+'">'+h.t+'</span>' : '';
+}
+
+var KUNCI = 'dasbor_pelaporan_lo_v1';
+var pelan = window.matchMedia && window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+var MODE = 'lo', AKTIF = -1, HOTEL_AKTIF = -1;
+var LB_MODE = 'delta', AMBANG = D.ambang, FASIL_BUKA = null, DET_STAT = null;
+var HD_STAT = null;   /* status kehadiran yang sedang dibuka rinciannya */
+
+function $(id){ return document.getElementById(id); }
+function esc(t){ return String(t==null?'':t).replace(/[&<>"]/g,function(c){
+  return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+function nf(n){ return String(n).replace(/\B(?=(\d{3})+(?!\d))/g,'.'); }
+function low(t){ return String(t==null?'':t).toLowerCase(); }
+function prov(i){ return String(P[i]||'').replace(/^Prov\.\s*/,''); }
+function pct(a,b){ return b ? Math.round(a*1000/b)/10 : 0; }
+function satu(n){ return n==null?'–':(Math.round(n*10)/10).toString().replace('.',','); }
+
+function animasi(induk){
+  var isi = induk.querySelectorAll('[data-w]');
+  var jalan = function(){ Array.prototype.forEach.call(isi, function(el){
+    el.style.width = el.getAttribute('data-w') + '%'; }); };
+  if(pelan) jalan(); else requestAnimationFrame(function(){ requestAnimationFrame(jalan); });
+}
+
+/* ---------- indeks dihitung sekali ---------- */
+var sekPerLO = D.lo.map(function(){ return []; });
+D.sekolah.forEach(function(x){ if(x[6]>=0) sekPerLO[x[6]].push(x); });
+var fasPerLO = D.lo.map(function(){ return []; });
+D.fasil.forEach(function(f,i){ f.ix = i; fasPerLO[f[1]].push(f); });
+/* antrean reviu tiap fasil = sekolah K3-nya + binaan di luar K3 */
+var antrePerFasil = D.fasil.map(function(){ return []; });
+D.sekolah.forEach(function(x){ if(x[7]>=0 && x[8]===PROSES) antrePerFasil[x[7]].push({u:x[9], nm:x[1], np:x[0], kab:x[3], k3:1}); });
+D.luar.forEach(function(x){ if(x[3]===PROSES) antrePerFasil[x[2]].push({u:x[4], nm:x[1], np:x[0], kab:x[5], k3:0}); });
+/* sekolah K3 per fasil, dihitung sekali supaya halaman fasil tidak menyapu
+   seluruh 2.031 baris untuk setiap orang */
+var sekPerFasil = D.fasil.map(function(){ return []; });
+D.sekolah.forEach(function(x){ if(x[7]>=0) sekPerFasil[x[7]].push(x); });
+
+/* ---------- lingkup ---------- */
+function loDalamLingkup(){
+  if(MODE === 'lo') return AKTIF >= 0 ? [AKTIF] : [];
+  return D.lo.map(function(r,i){ return i; }).filter(function(i){
+    return MODE === 'semua' || D.lo[i][1] === HOTEL_AKTIF; });
+}
+function lingkupSek(){
+  if(MODE === 'lo') return AKTIF>=0 ? sekPerLO[AKTIF] : [];
+  var keluar = [];
+  loDalamLingkup().forEach(function(i){ keluar = keluar.concat(sekPerLO[i]); });
+  return keluar;
+}
+function lingkupFas(){
+  if(MODE === 'lo') return AKTIF>=0 ? fasPerLO[AKTIF] : [];
+  var keluar = [];
+  loDalamLingkup().forEach(function(i){ keluar = keluar.concat(fasPerLO[i]); });
+  return keluar;
+}
+function info(){
+  if(MODE === 'lo'){
+    var r = D.lo[AKTIF];
+    return { judul:r[0], atas:H[r[1]], milik:true, jumLO:1,
+      peran:(r[2] ? 'Captain' : 'LO Fasil') + ' · ' + (r[6].join(', ') || 'ruangan belum tercatat'),
+      sekolah:r[3], fasil:r[4], koor:r[5] };
+  }
+  var ls = loDalamLingkup(), fas = lingkupFas();
+  var koor = {}; fas.forEach(function(f){ koor[f[3]] = 1; });
+  return {
+    judul: MODE==='semua' ? 'Semua LO' : 'Semua LO di hotel ini',
+    atas: MODE==='semua' ? (H.length + ' hotel') : H[HOTEL_AKTIF],
+    peran: ls.length + ' LO · ' + (MODE==='semua' ? (H.length + ' hotel') : H[HOTEL_AKTIF]),
+    sekolah: lingkupSek().length, fasil: fas.length, koor: Object.keys(koor).length,
+    jumLO: ls.length, milik:false };
+}
+
+/* ---------- hitungan inti ---------- */
+/* Sebaran status Laporan 50% pada sekumpulan sekolah. */
+function sebaran(sek){
+  var c = {}; URUT.forEach(function(k){ c[k] = 0; });
+  sek.forEach(function(x){ c[statSek(x)]++; });
+  return c;
+}
+/* Antrean reviu milik sekumpulan fasil, termasuk binaan di luar K3.
+   Alasannya: tunggakan fasil adalah seluruh laporan yang menunggu dia,
+   bukan hanya yang kebetulan masuk sasaran K3. */
+function antrean(fas){
+  var out = [];
+  fas.forEach(function(f){ out = out.concat(antrePerFasil[f.ix]); });
+  return out;
+}
+function lewatAmbang(q){ return q.filter(function(a){ return a.u != null && a.u > AMBANG; }); }
+
+/* Jumlah fasil bermasalah, yaitu yang punya minimal satu laporan
+   menunggu reviu melewati ambang. */
+function fasilBermasalah(fas){
+  return fas.filter(function(f){
+    return antrePerFasil[f.ix].some(function(a){ return a.u != null && a.u > AMBANG; });
+  });
+}
+
+/* ---------- halaman pilih ---------- */
+function isiHotel(){
+  var agg = H.map(function(h,i){
+    return {i:i, nama:h, lo:D.lo.filter(function(r){ return r[1]===i; }).length};
+  }).filter(function(x){ return x.lo>0; }).sort(function(a,b){ return a.nama<b.nama?-1:1; });
+  $('iKeg').textContent = D.kegiatan;
+  $('pilihHotel').innerHTML = '<option value="-1">— Pilih hotel —</option>' +
+    '<option value="-2">Semua hotel (' + D.lo.length + ' LO)</option>' +
+    agg.map(function(x){ return '<option value="'+x.i+'">'+esc(x.nama)+' ('+x.lo+' LO)</option>'; }).join('');
+}
+function isiNama(){
+  var h = parseInt($('pilihHotel').value,10), sel = $('pilihNama');
+  if(isNaN(h) || h === -1){
+    sel.innerHTML = '<option value="-1">— Pilih hotel dulu —</option>';
+    sel.disabled = true; $('btnBuka').disabled = true;
+    $('pilihKet').textContent = 'Pilih hotel tempat Anda bertugas, lalu nama Anda.';
+    return;
+  }
+  var semua = h === -2;
+  var daftar = D.lo.map(function(r,i){ return {r:r,i:i}; })
+    .filter(function(x){ return semua || x.r[1]===h; })
+    .sort(function(a,b){ return low(a.r[0])<low(b.r[0])?-1:1; });
+  sel.innerHTML = '<option value="-1">— Pilih nama LO —</option>' +
+    '<option value="-2">Semua LO' + (semua?'':' di hotel ini') + '</option>' +
+    daftar.map(function(x){
+      return '<option value="'+x.i+'">'+esc(x.r[0])+(x.r[2]?' (Captain)':'') +
+        (semua ? ' — ' + esc(H[x.r[1]]) : '') + '</option>'; }).join('');
+  sel.disabled = false; $('btnBuka').disabled = true;
+  $('pilihKet').textContent = semua
+    ? (D.lo.length + ' LO di ' + H.length + ' hotel. Pilih nama Anda, atau "Semua LO" untuk melihat keseluruhan.')
+    : (daftar.length + ' LO bertugas di ' + H[h] + '. Pilih nama Anda, atau "Semua LO di hotel ini".');
+}
+function namaDipilih(){
+  var i = parseInt($('pilihNama').value,10), h = parseInt($('pilihHotel').value,10);
+  if(isNaN(i) || i === -1){ $('btnBuka').disabled = true; return; }
+  if(i === -2){
+    var ls = D.lo.map(function(r,n){ return n; }).filter(function(n){ return h===-2 || D.lo[n][1]===h; });
+    var sek = ls.reduce(function(s,n){ return s + D.lo[n][3]; },0);
+    var fas = ls.reduce(function(s,n){ return s + D.lo[n][4]; },0);
+    $('pilihKet').textContent = (h===-2 ? 'Seluruh program' : H[h]) + ' — ' + ls.length +
+      ' LO · ' + fas + ' fasilitator · ' + nf(sek) + ' sekolah. Tampilan pusat, tanpa baris "Anda".';
+    $('btnBuka').disabled = false; return;
+  }
+  var r = D.lo[i];
+  $('pilihKet').textContent = r[0] + ' — ' + (r[2]?'Captain':'LO Fasil') + ' · ' + r[4] +
+    ' fasilitator · ' + r[3] + ' sekolah binaan.';
+  $('btnBuka').disabled = false;
+}
+
+function buka(mode, nilai){
+  MODE = mode; AKTIF = mode==='lo' ? nilai : -1; HOTEL_AKTIF = mode==='hotel' ? nilai : -1;
+  try{ localStorage.setItem(KUNCI, mode==='lo' ? ('lo:'+D.lo[nilai][0]) :
+    mode==='hotel' ? ('hotel:'+H[nilai]) : 'semua'); }catch(e){}
+  $('hal-pilih').classList.add('hide');
+  $('navbar').classList.remove('hide');
+  $('lingkup').value = 'binaan'; DET_STAT = null; FASIL_BUKA = null;
+  gambarSemua(); pindah('beranda');
+}
+function gantiLO(){
+  AKTIF = -1; MODE = 'lo'; HOTEL_AKTIF = -1;
+  try{ localStorage.removeItem(KUNCI); }catch(e){}
+  ['beranda','sekolah','fasil'].forEach(function(x){ $('hal-'+x).classList.add('hide'); });
+  $('navbar').classList.add('hide');
+  $('hal-pilih').classList.remove('hide');
+  $('pilihHotel').value = '-1'; isiNama(); window.scrollTo(0,0);
+}
+
+/* ---------- beranda ---------- */
+function gambarBeranda(){
+  var g = info(), sek = lingkupSek(), fas = lingkupFas();
+  var c = sebaran(sek), q = antrean(fas), lewat = lewatAmbang(q), bad = fasilBermasalah(fas);
+
+  $('bHotel').textContent = g.atas;
+  $('bNama').textContent = g.judul;
+  $('bPeran').textContent = g.peran;
+
+  /* Angka utama adalah yang benar-benar bisa ditindaklanjuti hari ini.
+     Sekolah yang fisiknya belum 50% tidak bisa mengajukan apa pun, jadi
+     menagihnya hanya membuang waktu LO. */
+  $('bBelum').textContent = nf(c[SIAP]);
+  $('bBelumKet').textContent = 'dari ' + nf(sek.length) + ' sekolah binaan \u00b7 ' +
+    nf(c[BELUM]) + ' lagi belum sampai 50% fisik';
+
+  $('bTunggak').textContent = nf(q.length);
+  $('bTunggakLbl').textContent = 'laporan menunggu reviu fasil';
+  /* Lingkupnya kini sama dengan Alur Laporan 50% di Statistik: hanya sekolah
+     sasaran K3. Binaan di luar K3 sengaja tidak ditampilkan di aplikasi ini. */
+  $('bTunggakKet').textContent = lewat.length
+    ? (nf(lewat.length) + ' sudah lewat ' + AMBANG + ' hari')
+    : 'belum ada yang lewat ' + AMBANG + ' hari';
+
+  $('kSudah').textContent = nf(sek.length - c[BELUM]);
+  $('kSudahLbl').textContent = 'sudah kirim (' + satu(pct(sek.length-c[BELUM], sek.length)) + '%)';
+  $('kFasil').textContent = nf(bad.length) + ' / ' + nf(fas.length);
+  $('kFasilLbl').textContent = 'fasil bermasalah';
+
+  /* Kartu ketiga: kehadiran sekolah binaan di lokasi Bimtek. Selama rekap
+     kehadiran belum ada, kartunya kembali ke peringkat capaian. */
+  if(adaHadir()){
+    var tiba = sek.filter(diLokasi).length;
+    var sedia = sek.filter(function(x){ return x.length>15 && x[15]===1; }).length;
+    $('kRank').textContent = nf(tiba) + ' / ' + nf(sek.length);
+    /* Sebelum ada yang tiba, label membawa angka konfirmasi supaya kartunya
+       tetap berguna; begitu kedatangan mulai terisi, persennya yang tampil. */
+    $('kRankLbl').textContent = tiba
+      ? 'sekolah hadir (' + satu(pct(tiba, sek.length)) + '%)'
+      : 'sekolah hadir · ' + nf(sedia) + ' bersedia';
+  } else if(g.milik){
+    var daftar = papanCapaian(), rank = 0;
+    daftar.forEach(function(x,n){ if(x.i===AKTIF) rank = n+1; });
+    $('kRank').textContent = rank + ' / ' + D.lo.length;
+    $('kRankLbl').textContent = 'peringkat capaian';
+  } else {
+    $('kRank').textContent = g.jumLO;
+    $('kRankLbl').textContent = 'LO tercakup';
+  }
+
+  $('bKaki').innerHTML = kakiData();
+  gambarPapan();
+}
+
+/* Sebelum tarikan Monitoring pertama, label "Data per" tidak punya tanggal
+   untuk dilekatkan, jadi kalimatnya diganti seluruhnya. */
+function kakiData(){
+  var ada = /\d/.test(String(D.stamp || ''));
+  return '<span class="titik"></span>' + (ada
+    ? '<span class="lbl">Data per</span><b>' + esc(D.stamp) + '</b>'
+    : '<b>Data laporan belum ditarik</b>');
+}
+
+/* ---------- papan peringkat ---------- */
+/* Capaian: persen sekolah binaan yang sudah mengirim Laporan 50%. */
+/* LO yang masuk papan peringkat: hanya yang sehotel dengan lingkup terpilih,
+   kecuali saat lingkupnya semua hotel. Membandingkan LO lintas hotel
+   menyesatkan karena beban sekolah dan tahap tiap hotel berbeda. */
+function loPapan(){
+  var semua = D.lo.map(function(r,i){ return i; });
+  if(MODE === 'semua') return semua;
+  var ht = MODE === 'lo' ? (AKTIF >= 0 ? D.lo[AKTIF][1] : -1) : HOTEL_AKTIF;
+  return semua.filter(function(i){ return D.lo[i][1] === ht; });
+}
+function papanCapaian(){
+  return loPapan().map(function(i){
+    var r = D.lo[i], sek = sekPerLO[i];
+    var sudah = sek.filter(function(x){ return x[8]!==BELUM; }).length;
+    return {i:i, nama:r[0], hotel:H[r[1]], n:sek.length, sudah:sudah, persen:pct(sudah, sek.length)};
+  }).sort(function(a,b){
+    if(b.persen!==a.persen) return b.persen-a.persen;
+    if(b.sudah!==a.sudah) return b.sudah-a.sudah;
+    return low(a.nama)<low(b.nama)?-1:1;
+  });
+}
+/* Pergerakan: sekolah yang mengirim pada atau setelah tanggal baseline.
+   Tanggal pengajuan ada di tiap baris sekolah, jadi keadaan pada tanggal
+   mana pun bisa disusun ulang tanpa perlu menyimpan agregat baseline. */
+function papanDelta(){
+  var batas = D.baseline;
+  return loPapan().map(function(i){
+    var r = D.lo[i], sek = sekPerLO[i];
+    var baru = sek.filter(function(x){ return x[11] && x[11] >= batas; }).length;
+    var sudah = sek.filter(function(x){ return x[8]!==BELUM; }).length;
+    return {i:i, nama:r[0], hotel:H[r[1]], n:sek.length, baru:baru, sudah:sudah,
+      persen:pct(sudah, sek.length)};
+  }).sort(function(a,b){
+    if(b.baru!==a.baru) return b.baru-a.baru;
+    if(b.persen!==a.persen) return b.persen-a.persen;
+    return low(a.nama)<low(b.nama)?-1:1;
+  });
+}
+function setMode(m){
+  LB_MODE = m;
+  Array.prototype.forEach.call(document.querySelectorAll('#lbMode button'), function(o){
+    o.setAttribute('aria-pressed', o.getAttribute('data-mode')===m ? 'true':'false'); });
+}
+function gambarPapan(){
+  var delta = LB_MODE === 'delta';
+  var daftar = delta ? papanDelta() : papanCapaian();
+  var rank = 0, saya = null;
+  daftar.forEach(function(x,n){ if(x.i===AKTIF){ rank = n+1; saya = x; } });
+  var maks = delta ? Math.max(1, daftar[0].baru) : 100;
+
+  function baris(x, n, ini){
+    /* Nilai nol digambar tanpa isi sama sekali; sisa bar 1% pada 97 baris
+       hanya jadi derau saat papan belum bergerak. */
+    var nilai = delta ? x.baru : x.persen;
+    var w = nilai > 0 ? Math.max(1, Math.round(delta ? nilai*100/maks : nilai)) : 0;
+    var kanan = delta ? ((x.baru>0?'+':'') + nf(x.baru)) : (satu(x.persen) + '%');
+    /* Judul bagian sudah menyebut titik mulainya, jadi baris tidak perlu
+       mengulangnya; cukup "belum bergerak" saat nol. */
+    var kecil = delta
+      ? ((x.baru>0 ? x.baru + ' sekolah kirim sejak Bimtek mulai' : 'belum bergerak') +
+         ' · total ' + x.sudah + '/' + x.n + ' · ' + esc(x.hotel))
+      : (x.sudah + ' dari ' + x.n + ' sekolah sudah kirim · ' + esc(x.hotel));
+    return '<div class="row'+(ini?' milik':'')+'">' +
+      '<div class="top"><span class="grow"><b>'+(n+1)+'. '+esc(x.nama)+'</b></span>' +
+      (ini?'<span class="tag">Anda</span>':'') +
+      '<b class="num '+(delta?(x.baru>0?'naik':'diam'):'')+'">'+kanan+'</b></div>' +
+      '<div class="bar"><i data-w="'+w+'"></i></div>' +
+      '<small>'+kecil+'</small></div>';
+  }
+
+  $('lbSaya').innerHTML = saya ? baris(saya, rank-1, true) : '';
+  $('lbSaya').classList.toggle('hide', !saya);
+  animasi($('lbSaya'));
+  /* Pencarian hanya menyaring tampilan, bukan peringkatnya: nomor urut tiap
+     baris tetap posisi sebenarnya di papan, supaya hasil cari tidak terbaca
+     sebagai peringkat baru. */
+  var cari = low($('lbCari').value).trim();
+  var tampil = daftar.map(function(x,n){ return {x:x, n:n}; });
+  if(cari) tampil = tampil.filter(function(o){
+    return (low(o.x.nama) + ' ' + low(o.x.hotel)).indexOf(cari) !== -1; });
+  $('lbList').innerHTML = tampil.length
+    ? tampil.map(function(o){ return baris(o.x, o.n, o.x.i===AKTIF); }).join('')
+    : '<div class="kosong">Tidak ada LO yang cocok dengan pencarian.</div>';
+  animasi($('lbList'));
+  var lingkupPapan = MODE === 'semua' ? (H.length + ' hotel')
+    : H[MODE === 'lo' ? D.lo[AKTIF][1] : HOTEL_AKTIF];
+  $('lbKet').textContent = daftar.length + ' LO · ' + lingkupPapan;
+
+  var totBaru = daftar.reduce(function(s,x){ return s+(x.baru||0); },0);
+  var diam = daftar.filter(function(x){ return !x.baru; }).length;
+  var atas = daftar[0], bawah = daftar[daftar.length-1];
+  $('lbNote').textContent = delta
+    ? ('Diukur dari jumlah sekolah binaan yang mengirim Laporan 50% pada atau setelah ' +
+       D.baseLabel + '. Tanggal pengajuan dibaca dari Monitoring Laporan Tengah, jadi ' +
+       'angka ini ikut benar sendiri setiap kali data ditarik ulang. ' +
+       (totBaru === 0
+         ? 'Belum ada satu pun sekolah yang mengirim sejak titik itu, jadi papan ini masih rata ' +
+           'nol dan urutannya untuk sementara mengikuti capaian. Angkanya mulai bergerak begitu ' +
+           'peserta mengirim laporan dan data ditarik ulang.'
+         : ((saya ? saya.nama + ' ada di peringkat ' + rank + ' dari ' + daftar.length + ' LO. ' : '') +
+            'Seluruh K3 bertambah ' + nf(totBaru) + ' sekolah' +
+            (diam ? ', ' + diam + ' LO belum bergerak' : '') + '.')))
+    : ('Persen sekolah binaan yang sudah mengirim Laporan 50%, apa pun status reviunya. ' +
+       (saya ? saya.nama + ' ada di peringkat ' + rank + ' dari ' + daftar.length + ' LO dengan ' +
+         satu(saya.persen) + '% (' + saya.sudah + ' dari ' + saya.n + ' sekolah). ' : '') +
+       'Tertinggi ' + atas.nama + ' ' + satu(atas.persen) + '%, terendah ' + bawah.nama + ' ' +
+       satu(bawah.persen) + '%. Jumlah sekolah tiap LO berbeda, jadi baca persennya bersama ' +
+       'angka "x dari y".') +
+    (MODE === 'semua'
+      ? ' Papan ini memuat seluruh LO di ' + H.length + ' hotel.'
+      : ' Papan ini hanya memuat LO di ' + lingkupPapan +
+        ', karena beban sekolah dan tahap tiap hotel berbeda.');
+}
+
+/* ---------- halaman sekolah ---------- */
+function sekLingkupPilihan(){
+  var v = $('lingkup').value;
+  if(v === 'semua') return {sek:D.sekolah, judul:'Semua sekolah K3'};
+  if(v === 'hotel'){
+    var h = MODE==='lo' ? (AKTIF>=0 ? D.lo[AKTIF][1] : -1) : HOTEL_AKTIF;
+    if(h >= 0) return {sek:D.sekolah.filter(function(x){ return x[4]===h; }), judul:H[h]};
+  }
+  var g = info();
+  return {sek:lingkupSek(), judul: g.milik ? ('Binaan ' + g.judul) : (g.judul + ' · ' + g.atas)};
+}
+function gambarAlur(){
+  /* Pilihan "hotel saya" tidak berarti di mode gabungan hotel atau semua. */
+  var opsiH = $('opsiHotel');
+  var sembunyi = MODE !== 'lo';
+  opsiH.disabled = sembunyi; opsiH.classList.toggle('hide', sembunyi);
+  if(sembunyi && $('lingkup').value === 'hotel') $('lingkup').value = 'binaan';
+  var g = info();
+  $('opsiBinaan').textContent = g.milik ? 'Sekolah binaan saya'
+    : (MODE==='semua' ? 'Semua LO (lingkup saya)' : 'Hotel saya — ' + g.atas);
+
+  var L = sekLingkupPilihan(), sek = L.sek, c = sebaran(sek), N = sek.length || 1;
+  $('alurKet').textContent = L.judul;
+
+  $('alurBox').innerHTML = URUT.map(function(k){
+    var s = STAT[k];
+    return '<button type="button" data-stat="'+k+'" aria-expanded="'+(DET_STAT===k?'true':'false')+'">' +
+      '<span class="sw" style="background:'+s.c+'"></span>' +
+      '<span class="m"><b>'+s.t+'</b><small>'+ketStat(k)+'</small></span>' +
+      '<span><span class="n num">'+nf(c[k])+'</span>' +
+      '<span class="pc">'+satu(pct(c[k],N))+'%</span></span></button>';
+  }).join('');
+  Array.prototype.forEach.call($('alurBox').querySelectorAll('button'), function(b){
+    b.addEventListener('click', function(){
+      var k = parseInt(b.getAttribute('data-stat'),10);
+      DET_STAT = DET_STAT===k ? null : k;
+      gambarAlur();   /* gambarAlur sendiri yang membuka daftar rinciannya */
+    });
+  });
+
+  $('alurNote').textContent = 'Status dibaca dari Monitoring Laporan 50 per ' + D.stamp +
+    '. Berkas itu hanya memuat sekolah yang capaian fisiknya sudah menembus 50 persen. ' +
+    '"Siap kirim" berarti sekolah sudah boleh mengajukan tetapi laporannya belum masuk, ' +
+    'dan inilah kelompok yang layak ditagih. "Belum 50% fisik" belum bisa mengajukan apa pun, ' +
+    'jadi menagihnya tidak ada gunanya. Tekan salah satu baris untuk membuka daftar sekolahnya ' +
+    'beserta tombol WhatsApp kepala sekolah. Seluruh angka hanya mencakup sekolah yang ' +
+    'diundang ke Bimtek ini.';
+
+  $('detBox').classList.toggle('hide', DET_STAT===null);
+  if(DET_STAT !== null) gambarDetail(); else $('detList').innerHTML = '';
+  gambarHadir();
+  gambarWilayah();
+}
+
+/* Sebaran kehadiran sekolah di lokasi Bimtek. Seluruh bloknya disembunyikan
+   selama rekap kehadiran belum masuk ke dataset. */
+function gambarHadir(){
+  $('hadirBlok').classList.toggle('hide', !adaHadir());
+  if(!adaHadir()) return;
+  var L = sekLingkupPilihan(), sek = L.sek, N = sek.length || 1;
+  var c = {}; HADIR_URUT.forEach(function(k){ c[k] = 0; });
+  sek.forEach(function(x){ if(c[x[15]] !== undefined) c[x[15]]++; });
+  var tiba = c[3] + c[2];
+  $('hadirKet').textContent = nf(tiba) + ' dari ' + nf(sek.length) + ' hadir';
+  /* Tiap baris bisa ditekan untuk membuka daftar sekolahnya, sama seperti
+     baris pada Alur Laporan 50%. Baris kosong tetap disembunyikan kecuali
+     "sudah tiba", supaya daftar status tidak penuh angka nol. */
+  $('hadirBox').innerHTML = HADIR_URUT.filter(function(k){ return c[k] || k===3; })
+    .map(function(k){
+      var h = HADIR[String(k)];
+      return '<button type="button" data-hadir="'+k+'" aria-expanded="'+(HD_STAT===k?'true':'false')+'">' +
+        '<span class="pil '+h.k+'" style="margin-top:0">'+h.t+'</span>' +
+        '<span style="flex:1"></span>' +
+        '<span><span class="n num">'+nf(c[k])+'</span>' +
+        '<span class="pc">'+satu(pct(c[k],N))+'%</span></span></button>';
+    }).join('');
+  Array.prototype.forEach.call($('hadirBox').querySelectorAll('button'), function(b){
+    b.addEventListener('click', function(){
+      var k = parseInt(b.getAttribute('data-hadir'),10);
+      HD_STAT = HD_STAT===k ? null : k;
+      gambarHadir();   /* gambarHadir sendiri yang membuka daftar rinciannya */
+    });
+  });
+  $('hadirDet').classList.toggle('hide', HD_STAT===null);
+  if(HD_STAT !== null) gambarHadirDet(); else $('hdList').innerHTML = '';
+  $('hadirNote').textContent = (/\d/.test(String(D.hadirStamp||''))
+      ? 'Kehadiran per ' + D.hadirStamp + '. '
+      : 'Rekap kehadiran belum pernah dimuat, jadi semua sekolah masih tercatat belum konfirmasi. ') +
+    '"Sudah tiba" dan ' +
+    '"sedang antri" dihitung sama-sama sudah berada di lokasi, "bersedia hadir" berarti ' +
+    'baru konfirmasi di aplikasi. Status diambil dari baris berperan Sekolah pada rekap, ' +
+    'satu baris per sekolah, dicocokkan lewat nama instansi karena rekapnya tidak memuat NPSN. ' +
+    (tiba === 0 ? 'Belum ada sekolah yang tercatat tiba pada tarikan ini, jadi yang bergerak ' +
+      'dulu adalah konfirmasi. ' : '') +
+    'Status ini juga muncul sebagai pil di tiap baris daftar sekolah di atas.';
+}
+/* Daftar sekolah untuk satu status kehadiran. Urutannya menurut peringkat
+   sasaran, sama dengan daftar "belum kirim", supaya yang paling perlu
+   ditindaklanjuti muncul lebih dulu. */
+function gambarHadirDet(){
+  var k = HD_STAT, L = sekLingkupPilihan();
+  var q = low($('hdCari').value).trim();
+  var daftar = L.sek.filter(function(x){ return x[15]===k; });
+  if(q) daftar = daftar.filter(function(x){
+    return (low(x[1]) + ' ' + x[0] + ' ' + low(x[3])).indexOf(q) !== -1; });
+  daftar = daftar.slice().sort(function(a,b){ return (a[14]||1e9)-(b[14]||1e9); });
+  $('hdJudul').textContent = HADIR[String(k)].t;
+  $('hdList').innerHTML = daftar.length ? daftar.slice(0,DET_BATAS).map(function(x){
+    var fn = x[7]>=0 ? FN[D.fasil[x[7]][0]] : '-';
+    return '<div class="s-row"><span class="grow">' +
+      '<b>'+esc(x[1])+'</b>' +
+      '<small>'+esc(x[0])+' · '+esc(x[3])+', '+esc(prov(x[2]))+
+      '<br>Fasil '+esc(fn)+' · '+esc(RU[x[5]]||'-')+'</small>' +
+      '<span class="pil-baris">' + pilHadir(x) + pil(statSek(x)) +
+        (x[10]!=null ? '<span class="badge">capaian '+satu(x[10])+'%</span>' : '') + '</span>' +
+      '</span><span class="aksi">'+tombolWa(x[12],'WA kepsek')+'</span></div>';
+  }).join('') + (daftar.length>DET_BATAS
+      ? '<div class="kosong">Menampilkan '+DET_BATAS+' teratas dari '+nf(daftar.length)+
+        ' sekolah. Persempit dengan pencarian.</div>' : '')
+    : '<div class="kosong">Tidak ada sekolah pada status ini.</div>';
+  $('hdNote').textContent = 'Lingkup ' + L.judul + ' · ' + nf(daftar.length) + ' sekolah. ' +
+    'Diurutkan menurut peringkat sasaran. Pil kedua menunjukkan status Laporan 50% sekolah itu.';
+}
+function ketStat(k){
+  if(k===SIAP)   return 'capaian fisik sudah lewat 50%, paling layak didorong';
+  if(k===BELUM)  return 'capaian fisik belum 50%, belum bisa mengajukan';
+  if(k===PROSES) return 'sudah diajukan, menunggu reviu fasil';
+  if(k===TOLAK)  return 'perlu diperbaiki sekolah lalu diajukan ulang';
+  return 'selesai, tidak perlu ditindaklanjuti';
+}
+function tombolWa(nomor, teks, kelas){
+  if(!nomor) return '<span class="badge">Nomor belum ada</span>';
+  return '<a class="wa '+(kelas||'')+'" target="_blank" rel="noopener" href="https://wa.me/'+esc(nomor)+'">' +
+    '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15l-1.3 4.7 4.8-1.3A10 10 0 1 0 12 2zm5.6 14.1c-.2.6-1.2 1.2-1.7 1.2-.5.1-1 .1-1.6-.1-.4-.1-.9-.3-1.5-.6-2.6-1.1-4.3-3.8-4.4-4-.1-.2-1-1.4-1-2.6s.6-1.8.9-2.1c.2-.2.5-.3.7-.3h.5c.2 0 .4 0 .6.4l.8 1.9c.1.2 0 .4-.1.5l-.3.4c-.1.1-.3.3-.1.6.1.2.6 1 1.3 1.7.9.8 1.6 1 1.9 1.2.2.1.4.1.5-.1l.7-.8c.2-.2.3-.2.6-.1l1.8.9c.3.1.4.2.5.3 0 .1 0 .6-.3 1.2z"/></svg>' +
+    esc(teks) + '</a>';
+}
+/* Tombol lapor pergantian fasilitator. Membuka WhatsApp ke panitia dengan
+   keterangan yang sudah terisi; LO tinggal mengetik nama dan nomor penggantinya.
+   Dasbor sengaja TIDAK mengubah datanya sendiri. Berkas ini statis, jadi
+   perubahan yang diketik di sini hanya akan hidup di satu ponsel, tidak sampai
+   ke panitia maupun LO lain, dan hilang saat data dirakit ulang. Sumber
+   kebenarannya tetap berkas pemetaan panitia. */
+function tombolLapor(x){
+  if(!D.waLapor) return '';
+  var baris = [
+    '*Lapor Pergantian Fasilitator*',
+    D.kegiatan,
+    '',
+    'LO: ' + x.lo,
+    'Hotel: ' + x.hotel,
+    'Ruangan: ' + x.ruang,
+    'Fasilitator lama: ' + x.nama,
+    'PTN: ' + x.ptn,
+    'Koordinator: ' + x.koor,
+    'Sekolah terdampak: ' + x.sek.length,
+    '',
+    'Mohon diperbarui menjadi:',
+    'Nama pengganti: ',
+    'No. WhatsApp: ',
+    'PTN: ',
+    'Alasan: ',
+    'Berlaku sejak: '
+  ].join('\n');
+  return '<a class="lapor" target="_blank" rel="noopener" href="https://wa.me/' +
+    esc(D.waLapor) + '?text=' + encodeURIComponent(baris) + '">Lapor ganti</a>';
+}
+
+function pil(k, tambahan){
+  var s = STAT[k];
+  return '<span class="pil '+s.k+'"><i style="background:'+s.c+'"></i>'+s.t+(tambahan||'')+'</span>';
+}
+var DET_BATAS = 80;
+function gambarDetail(){
+  var k = DET_STAT, L = sekLingkupPilihan();
+  var q = low($('detCari').value).trim();
+  var daftar = L.sek.filter(function(x){ return statSek(x)===k; });
+  if(q) daftar = daftar.filter(function(x){
+    return (low(x[1]) + ' ' + x[0] + ' ' + low(x[3])).indexOf(q) !== -1; });
+  /* Yang paling perlu didorong dulu. Untuk yang belum kirim, capaian fisik
+     tidak ada di monitoring, jadi diurutkan menurut peringkat sasaran. */
+  daftar = daftar.slice().sort(function(a,b){
+    if(k===PROSES) return (b[9]||0)-(a[9]||0);
+    /* Yang siap kirim diurutkan dari capaian tertinggi: makin jauh di atas
+       50%, makin tidak ada alasan laporannya belum masuk. */
+    if(k===SIAP) return (b[10]||0)-(a[10]||0);
+    return (a[14]||1e9)-(b[14]||1e9);
+  });
+  $('detJudul').textContent = STAT[k].t;
+  $('detList').innerHTML = daftar.length ? daftar.slice(0,DET_BATAS).map(function(x){
+    var fn = x[7]>=0 ? FN[D.fasil[x[7]][0]] : '-';
+    return '<div class="s-row"><span class="grow">' +
+      '<b>'+esc(x[1])+'</b>' +
+      '<small>'+esc(x[0])+' · '+esc(x[3])+', '+esc(prov(x[2]))+
+      '<br>Bendahara '+esc(x[13]||'-')+'<br>Fasil '+esc(fn)+' · '+esc(RU[x[5]]||'-')+'</small>' +
+      '<span class="pil-baris">' +
+        (k===PROSES ? pil(k, ' ' + satu(x[9]) + ' hari') : pil(k)) + pilHadir(x) +
+        /* Capaian fisik kini ada untuk semua sekolah, termasuk yang belum
+           mengajukan, karena diambil dari Progres Laporan Sekolah. */
+        (x[10]!=null ? '<span class="badge">capaian '+satu(x[10])+'%</span>' : '') +
+      '</span>' +
+      '</span><span class="aksi">'+tombolWa(x[12],'WA kepsek')+'</span></div>';
+  }).join('') + (daftar.length>DET_BATAS
+      ? '<div class="kosong">Menampilkan '+DET_BATAS+' teratas dari '+nf(daftar.length)+
+        ' sekolah. Persempit dengan pencarian.</div>' : '')
+    : '<div class="kosong">Tidak ada sekolah pada status ini.</div>';
+  $('detNote').textContent = 'Lingkup ' + L.judul + ' · ' + nf(daftar.length) + ' sekolah. ' +
+    (k===BELUM ? 'Diurutkan menurut peringkat sasaran, yang paling prioritas di atas. '
+      : k===PROSES ? 'Diurutkan dari antrean terlama. ' : '') +
+    'Tombol WhatsApp menghubungi kepala sekolah. Peserta Bimtek dari sekolah ini adalah ' +
+    'bendaharanya, namanya tertulis di tiap baris supaya mudah dicari di ruangan. ' +
+    'Angka capaian adalah progres fisik pembangunan terkini, bukan nilai saat laporan diajukan.';
+}
+
+function gambarWilayah(){
+  var sek = sekLingkupPilihan().sek, kab = {};
+  sek.forEach(function(x){
+    if(!kab[x[3]]) kab[x[3]] = {nama:x[3], n:0, c:{}};
+    var v = kab[x[3]]; v.n++;
+    v.c[x[8]] = (v.c[x[8]]||0) + 1;
+  });
+  var daftar = Object.keys(kab).map(function(key){
+    var v = kab[key];
+    v.belum = v.c[BELUM]||0;
+    v.persen = pct(v.n - v.belum, v.n);
+    return v;
+  }).sort(function(a,b){
+    if(b.belum!==a.belum) return b.belum-a.belum;
+    return a.nama<b.nama?-1:1;
+  });
+  $('wilKet').textContent = daftar.length + ' kab/kota';
+  $('wilList').innerHTML = daftar.length ? daftar.map(function(x){
+    var seg = URUT.map(function(k){
+      var n = x.c[k]||0;
+      return n ? '<i data-w="'+(n/x.n*100)+'" style="background:'+STAT[k].c+'"></i>' : '';
+    }).join('');
+    return '<div class="row"><div class="top"><span class="grow"><b>'+esc(x.nama)+'</b></span>' +
+      '<b class="num">'+nf(x.belum)+'</b></div>' +
+      '<div class="stack">'+seg+'</div>' +
+      '<small>'+x.belum+' dari '+x.n+' sekolah belum kirim · sudah kirim '+satu(x.persen)+'%</small></div>';
+  }).join('') : '<div class="kosong">Belum ada sekolah.</div>';
+  /* legenda ditaruh di luar kotak bergulir supaya selalu terlihat */
+  $('wilLeg').innerHTML = daftar.length ? URUT.map(function(k){
+    return '<span><i class="dot" style="background:'+STAT[k].c+'"></i>'+STAT[k].t+'</span>';
+  }).join('') : '';
+  animasi($('wilList'));
+  var tb = daftar.reduce(function(s,x){ return s+x.belum; },0);
+  var tn = daftar.reduce(function(s,x){ return s+x.n; },0);
+  $('wilNote').textContent = 'Angka di kanan tiap baris adalah jumlah sekolah yang belum mengirim ' +
+    'Laporan 50%, karena itu yang perlu dikejar. Urutannya menurut jumlah itu, bukan menurut persen, ' +
+    'supaya wilayah bersekolah banyak tidak tenggelam. Seluruh wilayah dalam lingkup ini ' +
+    nf(tb) + ' dari ' + nf(tn) + ' sekolah belum kirim.';
+}
+/* ---------- halaman fasilitator ---------- */
+function setAmbang(v){
+  AMBANG = v;
+  Array.prototype.forEach.call(document.querySelectorAll('#ambBox button'), function(o){
+    o.setAttribute('aria-pressed', +o.getAttribute('data-amb')===v ? 'true':'false'); });
+}
+function gambarFasil(){
+  var g = info(), fas = lingkupFas().slice();
+  var qf = low($('fsCari').value).trim();
+  var urut = $('fsUrut').value;
+
+  var baris = fas.map(function(f){
+    var q = antrePerFasil[f.ix];
+    var lewat = q.filter(function(a){ return a.u!=null && a.u>AMBANG; });
+    var mx = q.length ? Math.max.apply(null, q.map(function(a){ return a.u||0; })) : null;
+    var sek = sekPerFasil[f.ix];
+    var belum = sek.filter(function(x){ return x[8]===BELUM; }).length;
+    return {f:f, nama:FN[f[0]], ptn:PT[f[2]]||'-', koor:KO[f[3]]||'-', ruang:RU[f[4]]||'-',
+      hp:f[5], hp2:f[7]||'', ket:f[8]||'', q:q, lewat:lewat.length, mx:mx,
+      sek:sek, belum:belum, luarBelum:f[6],
+      lo:D.lo[f[1]][0], hotel:H[D.lo[f[1]][1]]};
+  });
+  if(qf) baris = baris.filter(function(x){
+    return (low(x.nama)+' '+low(x.ptn)+' '+low(x.koor)+' '+low(x.lo)).indexOf(qf) !== -1; });
+  baris.sort(function(a,b){
+    if(urut==='nama') return low(a.nama)<low(b.nama)?-1:1;
+    if(urut==='belum'){ if(b.belum!==a.belum) return b.belum-a.belum; }
+    else { if(b.lewat!==a.lewat) return b.lewat-a.lewat;
+           if((b.mx||0)!==(a.mx||0)) return (b.mx||0)-(a.mx||0);
+           if(b.q.length!==a.q.length) return b.q.length-a.q.length; }
+    return low(a.nama)<low(b.nama)?-1:1;
+  });
+
+  $('fsJudul').textContent = g.milik ? 'Fasilitator binaan' : 'Fasilitator';
+  $('fsKet').textContent = qf ? (baris.length + ' dari ' + fas.length + ' orang')
+                              : (baris.length + ' orang');
+
+  $('fsList').innerHTML = baris.length ? baris.map(function(x){
+    var buka = FASIL_BUKA === x.f.ix;
+    /* Pil menyebut satuannya sendiri. "Bermasalah · 1" sempat dibaca sebagai
+       satu sekolah bermasalah, padahal maksudnya satu laporan yang menunggu
+       reviu melewati ambang. */
+    var status = x.lewat
+      ? '<span class="pil p-tolak"><i style="background:var(--s-tolak)"></i>' +
+        x.lewat + ' laporan lewat ' + AMBANG + ' hari</span>'
+      : x.q.length
+      ? '<span class="pil p-tunggu"><i style="background:var(--s-tunggu)"></i>' +
+        x.q.length + ' laporan menunggu reviu</span>'
+      : '<span class="pil p-terima"><i style="background:var(--s-terima)"></i>Tidak ada antrean</span>';
+    return '<div class="s-row"><span class="grow">' +
+      '<button type="button" class="nama-fasil" data-fasil="'+x.f.ix+'" aria-expanded="'+(buka?'true':'false')+'">' +
+        esc(x.nama)+'</button>' +
+      '<small>'+esc(x.ptn)+(g.milik?'':'<br>LO '+esc(x.lo))+
+      '<br>Koor '+esc(x.koor)+' · '+esc(x.ruang)+
+      '<br>'+x.sek.length+' sekolah K3, '+x.belum+' belum kirim</small>' +
+      status +
+      (x.ket ? '<span class="ket-ganti">'+esc(x.ket)+'</span>' : '') +
+      '</span><span class="aksi">'+tombolWa(x.hp,'WhatsApp') +
+        (x.hp2 ? tombolWa(x.hp2,'Nomor lain','wa-alt') : '') +
+        tombolLapor(x) + '</span></div>' +
+      (buka ? panel(x) : '');
+  }).join('') : '<div class="kosong">' +
+    (qf ? 'Tidak ada fasilitator yang cocok dengan pencarian.' : 'Belum ada fasilitator.') + '</div>';
+  pasangKlik($('fsList'));
+
+  var adaHp = fas.filter(function(f){ return f[5]; }).length;
+  var adaAlt = fas.filter(function(f){ return f[7]; }).length;
+  var bad = fasilBermasalah(fas).length;
+  $('fsNote').textContent = 'Fasil bermasalah berarti ada laporan yang menunggu reviunya lebih dari ' +
+    AMBANG + ' hari. Pada lingkup ini ' + bad + ' dari ' + fas.length + ' fasil bermasalah. ' +
+    adaHp + ' dari ' + fas.length + ' fasil sudah ada nomornya' +
+    (fas.length-adaHp ? ', ' + (fas.length-adaHp) + ' sisanya belum dan perlu dilengkapi' : '') +
+    '. ' + (adaAlt ? adaAlt + ' orang punya tombol "Nomor lain" karena berkas kontak program ' +
+      'mencatat nomor yang berbeda dari daftar LO; coba nomor utama dulu, pakai yang lain bila ' +
+      'tidak tersambung. ' : '') +
+    'Halaman ini memuat nomor telepon, jadi tautannya jangan diteruskan ke luar panitia. ' +
+    (D.waLapor ? 'Bila fasil memberi tahu ada pergantian, tekan "Lapor ganti" di barisnya. ' +
+      'WhatsApp ke panitia terbuka dengan keterangan yang sudah terisi, Anda tinggal menulis ' +
+      'nama dan nomor penggantinya. Dasbor tidak mengubah datanya sendiri; penggantian muncul ' +
+      'untuk semua LO setelah panitia memasukkannya dan data dirakit ulang.' : '');
+
+  $('ambNote').textContent = 'Ambang menentukan kapan sebuah laporan disebut menunggak. ' +
+    'Bawaannya ' + D.ambang + ' hari, bukan 7 hari, karena fasil kelompok ini biasanya mereviu ' +
+    'dalam waktu kurang dari satu hari, sehingga ambang 7 hari hampir tidak menangkap siapa pun ' +
+    'selama acara berlangsung. Ambang 7 hari tetap tersedia untuk pelaporan setelah acara.';
+}
+/* Panel di bawah nama fasil: antrean reviunya dulu, karena itu yang bisa dia
+   kerjakan sekarang, lalu sekolah K3 yang belum mengirim. */
+function panel(x){
+  var q = x.q.slice().sort(function(a,b){ return (b.u||0)-(a.u||0); });
+  var belum = x.sek.filter(function(s){ return s[8]===BELUM; })
+    .sort(function(a,b){ return (a[14]||1e9)-(b[14]||1e9); });
+  var h = '<div class="panel">' +
+    '<div class="panel-kepala"><b>'+q.length+' laporan menunggu reviu</b>' +
+      '<span>'+x.lewat+' lewat '+AMBANG+' hari'+(x.mx!=null?' · terlama '+satu(x.mx)+' hari':'')+'</span>' +
+      '<button type="button" class="det-tutup" data-tutup="1">Tutup</button></div>' +
+    '<div class="panel-wa">'+tombolWa(x.hp,'WhatsApp '+x.nama,'wa-fasil') +
+      (x.hp2 ? ' ' + tombolWa(x.hp2,'Nomor lain','wa-alt') : '') + '</div>';
+  h += q.length ? q.map(function(a){
+    return '<div class="s-row"><span class="grow"><b>'+esc(a.nm)+'</b>' +
+      '<small>'+esc(a.np)+' · '+esc(a.kab)+(a.k3?'':' · di luar sasaran K3')+'</small>' +
+      pil(PROSES, ' ' + satu(a.u) + ' hari') + '</span></div>';
+  }).join('') : '<div class="kosong">Tidak ada laporan yang menunggu reviunya.</div>';
+  if(belum.length){
+    h += '<div class="panel-kepala" style="padding-top:14px"><b>'+belum.length+
+      ' sekolah K3 belum kirim</b><span>perlu didorong</span></div>';
+    h += belum.slice(0,25).map(function(s){
+      return '<div class="s-row"><span class="grow"><b>'+esc(s[1])+'</b>' +
+        '<small>'+esc(s[0])+' · '+esc(s[3])+'<br>Bendahara '+esc(s[13]||'-')+'</small>' +
+        pilHadir(s) +
+        '</span><span class="aksi">'+tombolWa(s[12],'WA kepsek')+'</span></div>';
+    }).join('');
+    if(belum.length>25) h += '<div class="kosong">25 teratas ditampilkan dari '+belum.length+
+      ' sekolah. Sisanya ada di halaman Sekolah.</div>';
+  }
+  if(x.luarBelum) h += '<div class="kosong">Fasil ini juga membina '+x.luarBelum+
+    ' sekolah di luar sasaran K3 yang belum mengirim Laporan 50%.</div>';
+  return h + '</div>';
+}
+function pasangKlik(induk){
+  Array.prototype.forEach.call(induk.querySelectorAll('[data-fasil]'), function(b){
+    b.addEventListener('click', function(){
+      var i = parseInt(b.getAttribute('data-fasil'),10);
+      FASIL_BUKA = FASIL_BUKA===i ? null : i;
+      gambarFasil();
+    });
+  });
+  Array.prototype.forEach.call(induk.querySelectorAll('[data-tutup]'), function(b){
+    b.addEventListener('click', function(){ FASIL_BUKA = null; gambarFasil(); });
+  });
+}
+
+/* ---------- navigasi ---------- */
+function gambarSemua(){
+  gambarBeranda();
+  $('sKaki').innerHTML = kakiData();
+  gambarAlur();
+  gambarFasil();
+}
+function pindah(h){
+  ['beranda','sekolah','fasil'].forEach(function(x){ $('hal-'+x).classList.toggle('hide', x!==h); });
+  Array.prototype.forEach.call(document.querySelectorAll('.nav-in button'), function(o){
+    if(o.getAttribute('data-hal')===h) o.setAttribute('aria-current','page');
+    else o.removeAttribute('aria-current');
+  });
+  window.scrollTo(0,0);
+}
+
+$('pilihHotel').addEventListener('change', isiNama);
+$('pilihNama').addEventListener('change', namaDipilih);
+$('btnBuka').addEventListener('click', function(){
+  var i = parseInt($('pilihNama').value,10), h = parseInt($('pilihHotel').value,10);
+  if(i >= 0) buka('lo', i);
+  else if(i === -2) buka(h === -2 ? 'semua' : 'hotel', h);
+});
+$('btnGanti').addEventListener('click', gantiLO);
+Array.prototype.forEach.call(document.querySelectorAll('#lbMode button'), function(b){
+  b.addEventListener('click', function(){ setMode(b.getAttribute('data-mode')); gambarPapan(); });
+});
+Array.prototype.forEach.call(document.querySelectorAll('#ambBox button'), function(b){
+  b.addEventListener('click', function(){
+    setAmbang(+b.getAttribute('data-amb')); gambarBeranda(); gambarFasil(); });
+});
+$('lingkup').addEventListener('change', function(){ DET_STAT = null; HD_STAT = null; gambarAlur(); gambarHadir(); });
+$('hdCari').addEventListener('input', gambarHadirDet);
+$('lbCari').addEventListener('input', gambarPapan);
+$('hdTutup').addEventListener('click', function(){ HD_STAT = null; gambarHadir(); });
+$('detCari').addEventListener('input', gambarDetail);
+$('detTutup').addEventListener('click', function(){ DET_STAT = null; gambarAlur(); });
+$('fsCari').addEventListener('input', gambarFasil);
+$('fsUrut').addEventListener('change', gambarFasil);
+Array.prototype.forEach.call(document.querySelectorAll('.nav-in button'), function(b){
+  b.addEventListener('click', function(){ pindah(b.getAttribute('data-hal')); });
+});
+
+isiHotel(); isiNama(); setMode('delta'); setAmbang(D.ambang);
+(function pulihkan(){
+  var simpan = '';
+  try{ simpan = localStorage.getItem(KUNCI) || ''; }catch(e){}
+  if(!simpan) return;
+  if(simpan === 'semua'){ buka('semua', -1); return; }
+  if(simpan.indexOf('hotel:') === 0){
+    var h = H.indexOf(simpan.slice(6));
+    if(h >= 0) buka('hotel', h);
+    return;
+  }
+  if(simpan.indexOf('lo:') === 0){
+    var nm = simpan.slice(3);
+    for(var i=0;i<D.lo.length;i++) if(D.lo[i][0]===nm){ buka('lo', i); return; }
+  }
+})();
+</script>
+</body>
+</html>
+
+</body></html>

@@ -343,7 +343,7 @@ export default function Scan() {
                     return (
                       <tr key={p.id} role="row">
                         <td role="cell"><b>{p.representative ? personName(p.representative.name) : p.name}</b>
-                          {p.representative && <><span className="tag tag--venue">Diwakilkan</span>
+                          {p.representative && <><span className="tag tag--venue">Mewakili</span>
                             <div className="muted small">Mewakili {personName(p.name)}</div></>}
                           {!p.representative && <WhatsAppLink name={p.name} phone={p.phone} />}
                           <div className="muted small">{[p.position, p.code].filter(Boolean).join(' · ')}</div></td>
@@ -490,7 +490,7 @@ function LoShot({ target, user, busy, onSend, onClose }) {
     const lines = [
       target.sessionName ? `${target.isTest ? 'Uji coba · ' : ''}${target.sessionName}` : '',
       `${target.name}${target.position ? ` (${target.position})` : ''}`,
-      target.originalName ? `Diwakilkan · Mewakili ${personName(target.originalName)}` : '',
+      target.originalName ? `Mewakili ${personName(target.originalName)}` : '',
       target.school || target.code,
       `${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })} WIB${user?.venue ? ' • ' + user.venue.name : ''}`,
       `Diabsenkan oleh ${user?.name || 'LO'}`,
@@ -516,7 +516,7 @@ function LoShot({ target, user, busy, onSend, onClose }) {
       <div className="lo-shot__card">
         <div className="lo-shot__head">
           <Icon name="camera" size={22} />
-          <span><b>Foto {target.name}</b>{target.originalName && <small>Diwakilkan · Mewakili {personName(target.originalName)}</small>}
+          <span><b>Foto {target.name}</b>{target.originalName && <small>Mewakili {personName(target.originalName)}</small>}
             <small>{[target.position, target.school].filter(Boolean).join(' · ') || 'Arahkan kamera ke wajah peserta'}</small></span>
           <button type="button" className="btn btn--sm" onClick={onClose} disabled={busy} aria-label="Tutup"><Icon name="x" size={16} /></button>
         </div>

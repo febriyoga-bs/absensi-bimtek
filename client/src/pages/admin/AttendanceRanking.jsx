@@ -25,7 +25,7 @@ export default function AttendanceRanking({ venue, query }) {
     return () => { current = false; };
   }, [sessionId, revision]);
   const rows = (result || []).filter((row) => !venue || row.venue === venue)
-    .map((row) => ({ ...row, ratio: row.assigned ? row.total * 100 / row.assigned : null }))
+    .map((row) => ({ ...row, ratio: row.present ? row.total * 100 / row.present : null }))
     .sort((a, b) => (b.ratio ?? -1) - (a.ratio ?? -1) || b.total - a.total || a.name.localeCompare(b.name, 'id'))
     .map((row, i) => ({ ...row, rank: i + 1 }))
     .filter((row) => row.name.toLowerCase().includes(query));
@@ -38,15 +38,15 @@ export default function AttendanceRanking({ venue, query }) {
       <button type="button" className="btn btn--sm" onClick={() => setRevision((value) => value + 1)}>Muat ulang</button>
     </div>
     {sessionError && <p className="alert alert--err" role="alert">Daftar sesi gagal dimuat. {sessionError}</p>}
-    <p className="muted small">Persentase = binaan yang diabsenkan LO ÷ total profil binaan Bendahara, Pengawas, dan Fasilitator. Orang yang sama dihitung sekali dalam sesi yang dipilih, atau sekali lintas sesi pada pilihan Semua sesi resmi. Hanya sesi resmi dengan status Valid atau Perlu dicek; absensi mandiri, ditolak, dan berhalangan tidak dihitung.</p>
+    <p className="muted small">Progres = binaan yang diabsenkan LO pada sesi pilihan ÷ binaan yang hadir di venue. Hadir berdasarkan rekap Sudah tiba/Selesai/Sedang antre atau bukti absensi resmi Valid/Perlu dicek, lintas sesi. Setiap orang dihitung sekali, termasuk Bendahara, Pengawas, dan Fasilitator. Absensi mandiri tidak dihitung sebagai pekerjaan LO; status ditolak dan berhalangan tidak dihitung.</p>
     {error && <p className="alert alert--err" role="alert">{error}</p>}
     {!result && !error && <p role="status">Memuat peringkat absensi…</p>}
     {result && <div className="reporting-ranking" tabIndex={0}>
       {rows.length ? <ol>{rows.map((row) => <li key={row.id}>
         <div className="reporting-ranking-name"><b>{row.rank}. {row.name}</b>
-          <strong>{row.ratio == null ? 'Belum ada binaan' : `${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(row.ratio)}%`}</strong></div>
-        <progress aria-label={`Capaian absensi ${row.name}`} value={row.ratio ?? 0} max={100} />
-        <p>Total {row.total}/{row.assigned} binaan sudah diabsenkan · {row.participants} peserta · {row.facilitators} fasilitator · {row.venue}</p>
+          <strong>{row.total}/{row.present} sudah diabsenkan{row.ratio == null ? '' : ` (${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(row.ratio)}%)`}</strong></div>
+        <progress aria-label={`${row.total} dari ${row.present} sudah diabsenkan oleh ${row.name}`} value={row.ratio ?? 0} max={100} />
+        <p>{row.present}/{row.assigned} peserta/fasilitator hadir di venue · {row.participants} peserta dan {row.facilitators} fasilitator sudah diabsenkan · {row.venue}</p>
       </li>)}</ol> : <p className="muted">Tidak ada LO yang cocok dengan filter.</p>}
     </div>}
   </section>;

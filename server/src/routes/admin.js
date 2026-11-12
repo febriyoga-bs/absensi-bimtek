@@ -926,9 +926,20 @@ r.get('/reporting/attendance-ranking', ah(async (req, res) => {
         AND string_to_array(replace(m.npsn,' ',''),';') && string_to_array(replace(p.npsn,' ',''),';')))
     WHERE r.id=1 AND p.archived_at IS NULL
       AND (lower(trim(p.position)) IN ('bendahara','pengawas') OR lower(trim(p.position)) ~ '^fasil(itator)?($|[[:space:]])')
+  ), presence AS MATERIALIZED (
+    SELECT DISTINCT a.person_id,a.venue_id FROM attendance a JOIN sessions s ON s.id=a.session_id
+    WHERE NOT s.is_test AND a.status IN ('valid','review')
+  ), presence_counts AS (
+    SELECT t.owner_id,count(*)::int AS present
+    FROM targets t JOIN owners owner ON owner.id=t.owner_id
+    LEFT JOIN venue_arrival_recap arrival ON arrival.venue_id=owner.venue_id
+    LEFT JOIN presence evidence ON evidence.person_id=t.person_id AND evidence.venue_id=owner.venue_id
+    WHERE arrival.marks->>t.person_id::text IN ('selesai','sudah_tiba','sedang_antre') OR evidence.person_id IS NOT NULL
+    GROUP BY t.owner_id
   )
   SELECT l.id,l.name,l.venue,
     (SELECT count(*)::int FROM targets t WHERE t.owner_id=l.id) AS assigned,
+    COALESCE((SELECT present FROM presence_counts pc WHERE pc.owner_id=l.id),0) AS present,
     count(DISTINCT p.id) FILTER (WHERE lower(trim(p.position)) IN ('bendahara','pengawas'))::int AS participants,
     count(DISTINCT p.id) FILTER (WHERE lower(trim(p.position)) ~ '^fasil(itator)?($|[[:space:]])')::int AS facilitators,
     count(DISTINCT p.id)::int AS total
