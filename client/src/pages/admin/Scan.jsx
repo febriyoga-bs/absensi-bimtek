@@ -43,6 +43,7 @@ const categories = {
 };
 const number = new Intl.NumberFormat('id-ID');
 const directoryHeaders = ['Peserta', 'Sekolah / Instansi', 'Venue', 'LO bertugas', 'Fasilitator', 'Sesi', 'Kehadiran di venue', 'Status absensi'];
+const sortKeys = ['name','institution','venue','lo','facilitator','session','arrival','attendance'];
 
 function attendanceStatus(person) {
   if (person.unavailable) return ['Mundur/Berhalangan Hadir', 'tag--off'];
@@ -69,6 +70,8 @@ export default function Scan() {
   const [filterArrival, setFilterArrival] = useState('');
   const [filterLo, setFilterLo] = useState('');
   const [filterAttendance, setFilterAttendance] = useState('');
+  const [sort, setSort] = useState('name');
+  const [direction, setDirection] = useState('asc');
   const [showAll, setShowAll] = useState(false);
   const [page, setPage] = useState(1);
   const [list, setList] = useState(null);
@@ -127,7 +130,7 @@ export default function Scan() {
     setLoading(true);
     setListError('');
     const params = new URLSearchParams({ category: tab, q: search.trim(), page, venue_id: filterVenue, arrival: filterArrival,
-      lo_id: filterLo, attendance: filterAttendance });
+      lo_id: filterLo, attendance: filterAttendance, sort, direction });
     if (testSessionId) params.set('session_id', testSessionId);
     if (lo && showAll) params.set('scope', 'all');
     const timer = setTimeout(() => {
@@ -137,7 +140,7 @@ export default function Scan() {
         .finally(() => { if (current) setLoading(false); });
     }, search.trim() ? 220 : 0);
     return () => { current = false; clearTimeout(timer); };
-  }, [tab, search, page, filterVenue, filterArrival, filterLo, filterAttendance, lo, showAll, revision, testSessionId]);
+  }, [tab, search, page, filterVenue, filterArrival, filterLo, filterAttendance, sort, direction, lo, showAll, revision, testSessionId]);
 
   function changeTab(next) {
     if (tab === next) return;
@@ -326,8 +329,14 @@ export default function Scan() {
             <div className="assignment-table">
               <table className="table stack-table" role="table" aria-label={`Daftar ${categories[tab].label}`} aria-busy={loading}>
                 <thead role="rowgroup"><tr role="row">
-                  {headers.map((name) => (
-                    <th key={name} scope="col" role="columnheader">{name}</th>
+                  {headers.map((name, index) => (
+                    <th key={name} scope="col" role="columnheader"
+                      aria-sort={sortKeys[index] ? sort === sortKeys[index] ? direction === 'asc' ? 'ascending' : 'descending' : 'none' : undefined}>
+                      {sortKeys[index] ? <button type="button" className="scan-sort" onClick={() => {
+                        setLoading(true); setPage(1);
+                        setDirection(sort === sortKeys[index] && direction === 'asc' ? 'desc' : 'asc'); setSort(sortKeys[index]);
+                      }}>{name} <span aria-hidden="true">{sort === sortKeys[index] ? direction === 'asc' ? '↑' : '↓' : '↕'}</span></button> : name}
+                    </th>
                   ))}
                 </tr></thead>
                 <tbody role="rowgroup">

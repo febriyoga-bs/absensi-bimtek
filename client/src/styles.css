@@ -261,6 +261,8 @@ select:disabled { background-color: var(--surface-2); color: var(--muted); curso
 /* ============ Tag umum ============ */
 .tag { display: inline-block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; padding: 3px 8px; border-radius: 99px; background: #eef1f6; color: var(--muted); }
 .tag--panitia { text-transform: capitalize; }
+.scan-sort { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; padding: 0; color: inherit; font: inherit; text-transform: inherit; cursor: pointer; text-align: left; }
+.scan-sort:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 .tag--peserta { background: var(--peserta-soft); color: var(--peserta); } .tag--panitia { background: var(--panitia-soft); color: var(--panitia); }
 .tag--semua { background: #f1e9fb; color: #6b3fb3; }
 .tag--open { background: var(--ok-soft); color: var(--ok); } .tag--off { background: #f1f3f6; color: #8a95a8; }
