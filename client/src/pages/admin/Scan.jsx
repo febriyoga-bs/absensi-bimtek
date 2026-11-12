@@ -42,7 +42,7 @@ const categories = {
   bpmp: { label: 'BB/BPMP', icon: 'building', placeholder: 'Cari nama atau kode BB/BPMP' },
 };
 const number = new Intl.NumberFormat('id-ID');
-const directoryHeaders = ['Peserta', 'Sekolah / Instansi', 'Venue', 'LO bertugas', 'Sesi', 'Kehadiran di venue', 'Status absensi'];
+const directoryHeaders = ['Peserta', 'Sekolah / Instansi', 'Venue', 'LO bertugas', 'Fasilitator', 'Sesi', 'Kehadiran di venue', 'Status absensi'];
 
 function attendanceStatus(person) {
   if (person.unavailable) return ['Mundur/Berhalangan Hadir', 'tag--off'];
@@ -359,6 +359,11 @@ export default function Scan() {
                             {organizationTab && <div className="muted small">LO venue</div>}
                             {p.assigned_los.map((name) => <div key={name}>{name}</div>)}
                           </> : <span className="muted">Belum terpetakan</span>}
+                        </td>
+                        <td role="cell" data-label="Fasilitator" className="small">
+                          {p.assigned_facilitators?.length
+                            ? p.assigned_facilitators.map((name) => <div key={name}>{name}</div>)
+                            : <span className="muted">{tab === 'sekolah' ? 'Belum terpetakan' : '—'}</span>}
                         </td>
                         <td role="cell" data-label="Sesi" className="small">{sessionTitle(p.session)}
                           {p.session?.is_test && <div><span className="tag tag--venue">Uji coba</span></div>}

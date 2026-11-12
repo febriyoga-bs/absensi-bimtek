@@ -670,9 +670,20 @@ r.get('/scan/participants', ah(async (req, res) => {
           OR ($11='no_session' AND selected_session_id IS NULL))
     ), page_rows AS (
       SELECT * FROM filtered ORDER BY name,id LIMIT $3 OFFSET $4
+    ), school_facilitators AS MATERIALIZED (
+      SELECT school.npsn,school.venue,school.facilitator
+      FROM assignment_roster roster
+      CROSS JOIN LATERAL jsonb_to_recordset(roster.data->'schools')
+        AS school(npsn text,venue text,facilitator text)
+      WHERE roster.id=1 AND nullif(trim(school.facilitator),'') IS NOT NULL
     ), details AS (
       SELECT p.id, p.code, p.name, p.position, p.phone, p.institution, p.npsn, p.ruangan, p.venue_name, p.arrival_status,
         p.assigned_los,p.can_check_in,p.representative,
+        COALESCE((SELECT jsonb_agg(names.facilitator ORDER BY names.facilitator) FROM (
+          SELECT DISTINCT school.facilitator FROM school_facilitators school
+          WHERE school.venue=p.venue_name
+            AND school.npsn=ANY(string_to_array(replace(p.npsn,' ',''),';'))
+        ) names),'[]'::jsonb) AS assigned_facilitators,
         CASE WHEN s.id IS NOT NULL THEN json_build_object('id',s.id,'name',s.name,'type',s.type,'starts_at',s.starts_at,'is_test',s.is_test) END AS session,
         CASE WHEN a.id IS NOT NULL THEN json_build_object('id',a.id,'at',a.created_at,'status',a.status,'method',a.method,
           'participant_note',CASE WHEN p.can_check_in THEN a.participant_note END,
