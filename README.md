@@ -70,6 +70,10 @@ Dari **Peserta & Panitia**, buka **Pratinjau Sinkronisasi Absensi** untuk memeri
 
 ## Data peserta (Bendahara & Pengawas)
 
+### Impor Progres Laporan Sekolah
+
+Menu **Pantau Pelaporan → Impor status BIMTEK TAHAP 3** mengenali CSV Progres Laporan Sekolah dari kolom `NPSN`, `Capaian (%)`, `L7 Capaian 50% Terisi`, `L8 Capaian 50% Terkirim`, dan `R6 Capaian 50% Direviu`. Hanya sekolah dalam pemetaan yang diperbarui; baris di luar cakupan dilewati dan sekolah yang tidak tercantum tetap. Browser hanya mengirim lima kolom ini, tanpa NIK atau kontak. Nilai `Direviu` tidak otomatis menjadi `Diterima`; hasil reviu dan tanggal kirim sebelumnya tetap tersimpan. Sumber paling baru antara impor progres dan impor status reviu digunakan untuk tampilan. Jalankan `npm run migrate` sebelum deploy untuk membuat tabel `school_progress_report`. Popup hasil menampilkan sekolah diperbarui/dilewati, terkirim, direviu, dan siap kirim.
+
 Impor Rekap Kehadiran menggunakan sheet **Ringkasan** sebagai acuan angka per venue dan peran, serta **Detail Peserta** untuk daftar dan pencocokan profil. Jumlah Pengawas pada Ringkasan adalah akun terdaftar, bukan undangan. Kolom Tiba pada dashboard menghitung yang selesai/sudah tiba di luar antrean; kolom Sudah Tiba pada Ringkasan sumber mencakup antrean, sehingga importer mengurangkan antrean sekali. Jalankan migrasi sebelum men-deploy perubahan importer (`source_summary`). Impor tidak mengganti identitas peserta atau riwayat absensi; profil yang tidak cocok harus diperiksa terpisah.
 
 File **Pemetaan Sekolah** (CSV dari Excel) bisa langsung diimpor di *Peserta & Panitia → Pilih file CSV…*. Formatnya dikenali otomatis:

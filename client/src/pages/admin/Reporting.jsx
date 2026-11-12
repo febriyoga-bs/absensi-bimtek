@@ -4,7 +4,7 @@ import { api } from '../../api.js';
 import { formatRoom } from '../../lib/room.js';
 import { fmtFull } from '../../lib/time.js';
 import { readMonitoringCsv } from '../../lib/reportingFiles.js';
-import { SkelCards } from '../../components/Skeleton.jsx';
+import { SkelCards, Spinner } from '../../components/Skeleton.jsx';
 import AttendanceDetailDialog from './AttendanceDetailDialog.jsx';
 import WhatsAppLink from '../../components/WhatsAppLink.jsx';
 import './Reporting.css';
@@ -12,12 +12,12 @@ import AttendanceRanking from './AttendanceRanking.jsx';
 
 const labels = {
   belum_kirim: 'Belum kirim', menunggu_reviu: 'Menunggu reviu', ditolak: 'Ditolak',
-  diterima: 'Diterima', belum_ada_data: 'Belum ada data', sudah_absen: 'Sudah absen',
+  diterima: 'Diterima', sudah_direviu: 'Sudah direviu (hasil belum tersedia)', belum_ada_data: 'Belum ada data', sudah_absen: 'Sudah absen',
   belum_absen: 'Belum absen', sudah_tiba: 'Sudah tiba', sedang_antre: 'Sedang antre',
   bersedia_hadir: 'Bersedia hadir', belum_konfirmasi: 'Belum konfirmasi',
   berhalangan: 'Berhalangan', tidak_terdata: 'Tidak terdata',
 };
-const reportStatuses = ['belum_kirim', 'menunggu_reviu', 'ditolak', 'diterima', 'belum_ada_data'];
+const reportStatuses = ['belum_kirim', 'menunggu_reviu', 'ditolak', 'diterima', 'sudah_direviu', 'belum_ada_data'];
 const datasetNames = { current: 'BIMTEK TAHAP 3', k3: 'BIMTEK TAHAP 2' };
 const views = { schools: 'Sekolah', facilitators: 'Fasilitator', ranking: 'Peringkat LO', regions: 'Wilayah' };
 const PAGE_SIZE = 10;
@@ -120,16 +120,24 @@ function ImportReporting({ onSaved }) {
   const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState(null);
+  const [stage, setStage] = useState('');
+  const [showResult, setShowResult] = useState(false);
+  const dialog = useRef(null);
+  useEffect(() => { if ((busy || showResult) && !dialog.current.open) dialog.current.showModal(); }, [busy, showResult]);
   async function save(e) {
     e.preventDefault();
     if (!file || busy) return;
     setBusy(true);
     setFeedback(null);
+    setShowResult(true); setStage('Membaca dan mengenali format CSV…');
     try {
-      const { updated, skipped, contacts_updated: contacts, defaulted } = await api('/admin/reporting/import', {
-        admin: true, method: 'POST', body: { csv: await readMonitoringCsv(file) },
+      const csv = await readMonitoringCsv(file);
+      setStage('Mencocokkan NPSN dan menyimpan data pelaporan…');
+      const result = await api('/admin/reporting/import', {
+        admin: true, method: 'POST', body: { csv },
       });
-      setFeedback({ message: `${nf.format(updated)} status sekolah disimpan.${defaulted ? ` ${nf.format(defaulted)} sekolah di luar CSV ditandai Belum kirim.` : ''}${skipped ? ` ${nf.format(skipped)} NPSN di luar pemetaan Tahap 3 dilewati.` : ''}${contacts ? ` ${nf.format(contacts)} kontak dilengkapi.` : ''}` });
+      const { updated, skipped, contacts_updated: contacts, defaulted } = result;
+      setFeedback({ result, message: `${nf.format(updated)} sekolah diperbarui.${defaulted ? ` ${nf.format(defaulted)} sekolah di luar CSV ditandai Belum kirim.` : ''}${skipped ? ` ${nf.format(skipped)} NPSN di luar pemetaan Tahap 3 dilewati.` : ''}${contacts ? ` ${nf.format(contacts)} kontak dilengkapi.` : ''}` });
       onSaved();
     } catch (e) {
       setFeedback({ error: true, message: e.message });
@@ -138,9 +146,31 @@ function ImportReporting({ onSaved }) {
     }
   }
   return (
+    <>
+    <dialog ref={dialog} className="assignment-dialog" aria-labelledby="report-import-title" aria-busy={busy}
+      onCancel={(event) => { if (busy) event.preventDefault(); }} onClose={() => setShowResult(false)}>
+      <header><h3 id="report-import-title">{busy ? 'Memproses impor pelaporan' : feedback?.error ? 'Impor belum selesai' : 'Impor selesai'}</h3></header>
+      <p className="muted small">{file?.name}</p>
+      {busy ? <div className="import-progress-status" role="status"><Spinner size={24} /><div>{stage}<p>Mohon tunggu dan jangan tutup halaman.</p></div></div>
+        : <><p className={feedback?.error ? 'alert alert--err' : 'alert alert--ok'} role="status">{feedback?.message}</p>
+          {feedback?.result?.source === 'progress' && <>
+            <dl className="import-result-summary">
+              <dt>Baris diperiksa</dt><dd>{nf.format(feedback.result.imported)}</dd>
+              <dt>Sekolah binaan diperbarui</dt><dd>{nf.format(feedback.result.updated)}</dd>
+              <dt>Di luar binaan, dilewati</dt><dd>{nf.format(feedback.result.skipped)}</dd>
+              <dt>Binaan tidak tercantum, tetap</dt><dd>{nf.format(feedback.result.unchanged)}</dd>
+              <dt>Laporan 50% terkirim</dt><dd>{nf.format(feedback.result.sent)}</dd>
+              <dt>Laporan 50% direviu</dt><dd>{nf.format(feedback.result.reviewed)}</dd>
+              <dt>Capaian ≥50%, belum terkirim</dt><dd>{nf.format(feedback.result.ready)}</dd>
+            </dl><p className="muted small">Hasil diterima/ditolak dan tanggal kirim sebelumnya tetap disimpan. Direviu tidak otomatis berarti diterima. Nama, kontak, penugasan, dan absensi tidak diubah.</p>
+          </>}
+          <button type="button" className="btn btn--primary" onClick={() => dialog.current.close()}>Tutup</button>
+        </>}
+    </dialog>
     <details className="card reporting-import">
       <summary>Impor status BIMTEK TAHAP 3</summary>
       <form className="form" onSubmit={save}>
+        <p className="muted small">CSV <b>Progres Laporan Sekolah</b> juga didukung: memperbarui capaian fisik serta indikator laporan 50% terisi, terkirim, dan direviu. Hanya NPSN sekolah binaan diproses; sekolah di luar file, hasil reviu, dan tanggal kirim tidak ditimpa. Data NIK dan nomor kontak tidak dikirim dari format ini.</p>
         <p className="muted small">Unggah CSV Monitoring Laporan 50% lengkap untuk memperbarui status reviu, tanggal kirim, dan capaian fisik berdasarkan NPSN. Sekolah pemetaan Tahap 3 yang tidak tercantum ditandai Belum kirim. Nomor fasilitator dan pengawas ditambahkan jika identitasnya cocok dan profil belum memiliki nomor.</p>
         <p className="muted small">Format ringkas dengan kolom <code>npsn</code>, <code>status</code>, <code>tanggal_kirim</code> dan <code>progres_fisik</code> juga bisa dipakai.</p>
         <input type="file" accept=".csv,text/csv" aria-label="File CSV monitoring" disabled={busy} onChange={(e) => setFile(e.target.files[0])} />
@@ -148,6 +178,7 @@ function ImportReporting({ onSaved }) {
         {feedback && <p className={feedback.error ? 'alert alert--err' : 'alert alert--ok'} role="status">{feedback.message}</p>}
       </form>
     </details>
+    </>
   );
 }
 

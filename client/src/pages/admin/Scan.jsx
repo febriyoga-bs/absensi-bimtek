@@ -52,7 +52,7 @@ function savedDisplay() {
       ? value.hiddenColumns.filter((name) => directoryHeaders.includes(name) && name !== 'Peserta') : [] };
   } catch { return { showFilters: true, hiddenColumns: [] }; }
 }
-const reportLabels = { belum_kirim: 'Belum kirim', menunggu_reviu: 'Menunggu reviu', ditolak: 'Ditolak', diterima: 'Diterima', belum_ada_data: 'Belum ada data' };
+const reportLabels = { belum_kirim: 'Belum kirim', menunggu_reviu: 'Menunggu reviu', ditolak: 'Ditolak', diterima: 'Diterima', sudah_direviu: 'Sudah direviu (hasil belum tersedia)', belum_ada_data: 'Belum ada data' };
 
 function attendanceStatus(person) {
   if (person.unavailable) return ['Mundur/Berhalangan Hadir', 'tag--off'];

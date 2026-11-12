@@ -18,6 +18,13 @@ export async function readMonitoringCsv(file) {
   const text = await file.text();
   const { data, errors } = Papa.parse(text, { skipEmptyLines: 'greedy' });
   if (errors.length) throw new Error('CSV tidak bisa dibaca. Periksa pemisah kolom dan tanda kutip.');
+  const names=data[0]?.map(normalized) || [];
+  if (names.includes('l8 capaian 50% terkirim')) {
+    const required=['npsn','capaian (%)','l7 capaian 50% terisi','l8 capaian 50% terkirim','r6 capaian 50% direviu'];
+    if(required.some(name=>!names.includes(name))) throw new Error('Kolom CSV Progres Laporan Sekolah tidak lengkap.');
+    const selected=required.map(name=>names.indexOf(name));
+    return Papa.unparse(data.map(row=>selected.map(index=>asText(row[index]))));
+  }
   if (!data[0]?.map(normalized).includes('status reviu')) return text;
   const columns = ['npsn', 'status reviu', 'tanggal kirim', 'capaian saat ini (%)'];
   const contacts = ['fasilitator', 'no. hp fasilitator', 'pengawas', 'no. hp pengawas'];

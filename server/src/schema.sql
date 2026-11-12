@@ -184,6 +184,16 @@ CREATE TABLE IF NOT EXISTS school_reporting (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ALTER TABLE school_reporting ENABLE ROW LEVEL SECURITY;
+CREATE TABLE IF NOT EXISTS school_progress_report (
+  npsn TEXT PRIMARY KEY,
+  progress NUMERIC CHECK (progress BETWEEN 0 AND 100),
+  filled BOOLEAN NOT NULL,
+  sent BOOLEAN NOT NULL,
+  reviewed BOOLEAN NOT NULL,
+  indicators JSONB NOT NULL DEFAULT '{}',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE school_progress_report ENABLE ROW LEVEL SECURITY;
 
 CREATE TABLE IF NOT EXISTS venue_arrival_recap (
   venue_id INT PRIMARY KEY REFERENCES venues(id) ON DELETE CASCADE,

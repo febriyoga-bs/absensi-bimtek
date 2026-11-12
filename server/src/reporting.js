@@ -3,6 +3,7 @@ import { q } from './db.js';
 import { parseRows } from './peopleImport.js';
 import { HttpError } from './util.js';
 import { reportingCheckInDates, reportingDates, reportingDays } from './reportingDays.js';
+import { importProgressCsv, progressStatusSql, currentProgressSql } from './progressImport.js';
 
 // Arsip statis dari Pantau Pelaporan LO · Bimtek K3.html. Hanya data yang dipakai dasbor.
 const archive = JSON.parse(readFileSync(new URL('./reportingK3.json', import.meta.url), 'utf8'));
@@ -38,10 +39,13 @@ export async function getReporting(dataset, user) {
   if (dataset !== 'current') throw new HttpError(400, 'Kegiatan pelaporan tidak valid.');
   const [{ rows: [roster] }, { rows: records }, { rows: contacts }] = await Promise.all([
     q("SELECT data->'lo' AS lo, data->'facilitators' AS facilitators, data->'schools' AS schools FROM assignment_roster WHERE id=1"),
-    q(`SELECT s.npsn, p.provinsi, p.peringkat, m.status, to_char(m.submitted_on,'YYYY-MM-DD') AS submitted_on, m.progress::float AS progress, m.updated_at,
+    q(`SELECT s.npsn, p.provinsi, p.peringkat, ${progressStatusSql('m','pr')} AS status,
+       CASE WHEN ${currentProgressSql('m','pr')} AND NOT pr.sent THEN NULL ELSE to_char(m.submitted_on,'YYYY-MM-DD') END AS submitted_on,
+       CASE WHEN ${currentProgressSql('m','pr')} THEN pr.progress ELSE m.progress END::float AS progress,
+       GREATEST(m.updated_at,pr.updated_at) AS updated_at,
        arrival.marks->>p.id::text AS arrival_status, arrival.imported_at AS arrival_imported_at,
        ${reportingCheckInDates('p.id', 'v.id', '$1')} AS check_in_dates,
-       CASE WHEN m.status='menunggu_reviu' AND m.submitted_on IS NOT NULL
+       CASE WHEN ${progressStatusSql('m','pr')}='menunggu_reviu' AND m.submitted_on IS NOT NULL
             THEN GREATEST(0, (now() AT TIME ZONE 'Asia/Jakarta')::date - m.submitted_on) END AS wait_days,
        EXISTS (SELECT 1 FROM attendance a JOIN sessions s2 ON s2.id=a.session_id AND NOT s2.is_test
          WHERE a.person_id=p.id AND a.venue_id=v.id AND a.status IN ('valid','review')) AS attended
@@ -50,7 +54,8 @@ export async function getReporting(dataset, user) {
        LEFT JOIN people p ON lower(p.code)='b-'||s.npsn AND p.role='peserta' AND lower(trim(p.position))='bendahara'
          AND p.archived_at IS NULL AND p.venue_id=v.id
        LEFT JOIN venue_arrival_recap arrival ON arrival.venue_id=v.id
-       LEFT JOIN school_reporting m ON m.npsn=s.npsn WHERE r.id=1`, [reportingDates]),
+       LEFT JOIN school_reporting m ON m.npsn=s.npsn
+       LEFT JOIN school_progress_report pr ON pr.npsn=s.npsn WHERE r.id=1`, [reportingDates]),
     q(`SELECT v.name AS venue,p.name,p.phone FROM people p JOIN venues v ON v.id=p.venue_id
        WHERE p.role='peserta' AND p.archived_at IS NULL AND lower(trim(p.position)) LIKE 'fasil%'
          AND ($1::int IS NULL OR p.venue_id=$1)`, [user.role === 'lo' ? user.venue : null]),
@@ -136,6 +141,9 @@ async function parseReporting(csv) {
 }
 
 export async function importReporting(csv) {
+  if (typeof csv !== 'string' || csv.length > 2_000_000) throw new HttpError(400, 'CSV yang diproses melebihi batas ukuran.');
+  const header = typeof csv === 'string' ? parseRows(csv)[0]?.map((name) => name.trim().toLowerCase()) : [];
+  if (header?.includes('l8 capaian 50% terkirim')) return importProgressCsv(csv);
   const { entries, official, skipped } = await parseReporting(csv);
   if (!entries.length) throw new HttpError(400, 'Tidak ada NPSN di CSV yang cocok dengan pemetaan Tahap 3.');
   const { rows: [result] } = await q(`WITH incoming AS (
