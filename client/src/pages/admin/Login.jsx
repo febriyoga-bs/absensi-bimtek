@@ -25,7 +25,7 @@ export default function Login() {
       adminToken.set(token);
       adminUser.set(user);
       const next = state?.next ?? new URLSearchParams(search).get('next');
-      nav(typeof next === 'string' && /^\/admin(?:\/|\?|$)/.test(next) ? next : '/admin', { replace: true });
+      nav(typeof next === 'string' && /^\/admin(?:\/|\?|$)/.test(next) ? next : '/admin/pelaporan', { replace: true });
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   }
 

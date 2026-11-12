@@ -15,7 +15,6 @@ import People from './pages/admin/People.jsx';
 import Settings from './pages/admin/Settings.jsx';
 import Venues from './pages/admin/Venues.jsx';
 import LoAccounts from './pages/admin/LoAccounts.jsx';
-const Assignments = lazy(() => import('./pages/admin/Assignments.jsx'));
 const ParticipantSync = lazy(() => import('./pages/admin/ParticipantSync.jsx'));
 const Scan = lazy(() => import('./pages/admin/Scan.jsx'));
 const LoSelfAttendance = lazy(() => import('./pages/admin/LoSelfAttendance.jsx'));
@@ -36,7 +35,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <Route path="/qr/:token" element={<QrCard />} />
         <Route path="/admin/login" element={<Login />} />
         <Route path="/admin" element={<AdminLayout />}>
-          <Route index element={<Dashboard />} />
+          <Route index element={<Navigate to="/admin/pelaporan" replace />} />
+          <Route path="rekap-absensi" element={<Dashboard />} />
           <Route path="kehadiran" element={<ArrivalRecap />} />
           <Route path="absensi" element={<Records />} />
           <Route path="absensi/foto/:id" element={<AttendancePhoto />} />
@@ -48,9 +48,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="orang/sinkronisasi" element={<ParticipantSync />} />
           <Route path="venue" element={<Venues />} />
           <Route path="lo" element={<LoAccounts />} />
-          <Route path="pendampingan" element={<Assignments />} />
+          <Route path="pendampingan" element={<Navigate to="/admin/pelaporan" replace />} />
           <Route path="pelaporan" element={<Reporting />} />
-          <Route path="pendampingan/saya" element={<Navigate to="/admin/pendampingan?cakupan=saya" replace />} />
+          <Route path="pendampingan/saya" element={<Navigate to="/admin/pelaporan" replace />} />
           <Route path="pengaturan" element={<Settings />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

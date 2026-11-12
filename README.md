@@ -5,7 +5,7 @@ Sistem pendampingan sekolah, pemantauan Laporan 50%, kedatangan peserta, dan abs
 ## Alur yang aktif
 
 1. LO login di `/admin/login` menggunakan username dan kata sandi akun LO.
-2. Buka **Pendampingan → Binaan saya** untuk sekolah, fasilitator, dan ruangan penugasan. Pilih **Semua penugasan** untuk melihat rekap lintas LO.
+2. Setelah login, **Pantau Pelaporan** menjadi halaman awal. Lihat sekolah binaan, fasilitator, ruangan, dan status laporan; gunakan filter venue/LO untuk mengubah cakupan.
 3. Buka **Absenkan Peserta**. Filter **LO bertugas** secara default memilih akun yang login. Pilih LO lain atau Semua LO untuk melihat daftar lain; kewenangan mencatat tetap mengikuti penugasan.
 4. Pada tab Sekolah, gunakan **Jabatan peserta** untuk Bendahara & Pengawas, Bendahara saja, atau Pengawas saja. Filter venue, fasilitator, status absensi, kedatangan, dan pencarian dapat digabungkan.
 5. Saat sesi aktif, pilih peserta, ambil foto kamera, tulis catatan, lalu kirim. Status Mundur/Berhalangan Hadir tidak memerlukan foto; peserta yang kemudian hadir dapat dicatat kembali dengan foto pada sesi yang sama.
@@ -24,9 +24,9 @@ Sistem pendampingan sekolah, pemantauan Laporan 50%, kedatangan peserta, dan abs
 | `/dashboard/kehadiran` | Ringkasan kedatangan dari impor | Publik |
 | `/qr/:token` | Kartu identitas pribadi, simpan gambar | Pemilik tautan |
 | `/admin/login` | Login LO atau admin utama | Publik |
-| `/admin` | Rekap absensi resmi per sesi dan venue, CSV | Admin dan LO sesuai cakupan |
+| `/admin` | Mengarahkan ke Pantau Pelaporan sebagai halaman awal | Admin dan LO |
+| `/admin/rekap-absensi` | Rekap absensi resmi per sesi dan venue, CSV | Admin dan LO sesuai cakupan |
 | `/admin/kehadiran` | Rekap kedatangan, rincian nama | Admin dan LO; impor hanya admin |
-| `/admin/pendampingan` | Binaan saya / Semua penugasan, tab LO/fasilitator/sekolah | Admin dan LO; CSV hanya admin |
 | `/admin/scan` | Absenkan Peserta (LO) / Daftar Peserta (admin) | Admin dan LO |
 | `/admin/absen-saya` | Absensi LO dengan foto dan GPS | LO |
 | `/admin/absensi` | Foto, lokasi, status, catatan, verifikasi, penghapusan, CSV/cetak PDF | Sesuai kewenangan |
@@ -40,7 +40,7 @@ Sistem pendampingan sekolah, pemantauan Laporan 50%, kedatangan peserta, dan abs
 | `/admin/lo` | Akun LO, penempatan, password, aktivitas login | Admin |
 | `/admin/pengaturan` | Identitas acara, akurasi GPS, kebijakan sesi | Admin |
 
-Tautan lama `/admin/pendampingan/saya` diarahkan ke `/admin/pendampingan?cakupan=saya`. LO membuka Binaan saya secara default; admin membuka semua penugasan. Kontak pada rincian pendampingan dibatasi sesuai penugasan. Perubahan venue akun LO memerlukan login ulang; akun nonaktif ditolak oleh server.
+Menu Pendampingan dihapus karena informasi sekolah, fasilitator, dan ruangan tersedia di Pantau Pelaporan. Tautan lama `/admin/pendampingan` dan `/admin/pendampingan/saya` diarahkan ke `/admin/pelaporan`. Kontak tetap dibatasi sesuai penugasan. Perubahan venue akun LO memerlukan login ulang; akun nonaktif ditolak oleh server.
 
 ## Arti angka dan sumber data
 

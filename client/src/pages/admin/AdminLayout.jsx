@@ -24,10 +24,12 @@ export default function AdminLayout() {
 
   const lo = user?.role === 'lo';
   const items = dashboardMenu.filter((n) => (lo ? n.lo : !n.loOnly));
-  if (loc.pathname === '/admin/pendampingan/saya') return <Navigate to="/admin/pendampingan?cakupan=saya" replace />;
-  // LO yang membuka menu admin utama lewat URL → kembalikan ke Rekap
+  if (['/admin', '/admin/', '/admin/pendampingan', '/admin/pendampingan/saya'].includes(loc.pathname)) {
+    return <Navigate to="/admin/pelaporan" replace />;
+  }
+  // LO yang membuka menu admin utama lewat URL → kembalikan ke Pantau Pelaporan
   if (lo && !items.some((n) => (n.end ? loc.pathname === n.to : loc.pathname.startsWith(n.to)))) {
-    return <Navigate to="/admin" replace />;
+    return <Navigate to="/admin/pelaporan" replace />;
   }
 
   return (

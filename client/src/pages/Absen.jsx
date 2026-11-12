@@ -435,7 +435,7 @@ export function Done({ result, role, onClose }) {
       )}
       <p className="muted small">Simpan bukti ini dengan screenshot bila diperlukan.</p>
       <div className="row">
-        {role === 'LO' ? <Link to="/admin" className="btn"><Icon name="chart" size={18} />Rekap Absensi</Link>
+        {role === 'LO' ? <Link to="/admin/rekap-absensi" className="btn"><Icon name="chart" size={18} />Rekap Absensi</Link>
           : <Link to="/riwayat" className="btn"><Icon name="clock" size={18} />Riwayat</Link>}
         <button className="btn btn--primary" onClick={onClose}>Selesai</button>
       </div>

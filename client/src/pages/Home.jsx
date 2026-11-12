@@ -9,7 +9,7 @@ import { useNow, fmtClock, fmtDate } from '../lib/time.js';
 import { checkInDayLabel } from './admin/shared.js';
 
 const workflows = [
-  ['Pendampingan', 'Buka Binaan saya untuk sekolah, fasilitator, dan ruangan Anda; pilih Semua penugasan untuk rekap lintas LO.'],
+  ['Pantau Pelaporan', 'Cek sekolah binaan, fasilitator, ruangan, dan status laporan. Gunakan filter venue dan LO untuk mengubah cakupan.'],
   ['Absenkan Peserta', 'Pilih peserta yang Anda tangani, ambil foto, isi catatan, lalu kirim.'],
   ['Absen Saya', 'Kirim absensi Anda dengan foto dan lokasi saat sesi resmi dibuka.'],
 ];
@@ -27,7 +27,7 @@ export default function Home() {
   const [info, setInfo] = useState(null);
   const now = useNow();
   const signedIn = !!adminToken.get();
-  const dashboardPath = signedIn ? '/admin' : '/admin/login';
+  const dashboardPath = signedIn ? '/admin/pelaporan' : '/admin/login';
   const dashboardLabel = signedIn ? 'Buka Dashboard' : 'Masuk Dashboard';
 
   useEffect(() => {
