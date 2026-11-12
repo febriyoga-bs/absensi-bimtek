@@ -733,6 +733,12 @@ select:disabled { background-color: var(--surface-2); color: var(--muted); curso
 .scan-column-options .check { margin: 0; }
 .import-progress-status { display: flex; gap: 14px; align-items: flex-start; padding: 16px 0; }
 .import-progress-status .spinner { flex-shrink: 0; }
+.assignment-dialog progress { width: 100%; accent-color: var(--accent); }
+.import-stage-list { padding-left: 22px; color: var(--muted); line-height: 1.8; }
+.import-stage-list [aria-current="step"] { color: var(--text); font-weight: 700; }
+.reporting-sort { display: flex; align-items: center; gap: 8px; width: 100%; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; text-transform: inherit; cursor: pointer; }
+.reporting-sort span { flex-shrink: 0; }
+.reporting-sort:focus-visible { outline: 2px solid var(--accent); outline-offset: 5px; border-radius: 2px; }
 .import-result-summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 16px; }
 .import-result-summary dt { color: var(--muted); }
 .import-result-summary dd { margin: 0; font-weight: 700; }

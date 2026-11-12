@@ -56,7 +56,7 @@ export default function Sessions() {
     <>
       <div className="page-head">
         <div><h2>Sesi & Jadwal</h2>
-          <p className="muted">Absensi hanya bisa dilakukan saat sesi dibuka. Buat sesi terpisah untuk peserta dan panitia bila jamnya berbeda.</p></div>
+          <p className="muted">Absensi hanya tersedia selama jadwal sesi. Jika batas satu sesi resmi per hari aktif di Pengaturan, gunakan peran Semua untuk peserta dan panitia; sesi uji coba dikecualikan.</p></div>
       </div>
       <form className="card form form--grid" onSubmit={save}>
         <h3 className="span2">{form.id ? 'Ubah sesi' : 'Tambah sesi'}</h3>
@@ -83,7 +83,7 @@ export default function Sessions() {
             <input type="checkbox" checked={!!form.is_test} onChange={(e) => setForm({ ...form, is_test: e.target.checked })} />
             Tandai sebagai sesi uji coba
           </label>
-          <small className="muted">Nama atau jenis sesi dengan kata Test, Tes, atau Uji Coba otomatis ditandai. Sesi uji coba hanya tampil di pengelolaan dan riwayat.</small>
+          <small className="muted">Nama atau jenis sesi dengan kata Test, Tes, atau Uji Coba otomatis ditandai. Sesi uji coba dapat dipilih di Absenkan Peserta saat dibuka dan tidak masuk rekap resmi.</small>
         </div>
         <div className="span2 form" style={{ gap: 8 }}>
           <b style={{ fontSize: 14 }}>Venue yang berlaku</b>

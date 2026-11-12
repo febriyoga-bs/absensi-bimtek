@@ -196,7 +196,7 @@ export default function Absen({ role }) {
             <ul className="checklist">
               <li><Icon name="crosshair" size={18} /><span>Aktifkan <b>GPS / Lokasi</b> lalu izinkan akses <b>Kamera</b> & <b>Lokasi</b> saat diminta.</span></li>
               <li><Icon name="pin" size={18} /><span>Absen hanya bisa di dalam area venue{info?.venues?.length ? `: ${info.venues.map((v) => v.name).join(', ')}` : ''}.</span></li>
-              <li><Icon name="shield" size={18} /><span>Aplikasi Fake GPS terdeteksi otomatis dan absensi akan ditolak atau diperiksa panitia.</span></li>
+              <li><Icon name="shield" size={18} /><span>Lokasi dan sinyal perangkat diperiksa. Data yang tidak wajar dapat ditolak atau diperiksa panitia; browser tidak dapat memastikan aplikasi Fake GPS terpasang.</span></li>
             </ul>
             <Link to="/riwayat" className="link-row"><Icon name="clock" size={16} />Sudah absen? Cek riwayat di perangkat ini</Link>
           </div>

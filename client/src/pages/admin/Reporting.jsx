@@ -9,6 +9,7 @@ import AttendanceDetailDialog from './AttendanceDetailDialog.jsx';
 import WhatsAppLink from '../../components/WhatsAppLink.jsx';
 import './Reporting.css';
 import AttendanceRanking from './AttendanceRanking.jsx';
+import { sortTableRows } from '../../lib/tableSort.js';
 
 const labels = {
   belum_kirim: 'Belum kirim', menunggu_reviu: 'Menunggu reviu', ditolak: 'Ditolak',
@@ -43,12 +44,15 @@ function grouped(rows, keyOf) {
 
 function ReportingTable({ headers, rows, fullWidthColumn }) {
   const [page, setPage] = useState(1);
+  const [sort, setSort] = useState({ column: null, direction: 'asc' });
+  const orderedRows = sortTableRows(rows, sort.column, sort.direction);
   const pages = Math.ceil(rows.length / PAGE_SIZE);
   const active = Math.min(page, pages || 1);
   return (
     <>
       <div className="assignment-table-head">
         <span className="muted small">{nf.format(rows.length)} hasil</span>
+        <span className="muted small">Klik judul kolom untuk mengurutkan naik/turun.</span>
         {pages > 1 && <nav className="pager assignment-pager" aria-label="Halaman pantau pelaporan">
           <button className="btn btn--sm" aria-label="Halaman sebelumnya" disabled={active === 1} onClick={() => setPage(active - 1)}>‹</button>
           <span className="small" aria-live="polite">Halaman {active} / {pages}</span>
@@ -57,8 +61,16 @@ function ReportingTable({ headers, rows, fullWidthColumn }) {
       </div>
       {rows.length ? <div className="assignment-table">
         <table className="table stack-table" role="table" aria-label="Rincian pelaporan">
-          <thead role="rowgroup"><tr role="row">{headers.map((heading) => <th key={heading} scope="col" role="columnheader">{heading}</th>)}</tr></thead>
-          <tbody role="rowgroup">{rows.slice((active - 1) * PAGE_SIZE, active * PAGE_SIZE).map(({ key, cells, onOpen, name }) => (
+          <thead role="rowgroup"><tr role="row">{headers.map((heading, column) => <th key={heading} scope="col" role="columnheader"
+            aria-sort={sort.column === column ? sort.direction === 'asc' ? 'ascending' : 'descending' : 'none'}>
+            <button type="button" className="reporting-sort" onClick={() => {
+              setSort((previous) => ({ column, direction: previous.column === column && previous.direction === 'asc' ? 'desc' : 'asc' }));
+              setPage(1);
+            }} aria-label={`Urutkan ${heading} ${sort.column === column && sort.direction === 'asc' ? 'menurun' : 'menaik'}`}>
+              {heading} <span aria-hidden="true">{sort.column !== column ? '↕' : sort.direction === 'asc' ? '↑' : '↓'}</span>
+            </button>
+          </th>)}</tr></thead>
+          <tbody role="rowgroup">{orderedRows.slice((active - 1) * PAGE_SIZE, active * PAGE_SIZE).map(({ key, cells, onOpen, name }) => (
             <tr key={key} role="row" className={onOpen ? 'reporting-clickable-row' : undefined}
               tabIndex={onOpen ? 0 : undefined} aria-label={onOpen ? `Lihat sekolah binaan ${name}` : undefined}
               onClick={onOpen ? (event) => { if (!event.target.closest('button,a,input,select,textarea')) onOpen(); } : undefined}
@@ -120,7 +132,7 @@ function ImportReporting({ onSaved }) {
   const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState(null);
-  const [stage, setStage] = useState('');
+  const [stage, setStage] = useState('reading');
   const [showResult, setShowResult] = useState(false);
   const dialog = useRef(null);
   useEffect(() => { if ((busy || showResult) && !dialog.current.open) dialog.current.showModal(); }, [busy, showResult]);
@@ -129,14 +141,17 @@ function ImportReporting({ onSaved }) {
     if (!file || busy) return;
     setBusy(true);
     setFeedback(null);
-    setShowResult(true); setStage('Membaca dan mengenali format CSV…');
+    setShowResult(true); setStage('reading');
     try {
-      const csv = await readMonitoringCsv(file);
-      setStage('Mencocokkan NPSN dan menyimpan data pelaporan…');
+      // Beri browser kesempatan menampilkan dialog sebelum memproses file.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const csv = await readMonitoringCsv(file, setStage);
+      setStage('saving');
       const result = await api('/admin/reporting/import', {
         admin: true, method: 'POST', body: { csv },
       });
       const { updated, skipped, contacts_updated: contacts, defaulted } = result;
+      setStage('done');
       setFeedback({ result, message: `${nf.format(updated)} sekolah diperbarui.${defaulted ? ` ${nf.format(defaulted)} sekolah di luar CSV ditandai Belum kirim.` : ''}${skipped ? ` ${nf.format(skipped)} NPSN di luar pemetaan Tahap 3 dilewati.` : ''}${contacts ? ` ${nf.format(contacts)} kontak dilengkapi.` : ''}` });
       onSaved();
     } catch (e) {
@@ -151,30 +166,57 @@ function ImportReporting({ onSaved }) {
       onCancel={(event) => { if (busy) event.preventDefault(); }} onClose={() => setShowResult(false)}>
       <header><h3 id="report-import-title">{busy ? 'Memproses impor pelaporan' : feedback?.error ? 'Impor belum selesai' : 'Impor selesai'}</h3></header>
       <p className="muted small">{file?.name}</p>
-      {busy ? <div className="import-progress-status" role="status"><Spinner size={24} /><div>{stage}<p>Mohon tunggu dan jangan tutup halaman.</p></div></div>
+      {busy ? <div role="status" aria-live="polite">
+        <div className="import-progress-status"><Spinner size={24} /><div>
+          {stage === 'reading' ? 'Membaca file CSV…' : stage === 'validating' ? 'Mengenali format dan menyiapkan kolom laporan…' : 'Mencocokkan NPSN, memvalidasi, dan menyimpan ke server…'}
+          <p>Mohon tunggu dan jangan tutup halaman. Hasil ditampilkan setelah server selesai.</p>
+        </div></div>
+        <progress aria-label="Impor laporan sedang diproses" />
+        <ol className="import-stage-list">
+          {[['reading', 'Baca file'], ['validating', 'Kenali format'], ['saving', 'Validasi & simpan']].map(([key, title], index) => {
+            const activeIndex = ['reading', 'validating', 'saving'].indexOf(stage);
+            return <li key={key} aria-current={stage === key ? 'step' : undefined}>{title} · {index < activeIndex ? 'Selesai' : index === activeIndex ? 'Sedang diproses' : 'Menunggu'}</li>;
+          })}
+        </ol>
+      </div>
         : <><p className={feedback?.error ? 'alert alert--err' : 'alert alert--ok'} role="status">{feedback?.message}</p>
+          {feedback?.result && <>
+            <dl className="import-result-summary">
+              <dt>Jenis laporan</dt><dd>{({ progress: 'Progres Laporan Sekolah', review: 'Monitoring status reviu', compact: 'Status ringkas' })[feedback.result.source] || 'Monitoring laporan'}</dd>
+              <dt>Baris diperiksa</dt><dd>{nf.format(feedback.result.imported)}</dd>
+              <dt>Sekolah diperbarui</dt><dd>{nf.format(feedback.result.updated)}</dd>
+              <dt>Di luar pemetaan, dilewati</dt><dd>{nf.format(feedback.result.skipped)}</dd>
+              <dt>Sekolah di luar CSV ditandai belum kirim</dt><dd>{nf.format(feedback.result.defaulted || 0)}</dd>
+              <dt>Sekolah di luar CSV tetap</dt><dd>{nf.format(feedback.result.unchanged || 0)}</dd>
+              <dt>Kontak dilengkapi</dt><dd>{nf.format(feedback.result.contacts_updated || 0)}</dd>
+            </dl>
+            {feedback.result.source !== 'progress' && <>
+              <h4>Status sekolah yang diperbarui</h4>
+              <dl className="import-result-summary">{['belum_kirim', 'menunggu_reviu', 'ditolak', 'diterima'].map((code) =>
+                <div key={code} style={{ display: 'contents' }}><dt>{labels[code]}</dt><dd>{nf.format(feedback.result.status_counts?.[code] || 0)}</dd></div>)}</dl>
+              <p className="muted small">Ringkasan ini mencakup sekolah yang diperbarui pada impor ini, termasuk sekolah yang ditandai Belum kirim dari berkas monitoring lengkap.</p>
+            </>}
+          </>}
           {feedback?.result?.source === 'progress' && <>
             <dl className="import-result-summary">
-              <dt>Baris diperiksa</dt><dd>{nf.format(feedback.result.imported)}</dd>
-              <dt>Sekolah binaan diperbarui</dt><dd>{nf.format(feedback.result.updated)}</dd>
-              <dt>Di luar binaan, dilewati</dt><dd>{nf.format(feedback.result.skipped)}</dd>
-              <dt>Binaan tidak tercantum, tetap</dt><dd>{nf.format(feedback.result.unchanged)}</dd>
               <dt>Laporan 50% terkirim</dt><dd>{nf.format(feedback.result.sent)}</dd>
               <dt>Laporan 50% direviu</dt><dd>{nf.format(feedback.result.reviewed)}</dd>
               <dt>Capaian ≥50%, belum terkirim</dt><dd>{nf.format(feedback.result.ready)}</dd>
             </dl><p className="muted small">Hasil diterima/ditolak dan tanggal kirim sebelumnya tetap disimpan. Direviu tidak otomatis berarti diterima. Nama, kontak, penugasan, dan absensi tidak diubah.</p>
           </>}
+          {feedback?.error && <p className="muted small">Periksa pesan di atas lalu pilih atau perbaiki file dan coba lagi. Jika koneksi terputus saat penyimpanan, muat ulang data pelaporan untuk memastikan hasilnya.</p>}
           <button type="button" className="btn btn--primary" onClick={() => dialog.current.close()}>Tutup</button>
         </>}
     </dialog>
     <details className="card reporting-import">
-      <summary>Impor status BIMTEK TAHAP 3</summary>
+      <summary>Impor laporan terbaru · BIMTEK TAHAP 3</summary>
       <form className="form" onSubmit={save}>
         <p className="muted small">CSV <b>Progres Laporan Sekolah</b> juga didukung: memperbarui capaian fisik serta indikator laporan 50% terisi, terkirim, dan direviu. Hanya NPSN sekolah binaan diproses; sekolah di luar file, hasil reviu, dan tanggal kirim tidak ditimpa. Data NIK dan nomor kontak tidak dikirim dari format ini.</p>
         <p className="muted small">Unggah CSV Monitoring Laporan 50% lengkap untuk memperbarui status reviu, tanggal kirim, dan capaian fisik berdasarkan NPSN. Sekolah pemetaan Tahap 3 yang tidak tercantum ditandai Belum kirim. Nomor fasilitator dan pengawas ditambahkan jika identitasnya cocok dan profil belum memiliki nomor.</p>
         <p className="muted small">Format ringkas dengan kolom <code>npsn</code>, <code>status</code>, <code>tanggal_kirim</code> dan <code>progres_fisik</code> juga bisa dipakai.</p>
         <input type="file" accept=".csv,text/csv" aria-label="File CSV monitoring" disabled={busy} onChange={(e) => setFile(e.target.files[0])} />
-        <button className="btn btn--primary" disabled={!file || busy}>{busy ? 'Menyimpan…' : 'Simpan status dari CSV'}</button>
+        <p className="muted small">Gunakan file sumber terbaru. Sumber status dipilih berdasarkan waktu impor; mengunggah file lama dapat mengganti tampilan data yang lebih baru. Popup menampilkan tahap proses dan ringkasan hasil setelah penyimpanan selesai.</p>
+        <button className="btn btn--primary" disabled={!file || busy}>{busy ? 'Menyimpan…' : 'Impor laporan terbaru'}</button>
         {feedback && <p className={feedback.error ? 'alert alert--err' : 'alert alert--ok'} role="status">{feedback.message}</p>}
       </form>
     </details>
@@ -240,7 +282,11 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
   const schoolRows = (list, search = '') => list
     .filter((s) => matches([s.name, s.npsn, s.city, s.province, facilitators.get(s.facilitator_id)?.name], search))
     .sort((a, b) => (b.wait_days ?? -1) - (a.wait_days ?? -1) || (a.rank || Infinity) - (b.rank || Infinity) || a.name.localeCompare(b.name, 'id'))
-    .map((s) => ({ key: s.npsn, cells: [
+    .map((s) => ({ key: s.npsn,
+      sortValues: [s.name, [s.venue, s.lo, formatRoom(s.room)].filter(Boolean).join(' '), facilitators.get(s.facilitator_id)?.name,
+        labels[s.status], s.progress, labels[venueStatus(s)],
+        ...(current ? checkInDays.map((day) => labels[checkInStatus(s, day)]) : [labels.tidak_terdata])],
+      cells: [
       <>{current && !publicView ? <button type="button" className="reporting-school-link" aria-haspopup="dialog" onClick={() => setSchoolDetails({
         label: 'Bendahara dan Pengawas', subtitle: s.venue, path: `/admin/reporting/school/${s.npsn}`, checkInDays,
       })}>{s.name}</button> : <b>{s.name}</b>}
@@ -268,7 +314,8 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
         const late = overdue(group);
         const pending = group.filter((s) => s.status === 'menunggu_reviu').length;
         const unsent = group.filter((s) => s.status === 'belum_kirim').length;
-        return { key: f.id, late, pending, name: f.name, onOpen: () => setSelectedFacilitator({ ...f }), cells: [
+        return { key: f.id, late, pending, name: f.name, onOpen: () => setSelectedFacilitator({ ...f }),
+          sortValues: [f.name, [f.venue, f.lo, formatRoom(f.room)].filter(Boolean).join(' '), group.length, unsent, pending, late], cells: [
           <><b>{f.name}</b><WhatsAppLink name={f.name} phone={f.phone} /><div className="muted small">{[f.institution, f.coordinator].filter(Boolean).join(' · ')}</div></>,
           <>{f.venue}<div className="muted small">{[formatRoom(f.room), f.lo].filter(Boolean).join(' · ')}</div></>,
           <button className="btn btn--sm" onClick={() => setSelectedFacilitator({ ...f })} aria-label={`Lihat sekolah ${f.name}`}>{group.length}</button>,
@@ -289,11 +336,14 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
       .filter((r) => matches([r.name], query) && (!publicView || !lo || ownerKey(r) === lo));
   }
   if (view === 'regions') {
-    headers = ['Wilayah', 'Sekolah', 'Belum kirim', 'Menunggu reviu', 'Ditolak', 'Diterima', 'Belum ada data'];
+    headers = ['Wilayah', 'Sekolah', ...reportStatuses.map((code) => labels[code])];
     rows = [...grouped(schools, (s) => [s.city, s.province].filter(Boolean).join(' · ') || 'Wilayah belum tersedia')]
       .filter(([region]) => matches([region], query))
       .sort(([a], [b]) => a.localeCompare(b, 'id'))
-      .map(([region, group]) => ({ key: region, cells: [<b>{region}</b>, group.length, ...reportStatuses.map((code) => group.filter((s) => s.status === code).length)] }));
+      .map(([region, group]) => {
+        const counts = reportStatuses.map((code) => group.filter((s) => s.status === code).length);
+        return { key: region, sortValues: [region, group.length, ...counts], cells: [<b>{region}</b>, group.length, ...counts] };
+      });
   }
   const detail = selectedFacilitator && byFacilitator.get(selectedFacilitator.id);
   const selectedOwner = data.lo.find((owner) => ownerKey(owner) === lo);
@@ -304,7 +354,7 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
     : [
       data.stamp ? `Impor monitoring ${fmtFull(data.stamp)}` : 'Monitoring belum diimpor',
       data.arrival_stamp ? `Impor kehadiran terbaru ${fmtFull(data.arrival_stamp)}` : 'Rekap kehadiran belum diimpor',
-      'Absensi Bendahara dari sesi resmi berdasarkan tanggal WIB',
+      'Absensi sekolah mengacu pada Bendahara, dari sesi resmi menurut tanggal WIB; status valid dan perlu dicek dihitung sudah absen',
     ].join(' · ');
 
   return (
@@ -365,7 +415,7 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
           <div><b>{nf.format(sentCount + readyCount)}</b><small>Sudah kirim atau siap kirim</small>
             <small>{nf.format(sentCount)} sudah kirim + {nf.format(readyCount)} siap kirim, belum diajukan</small></div>
           <div><b>{nf.format(problematicFacilitators)} / {nf.format(scopedFacilitators.length)}</b>
-            <small>Fasilitator bermasalah</small>
+            <small>Fasilitator dengan antrean lewat batas</small>
             <small>Minimal satu laporan menunggu reviu lebih dari {threshold} hari</small>
           </div>
           <div><b>{nf.format(present)} / {nf.format(schools.length)}</b><small>Sekolah hadir di venue ({nf.format(percent(present, schools.length))}%)</small>

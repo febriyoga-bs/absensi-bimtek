@@ -77,7 +77,8 @@ export default function Scan() {
   const [search, setSearch] = useState('');
   const [filterVenue, setFilterVenue] = useState('');
   const [filterArrival, setFilterArrival] = useState('');
-  const [filterLo, setFilterLo] = useState('');
+  const [filterLo, setFilterLo] = useState(lo ? 'mine' : '');
+  const [filterPosition, setFilterPosition] = useState('');
   const [showFilters, setShowFilters] = useState(() => savedDisplay().showFilters);
   const [hiddenColumns, setHiddenColumns] = useState(() => savedDisplay().hiddenColumns);
   useEffect(() => {
@@ -88,7 +89,6 @@ export default function Scan() {
   const [filterAttendance, setFilterAttendance] = useState('');
   const [sort, setSort] = useState('name');
   const [direction, setDirection] = useState('asc');
-  const [showAll, setShowAll] = useState(false);
   const [page, setPage] = useState(1);
   const [list, setList] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -146,9 +146,8 @@ export default function Scan() {
     setLoading(true);
     setListError('');
     const params = new URLSearchParams({ category: tab, q: search.trim(), page, venue_id: filterVenue, arrival: filterArrival,
-      lo_id: filterLo, attendance: filterAttendance, facilitator: tab === 'sekolah' ? filterFacilitator : '', sort, direction });
+      lo_id: filterLo, position: tab === 'sekolah' ? filterPosition : '', attendance: filterAttendance, facilitator: tab === 'sekolah' ? filterFacilitator : '', sort, direction });
     if (testSessionId) params.set('session_id', testSessionId);
-    if (lo && showAll) params.set('scope', 'all');
     const timer = setTimeout(() => {
       api(`/admin/scan/participants?${params}`, { admin: true })
         .then((response) => { if (current) setList(response); })
@@ -156,7 +155,7 @@ export default function Scan() {
         .finally(() => { if (current) setLoading(false); });
     }, search.trim() ? 220 : 0);
     return () => { current = false; clearTimeout(timer); };
-  }, [tab, search, page, filterVenue, filterArrival, filterLo, filterFacilitator, filterAttendance, sort, direction, lo, showAll, revision, testSessionId]);
+  }, [tab, search, page, filterVenue, filterArrival, filterLo, filterPosition, filterFacilitator, filterAttendance, sort, direction, lo, revision, testSessionId]);
 
   function changeTab(next) {
     if (tab === next) return;
@@ -247,14 +246,14 @@ export default function Scan() {
   const visibleCount = headers.filter((name) => !columnHidden(name)).length;
   const tableWidth = headers.reduce((width, name, index) => width + (columnHidden(name) ? 0 : columnWidths[index]), 0);
   const activeFilterCount = [search.trim(), filterVenue, filterArrival, filterLo, filterAttendance,
-    tab === 'sekolah' && filterFacilitator, testSessionId, lo && showAll].filter(Boolean).length;
+    tab === 'sekolah' && filterFacilitator, tab === 'sekolah' && filterPosition, testSessionId].filter(Boolean).length;
 
   return (
     <>
       <div className="page-head">
         <div><h2>{lo ? 'Absenkan Peserta' : 'Daftar Peserta'}</h2>
           <p className="muted">
-            {lo ? <>Catat absensi binaan serta peserta Dinas Pendidikan dan BB/BPMP di venue penugasan. Pilih sesi resmi atau sesi uji coba yang sedang dibuka{user?.venue && <> di <b>{user.venue.name}</b></>}.</>
+            {lo ? <>Filter LO bertugas memilih akun Anda secara default. Pilih LO lain atau Semua LO untuk melihat daftar; pencatatan tetap sesuai penugasan Anda{user?.venue && <> di <b>{user.venue.name}</b></>}. Gunakan sesi resmi atau uji coba yang sedang dibuka.</>
               : 'Lihat daftar peserta, status kedatangan, dan absensi per venue. Pencatatan dilakukan oleh LO.'}
           </p></div>
         {tab === 'qr' && (
@@ -304,27 +303,28 @@ export default function Scan() {
                 {testSessionId && !testSessions.some((session) => String(session.id) === testSessionId) &&
                   <option value={testSessionId}>Sesi uji coba dipilih · tidak tersedia</option>}
               </select></label>
-              {lo && <label><span>Cakupan peserta</span><select aria-label="Cakupan peserta" value={showAll ? 'all' : 'assigned'} onChange={(e) => {
-                setLoading(true); setShowAll(e.target.value === 'all'); setFilterVenue(''); setPage(1);
-              }}>
-                <option value="assigned">{organizationTab ? 'Venue saya' : 'Binaan saya'}</option>
-                <option value="all">Semua peserta</option>
-              </select></label>}
               <label><span>Pencarian peserta</span><input type="search" aria-label="Cari peserta" placeholder={categories[tab].placeholder} value={search} maxLength={150}
                 onChange={(e) => { setLoading(true); setSearch(e.target.value); setPage(1); }} /></label>
-              {(!lo || showAll) && <label><span>Venue</span><select aria-label="Filter venue" value={filterVenue}
+              <label><span>Venue</span><select aria-label="Filter venue" value={filterVenue}
                 onChange={(e) => { setLoading(true); setFilterVenue(e.target.value); setPage(1); }}>
                 <option value="">Semua venue</option>
                 {list?.venues.map((venue) => <option key={venue.id} value={venue.id}>{venue.name}</option>)}
-              </select></label>}
+              </select></label>
               <label><span>LO bertugas</span><select aria-label="Filter LO bertugas" value={filterLo} onChange={(e) => {
                 setLoading(true); setFilterLo(e.target.value); setPage(1);
               }}>
                 <option value="">Semua LO bertugas</option>
-                {filterLo && !list?.owners?.some((owner) => String(owner.id) === filterLo) &&
+                {lo && <option value="mine">{user?.name || 'LO saya'} (saya)</option>}
+                {filterLo && filterLo !== 'mine' && !list?.owners?.some((owner) => String(owner.id) === filterLo) &&
                   <option value={filterLo}>LO dipilih (di luar venue)</option>}
-                {list?.owners?.map((owner) => <option key={owner.id} value={owner.id}>{owner.name}</option>)}
+                {list?.owners?.filter((owner) => owner.id !== list.current_lo_id).map((owner) => <option key={owner.id} value={owner.id}>{owner.name}</option>)}
               </select></label>
+              {tab === 'sekolah' && <label><span>Jabatan peserta</span><select aria-label="Filter jabatan peserta" value={filterPosition}
+                onChange={(e) => { setLoading(true); setFilterPosition(e.target.value); setPage(1); }}>
+                <option value="">Bendahara &amp; Pengawas</option>
+                <option value="bendahara">Bendahara</option>
+                <option value="pengawas">Pengawas</option>
+              </select></label>}
               {tab === 'sekolah' && <label><span>Fasilitator</span><select aria-label="Filter fasilitator" value={filterFacilitator} onChange={(e) => {
                 setLoading(true); setFilterFacilitator(e.target.value); setPage(1);
               }}>
@@ -385,9 +385,7 @@ export default function Scan() {
                 <tbody role="rowgroup">
                   {loading && <SkelRows rows={4} cols={visibleCount} />}
                   {!loading && !listError && !list?.rows.length && <tr role="row"><td role="cell" colSpan={visibleCount}>
-                    {lo && !showAll && !search.trim() && !filterArrival
-                      ? `Tidak ada ${organizationTab ? 'peserta kategori ini di venue Anda' : 'binaan di kategori ini'}. Pilih Semua peserta untuk melihat daftar lengkap.`
-                      : 'Tidak ada peserta yang cocok.'}
+                    Tidak ada peserta yang cocok dengan filter yang dipilih.
                   </td></tr>}
                   {!loading && !listError && list?.rows.map((p) => {
                     const [status, style] = attendanceStatus(p);

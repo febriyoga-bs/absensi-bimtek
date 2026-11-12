@@ -160,7 +160,7 @@ export default function People() {
   return (
     <>
       <div className="page-head"><div><h2>Peserta & Panitia</h2>
-        <p className="muted">Kode dipakai untuk login absen. Venue boleh dikosongkan agar bisa absen di venue mana saja.</p></div>
+        <p className="muted">Kelola identitas dan penempatan peserta. Kode membantu LO mencari peserta; pencatatan absensi mengikuti penugasan LO dan sesi aktif.</p></div>
         <Link className="btn" to="/admin/orang/sinkronisasi">Pratinjau Sinkronisasi Absensi</Link>
       </div>
       <div className="tabs">

@@ -9,7 +9,7 @@ import { useNow, fmtClock, fmtDate } from '../lib/time.js';
 import { checkInDayLabel } from './admin/shared.js';
 
 const workflows = [
-  ['Daftar Pendampingan', 'Cek sekolah dan fasilitator binaan serta ruangan penugasan.'],
+  ['Pendampingan', 'Buka Binaan saya untuk sekolah, fasilitator, dan ruangan Anda; pilih Semua penugasan untuk rekap lintas LO.'],
   ['Absenkan Peserta', 'Pilih peserta yang Anda tangani, ambil foto, isi catatan, lalu kirim.'],
   ['Absen Saya', 'Kirim absensi Anda dengan foto dan lokasi saat sesi resmi dibuka.'],
 ];

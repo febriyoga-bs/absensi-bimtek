@@ -12,10 +12,13 @@ function pickColumns(rows, required, optional = []) {
   return body.map((row) => indices.map((index) => asText(row[index]))).filter((row) => row.some(Boolean));
 }
 
-export async function readMonitoringCsv(file) {
+export async function readMonitoringCsv(file, onProgress = () => {}) {
   if (file.size > 20_000_000) throw new Error('Ukuran CSV maksimal 20 MB.');
+  onProgress('reading');
   const { default: Papa } = await import('papaparse');
   const text = await file.text();
+  onProgress('validating');
+  await new Promise((resolve) => setTimeout(resolve, 0));
   const { data, errors } = Papa.parse(text, { skipEmptyLines: 'greedy' });
   if (errors.length) throw new Error('CSV tidak bisa dibaca. Periksa pemisah kolom dan tanda kutip.');
   const names=data[0]?.map(normalized) || [];

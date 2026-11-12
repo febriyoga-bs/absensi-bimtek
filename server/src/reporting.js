@@ -164,7 +164,7 @@ export async function importReporting(csv) {
     ORDER BY k.npsn
     ON CONFLICT (npsn) DO UPDATE SET status=EXCLUDED.status, submitted_on=EXCLUDED.submitted_on,
       progress=EXCLUDED.progress, updated_at=now()
-    RETURNING npsn
+    RETURNING npsn,status
   ), candidates AS (
     SELECT min(p.id) AS id,c.phone
     FROM incoming i JOIN known k USING(npsn)
@@ -187,8 +187,13 @@ export async function importReporting(csv) {
     CASE WHEN $2::boolean THEN (SELECT count(*)::int FROM known k LEFT JOIN incoming i USING(npsn) WHERE i.npsn IS NULL)
       ELSE 0 END AS defaulted,
     (SELECT count(*)::int FROM contacts_saved) AS contacts_updated,
+    (SELECT count(*)::int FROM known k LEFT JOIN incoming i USING(npsn) WHERE i.npsn IS NULL) AS absent_from_file,
+    (SELECT jsonb_object_agg(status, n) FROM (SELECT status,count(*)::int AS n FROM saved GROUP BY status) totals) AS status_counts,
     ARRAY(SELECT npsn FROM unknown ORDER BY npsn LIMIT 10) AS unknown`, [JSON.stringify(entries), official]);
   if (!official && result.unknown.length) throw new HttpError(400, `NPSN tidak ada di pemetaan Pelaporan 3 (${result.unknown.join(', ')}). Periksa CSV lalu coba lagi.`);
   if (!result.updated) throw new HttpError(400, 'Tidak ada NPSN di CSV yang cocok dengan pemetaan Tahap 3.');
-  return { updated: result.updated, skipped: skipped + result.skipped, contacts_updated: result.contacts_updated, defaulted: result.defaulted };
+  return { updated: result.updated, skipped: skipped + result.skipped, contacts_updated: result.contacts_updated,
+    defaulted: result.defaulted, unchanged: official ? 0 : result.absent_from_file,
+    source: official ? 'review' : 'compact', imported: entries.length + skipped,
+    status_counts: result.status_counts || {} };
 }

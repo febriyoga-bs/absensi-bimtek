@@ -50,7 +50,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="lo" element={<LoAccounts />} />
           <Route path="pendampingan" element={<Assignments />} />
           <Route path="pelaporan" element={<Reporting />} />
-          <Route path="pendampingan/saya" element={<Assignments key="mine" personal />} />
+          <Route path="pendampingan/saya" element={<Navigate to="/admin/pendampingan?cakupan=saya" replace />} />
           <Route path="pengaturan" element={<Settings />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

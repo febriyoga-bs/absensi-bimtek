@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useSearchParams } from 'react-router-dom';
 import { api } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
 import AttendanceDetailDialog from './AttendanceDetailDialog.jsx';
@@ -47,8 +47,10 @@ const reports = {
   },
 };
 
-export default function Assignments({ personal = false }) {
+export default function Assignments() {
   const { user, lo: isLo } = useOutletContext();
+  const [params, setParams] = useSearchParams();
+  const personal = isLo && params.get('cakupan') !== 'semua';
   const [data, setData] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
@@ -62,14 +64,19 @@ export default function Assignments({ personal = false }) {
   const [details, setDetails] = useState(null);
 
   useEffect(() => {
+    setTab(personal ? 'facilitators' : 'lo'); setVenue(''); setLo(''); setQuery(''); setPage(1); setDetails(null);
+  }, [personal]);
+
+  useEffect(() => {
     if (!user) return;
     let current = true;
+    setData(null); setLoaded(false); setError('');
     api(personal ? '/admin/assignments/mine' : '/admin/assignments', { admin: true })
       .then((result) => { if (current) setData(result); })
       .catch((e) => { if (current) setError(e.message); })
       .finally(() => { if (current) setLoaded(true); });
     return () => { current = false; };
-  }, [user?.role, personal]);
+  }, [user?.role, user?.venue?.id, personal]);
 
   useEffect(() => {
     function resize() {
@@ -128,16 +135,25 @@ export default function Assignments({ personal = false }) {
       <div className="page-head assignment-heading">
         <span className="assignment-heading__icon"><Icon name={personal ? 'list' : 'chart'} size={26} /></span>
         <div>
-          <h2>{personal ? 'Daftar Pendampingan' : 'Rekap Pendampingan'}</h2>
+          <h2>Pendampingan</h2>
           <p className="muted">{personal ? 'Fasilitator, sekolah binaan, dan ruangan dalam penugasan Anda.'
             : 'Pembagian LO, fasilitator pelaporan, dan sekolah binaan sesuai pemetaan Bimtek Pelaporan 3 revisi 8.'}</p>
         </div>
       </div>
+      {isLo && <div className="tabs" role="group" aria-label="Cakupan pendampingan">
+        {[['saya', 'Binaan saya'], ['semua', 'Semua penugasan']].map(([value, label]) => <button key={value} type="button"
+          className={(personal ? value === 'saya' : value === 'semua') ? 'on' : ''}
+          aria-pressed={personal ? value === 'saya' : value === 'semua'} onClick={() => {
+            if (personal === (value === 'saya')) return;
+            setData(null); setLoaded(false); setError(''); setVenue(''); setLo(''); setQuery(''); setPage(1); setDetails(null);
+            setTab(value === 'saya' ? 'facilitators' : 'lo'); setParams({ cakupan: value });
+          }}>{label}</button>)}
+      </div>}
       {error && <p className="alert alert--err" role="alert">{error}</p>}
       {loaded && !data && !error && <p className="muted">{personal ? 'Belum ada penugasan untuk akun ini.' : 'Data pembagian tugas belum diimpor.'}</p>}
       {data && (
         <>
-          {personal && <div className="card assignment-location">
+          {personal && data.lo?.[0] && <div className="card assignment-location">
             <Icon name="pin" size={22} />
             <div>
               <b>{data.lo[0].venue}</b>

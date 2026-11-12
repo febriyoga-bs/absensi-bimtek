@@ -1,52 +1,86 @@
-# Absensi BIMTEK Revitalisasi SD
+# Dashboard LO BIMTEK Revitalisasi SD
 
-Web absensi untuk **peserta** dan **panitia**, menggunakan **foto dari kamera realtime** dan **geotagging GPS**, dengan beberapa lapis deteksi **Fake GPS**.
+Sistem pendampingan sekolah, pemantauan Laporan 50%, kedatangan peserta, dan absensi resmi. Stack: React/Vite, Node.js/Express, PostgreSQL; penyimpanan foto melalui Cloudflare R2 atau direktori lokal.
 
-Stack: React (Vite) + Node.js/Express + PostgreSQL.
+## Alur yang aktif
 
-## Halaman
+1. LO login di `/admin/login` menggunakan username dan kata sandi akun LO.
+2. Buka **Pendampingan → Binaan saya** untuk sekolah, fasilitator, dan ruangan penugasan. Pilih **Semua penugasan** untuk melihat rekap lintas LO.
+3. Buka **Absenkan Peserta**. Filter **LO bertugas** secara default memilih akun yang login. Pilih LO lain atau Semua LO untuk melihat daftar lain; kewenangan mencatat tetap mengikuti penugasan.
+4. Pada tab Sekolah, gunakan **Jabatan peserta** untuk Bendahara & Pengawas, Bendahara saja, atau Pengawas saja. Filter venue, fasilitator, status absensi, kedatangan, dan pencarian dapat digabungkan.
+5. Saat sesi aktif, pilih peserta, ambil foto kamera, tulis catatan, lalu kirim. Status Mundur/Berhalangan Hadir tidak memerlukan foto; peserta yang kemudian hadir dapat dicatat kembali dengan foto pada sesi yang sama.
+6. LO melakukan absensi dirinya sendiri di **Absen Saya**, menggunakan foto kamera dan GPS di venue penugasan.
+7. Admin mengimpor laporan terbaru dan rekap kedatangan, mengelola data kegiatan, serta memeriksa absensi.
 
-| URL | Fungsi |
-|---|---|
-| `/` | Beranda: pilih Absen Peserta / Absen Panitia |
-| `/absen/peserta` | Absensi peserta (tema biru) |
-| `/absen/panitia` | Absensi panitia (tema hijau) |
-| `/admin` | Rekap realtime per sesi, unduh CSV |
-| `/admin/pendampingan` | Rekap seluruh venue untuk Admin Utama dan LO. Unduhan CSV tersedia untuk Admin Utama |
-| `/admin/pendampingan/saya` | Daftar fasilitator, sekolah, dan ruangan untuk akun LO yang sedang masuk |
-| `/admin/absensi` | Verifikasi foto + tanda Fake GPS, sahkan/tolak, log percobaan yang diblokir |
-| `/admin/sesi` | Jadwal sesi (masuk/pulang, untuk peserta/panitia/semua) |
-| `/admin/orang` | Data peserta & panitia (bisa dikunci ke venue tertentu), impor CSV / tempel dari Excel |
-| `/admin/orang/sinkronisasi` | Pratinjau dan penerapan daftar absensi Bendahara dan Pengawas revisi 8 |
-| `/admin/venue` | **Banyak venue**: koordinat, radius, aktif/nonaktif |
-| `/admin/pengaturan` | Nama acara, penyelenggara, tanggal, akurasi GPS maks |
+**Absensi mandiri peserta/panitia publik dan scan QR untuk pencatatan saat ini dinonaktifkan.** URL `/absen/peserta` dan `/absen/panitia` bukan halaman aktif. Kartu identitas QR dan ekspor tautannya masih tersedia, tetapi peserta cukup menunjukkan nama atau kode kepada LO. Admin utama melihat **Daftar Peserta**; pencatatan kehadiran peserta dilakukan oleh akun LO.
 
-## Multi venue
+## Halaman dan hak akses
 
-Venue yang berlaku untuk seseorang dihitung dari **venue aktif ∩ venue sesi ∩ venue orang**:
+| URL | Fungsi | Akses |
+|---|---|---|
+| `/` | Beranda, panduan, venue, tautan masuk | Publik |
+| `/dashboard/pelaporan` | Monitoring pelaporan Tahap 3 dan arsip Tahap 2 | Publik |
+| `/dashboard/absensi` | Ringkasan absensi harian dan rincian nama | Publik |
+| `/dashboard/kehadiran` | Ringkasan kedatangan dari impor | Publik |
+| `/qr/:token` | Kartu identitas pribadi, simpan gambar | Pemilik tautan |
+| `/admin/login` | Login LO atau admin utama | Publik |
+| `/admin` | Rekap absensi resmi per sesi dan venue, CSV | Admin dan LO sesuai cakupan |
+| `/admin/kehadiran` | Rekap kedatangan, rincian nama | Admin dan LO; impor hanya admin |
+| `/admin/pendampingan` | Binaan saya / Semua penugasan, tab LO/fasilitator/sekolah | Admin dan LO; CSV hanya admin |
+| `/admin/scan` | Absenkan Peserta (LO) / Daftar Peserta (admin) | Admin dan LO |
+| `/admin/absen-saya` | Absensi LO dengan foto dan GPS | LO |
+| `/admin/absensi` | Foto, lokasi, status, catatan, verifikasi, penghapusan, CSV/cetak PDF | Sesuai kewenangan |
+| `/admin/absensi/foto/:id` | Foto absensi yang memerlukan login | Sesuai cakupan venue |
+| `/admin/pelaporan` | Progres, antrean reviu, absensi Bendahara, peringkat | Admin dan LO; impor hanya admin |
+| `/admin/password` | Ganti kata sandi sendiri | LO |
+| `/admin/sesi` | Sesi resmi/uji coba, jadwal dan cakupan venue | Admin |
+| `/admin/orang` | Profil peserta/panitia, impor CSV dan kartu identitas | Admin |
+| `/admin/orang/sinkronisasi` | Pratinjau tambah/ubah/arsip peserta | Admin |
+| `/admin/venue` | Koordinat, radius, aktif/nonaktif | Admin |
+| `/admin/lo` | Akun LO, penempatan, password, aktivitas login | Admin |
+| `/admin/pengaturan` | Identitas acara, akurasi GPS, kebijakan sesi | Admin |
 
-| Pengaturan | Hasil |
-|---|---|
-| Sesi tanpa venue, orang tanpa venue | Absen di venue aktif mana saja |
-| Sesi dibatasi ke venue A dan B | Hanya di A atau B |
-| Orang dikunci ke venue B | Hanya di B (meskipun sesi berlaku untuk semua venue) |
+Tautan lama `/admin/pendampingan/saya` diarahkan ke `/admin/pendampingan?cakupan=saya`. LO membuka Binaan saya secara default; admin membuka semua penugasan. Kontak pada rincian pendampingan dibatasi sesuai penugasan. Perubahan venue akun LO memerlukan login ulang; akun nonaktif ditolak oleh server.
 
-Server memilih venue terdekat yang radiusnya mencakup posisi peserta. Venue yang sudah dipakai absen tidak bisa dihapus; nonaktifkan saja.
+## Arti angka dan sumber data
 
-## Akun LO per venue
+- **Kedatangan** berasal dari Excel eksternal, bukan transaksi absensi. Sudah tiba dan Sedang antre merupakan kelompok terpisah pada rekap kedatangan. Angka sumber Sudah Tiba yang mencakup antrean dikurangi antrean sekali saat impor.
+- **Sekolah hadir di venue** pada pelaporan mencakup sudah tiba atau sedang antre, berdasarkan profil Bendahara.
+- **Sudah absen** mencakup status `valid` dan `review`; review masih perlu diperiksa. Ditolak dan berhalangan tidak dihitung hadir.
+- **Absensi sekolah per hari** pada pelaporan mengacu pada Bendahara sekolah, bukan seluruh wakil sekolah.
+- **Per sesi** menghitung catatan pada sesi tersebut. Ringkasan venue menghitung setiap orang sekali per venue untuk hari/cakupan yang dipilih.
+- **Peringkat pencatatan LO** mencakup absensi yang dicatat LO dan status berhalangan; ini ukuran kelengkapan pencatatan, bukan persentase kehadiran.
+- Dashboard diperbarui saat dibuka atau melalui **Muat ulang**; bukan pembaruan otomatis realtime. Dashboard publik dapat menggunakan cache singkat.
+- Tabel Pantau Pelaporan (Sekolah, Fasilitator, Wilayah, dan rincian sekolah fasilitator) dapat diurutkan dengan klik judul kolom. Klik lagi membalik urutan. Pengurutan berlaku untuk seluruh hasil sebelum pagination; progres diurutkan sebagai angka dan data kosong diletakkan terakhir.
+- Tanggal pelaporan/absensi harian masih dikonfigurasi di `server/src/reportingDays.js`. Mengubah tanggal acara berbentuk teks pada Pengaturan tidak mengubah daftar hari tersebut.
 
-Admin utama membuat akun LO di menu **Akun LO**, berisi nama, username, password, dan venue. LO login di `/admin/login` lewat tab **LO Venue**, lalu hanya bisa:
-- melihat **Rekap** untuk venue-nya,
-- **memverifikasi** (sahkan atau tolak) absensi di venue-nya,
-- mengunduh **CSV** venue-nya.
+## Impor laporan terbaru
 
-Menu Peserta, Sesi, Venue, Akun LO, dan Pengaturan hanya untuk Admin Utama. Menu Daftar Pendampingan menampilkan fasilitator, sekolah, dan ruangan yang ditugaskan ke akun LO tersebut. LO perlu login ulang setelah penempatan venuenya berubah.
+Admin membuka **Pantau Pelaporan → BIMTEK TAHAP 3 → Impor laporan terbaru**. Pilih CSV lalu tekan **Impor laporan terbaru**. Popup menampilkan tahapan membaca file, mengenali format, dan validasi/penyimpanan server. Indikator berjalan tanpa persentase perkiraan; popup tidak dapat ditutup dengan Escape saat proses berlangsung.
 
-Di **Absenkan Peserta**, akun LO langsung melihat tabel **Binaan saya** untuk sekolah dan fasilitator, serta **Venue saya** untuk Dinas Pendidikan dan BB/BPMP. Pilihan **Semua peserta** menampilkan daftar lengkap. LO dapat mencatat kehadiran atau status berhalangan untuk Bendahara, Pengawas, dan Fasilitator binaannya serta peserta Dinas Pendidikan dan BB/BPMP di venue sendiri. Verifikasi kehadiran oleh LO mengikuti penugasan. Admin Utama dapat mencatat absensi seluruh kategori. Profil Fasilitator dan perwakilan instansi dimuat saat impor pemetaan Bimtek Pelaporan 3.
+Setelah selesai, popup merangkum jenis file, baris diperiksa, sekolah diperbarui/dilewati, sekolah di luar CSV yang tetap atau ditandai belum kirim, serta kontak yang dilengkapi. File status reviu/ringkas menampilkan jumlah per status; file progres menampilkan terkirim, direviu, dan siap kirim. Jika gagal, pesan kesalahan tetap ditampilkan dan file dapat diperbaiki lalu dicoba lagi. Jika koneksi terputus saat penyimpanan, muat ulang dashboard untuk memastikan hasil server.
 
-## Impor pembagian Bimtek Pelaporan 3 revisi 8
+| Format | Kolom utama | Perilaku |
+|---|---|---|
+| Progres Laporan Sekolah | `NPSN`, `Capaian (%)`, `L7 Capaian 50% Terisi`, `L8 Capaian 50% Terkirim`, `R6 Capaian 50% Direviu` | Memperbarui sekolah yang ada dalam file dan pemetaan. Sekolah di luar file tetap. Browser hanya mengirim lima kolom; NIK dan kontak tidak dikirim dari format ini. |
+| Monitoring status reviu lengkap | `NPSN`, `Status Reviu`, `Tanggal Kirim`, `Capaian Saat Ini (%)` | Snapshot lengkap: sekolah pemetaan yang tidak ada dalam file ditandai Belum kirim. Kontak fasilitator/pengawas dapat dilengkapi jika cocok dan profil masih kosong. |
+| Status ringkas | `npsn`, `status`, `tanggal_kirim`, `progres_fisik` | Memperbarui baris dalam file; NPSN di luar pemetaan menyebabkan impor ditolak. Status: `belum_kirim`, `menunggu_reviu`, `ditolak`, `diterima`. |
 
-Pasang `openpyxl` di lingkungan Python. Dari folder proyek, ekstrak pemetaan dan daftar peserta, jalankan migrasi, lalu simulasikan impor.
+Gunakan file sumber terbaru: pemilihan sumber status memperhitungkan waktu impor, sehingga file lama yang diunggah belakangan dapat mengganti tampilan data. Impor progres mempertahankan hasil reviu dan tanggal kirim tersimpan; **direviu tidak otomatis berarti diterima**. Ringkasan status adalah cakupan sekolah yang diperbarui pada impor tersebut, bukan seluruh dashboard.
+
+Jalankan migrasi sebelum deploy perubahan skema, termasuk tabel `school_progress_report` dan kolom `source_summary` rekap kedatangan.
+
+## Impor kedatangan dan profil
+
+**Rekap Kehadiran → Impor Rekap Kehadiran (.xlsx)** memerlukan sheet **Ringkasan** dan **Detail Peserta**. Ringkasan menjadi acuan angka venue/peran; Detail Peserta menjadi daftar dan bahan pencocokan profil. Jumlah Pengawas pada Ringkasan adalah akun terdaftar, bukan undangan. Impor tidak mengganti identitas atau riwayat absensi; profil yang tidak cocok diperiksa terpisah.
+
+**Peserta & Panitia** mendukung CSV `kode,nama,peran,instansi,jabatan,telepon,venue` dan pemetaan sekolah. Kode yang sama diperbarui. Nama venue harus cocok agar tertaut. Bendahara memakai kode `B-<NPSN>`; Pengawas dikelompokkan menurut nama gabungan dan dapat terkait beberapa NPSN. Perencana yang tidak diundang dan nama `(BELUM ADA)` dilewati. NPSN, wilayah, ruangan, PTN dan data fasilitator ikut disimpan.
+
+**Pratinjau Sinkronisasi Absensi** menampilkan tambahan, perubahan, usulan arsip dan data perlu diperiksa sebelum penerapan. Cakupannya Bendahara/Pengawas yang terkait NPSN. Jalankan di luar sesi aktif. Pengarsipan mempertahankan riwayat; penghapusan permanen profil/sesi dapat menghapus absensi terkait.
+
+## Impor pemetaan Bimtek Pelaporan 3
+
+Pasang `openpyxl`, ekstrak file Excel, migrasikan, lalu simulasikan:
 
 ```bash
 python server/scripts/readBimtek3.py "lokasi/berkas.xlsx" data/bimtek3-pemetaan.local
@@ -54,65 +88,21 @@ npm run migrate
 npm --prefix server run import-bimtek3 -- --input ../data/bimtek3-pemetaan.local --dry-run
 ```
 
-Terapkan impor ke database yang dikonfigurasi di `server/.env`.
+Terapkan ke database yang dikonfigurasi di `server/.env`:
 
 ```bash
 npm --prefix server run import-bimtek3 -- --input ../data/bimtek3-pemetaan.local --credentials ../data/bimtek3-kredensial-lo.local
 ```
 
-Akun baru memakai username seperti `LO1.Febriyoga` dan mendapat kata sandi acak masing-masing. Berkas kredensial diabaikan oleh Git. Bagikan tiap kata sandi hanya kepada pemilik akunnya. Impor biasa mempertahankan username dan kata sandi akun yang cocok. Periksa titik dan radius venue baru di menu **Venue** sebelum mengaktifkan absensi mandiri.
+Akun baru menggunakan username seperti `LO1.Febriyoga` dengan password acak. Berkas kredensial diabaikan Git; bagikan tiap password hanya kepada pemiliknya. Impor biasa mempertahankan login akun yang cocok. Untuk reset seluruh login, set `BIMTEK_LO_PASSWORD` dan tambahkan `--reset-lo-logins`, dengan berkas keluaran baru. Periksa koordinat/radius venue sebelum memakai absensi GPS.
 
-Untuk mengganti login seluruh LO dalam rekap, set `BIMTEK_LO_PASSWORD` di lingkungan shell dan tambahkan `--reset-lo-logins` pada perintah impor. Gunakan nama berkas keluaran yang baru. Berkas keluaran mode ini berisi daftar username dan venue.
+## Kebijakan absensi dan GPS
 
-**Rekap Pendampingan** menampilkan salinan pembagian dari Excel untuk Admin Utama dan LO. Klik angka pada tab **LO** untuk membuka daftar fasilitator, sekolah, koordinator, atau pengawas di baris tersebut. Admin Utama dapat memilih tab dan filter, lalu memakai **Unduh CSV sesuai filter** untuk mengekspor seluruh hasil pencarian.
+Absensi peserta oleh LO memakai foto kamera dan catatan; venue berasal dari akun LO. LO menangani Bendahara/Pengawas/Fasilitator binaannya, serta Dinas Pendidikan dan BB/BPMP di venue sendiri. Melihat daftar LO lain tidak memberikan hak mencatat. Absensi ganda per orang/sesi ditolak.
 
-Dari **Peserta & Panitia**, buka **Pratinjau Sinkronisasi Absensi** untuk memeriksa peserta baru, perubahan penempatan, dan usulan arsip. Sinkronisasi mencakup Bendahara dan Pengawas yang terhubung ke NPSN. Data dengan identitas yang meragukan masuk ke **Perlu diperiksa**. Jalankan **Terapkan Sinkronisasi** di luar sesi absensi peserta. Arsip dapat dilihat lewat filter **Status peserta** dan tetap terhubung dengan riwayat kehadiran.
+Absensi mandiri LO menggunakan token singkat, foto dan sampel GPS. Venue yang diizinkan merupakan irisan venue aktif, cakupan sesi, dan venue profil. Lokasi jelas di luar area atau akurasi terlalu buruk ditolak. Akurasi di atas batas otomatis dapat masuk review jika lokasi masih mungkin di area venue. Sinyal seperti koordinat statis, lompatan lokasi, perangkat dipakai bergantian, atau kamera virtual menambah skor pemeriksaan. Skor minimal 2 masuk review. Browser tidak dapat memastikan aplikasi Fake GPS terpasang; indikator ini merupakan bahan pemeriksaan, bukan bukti pasti pemalsuan.
 
-## Data peserta (Bendahara & Pengawas)
-
-### Impor Progres Laporan Sekolah
-
-Menu **Pantau Pelaporan → Impor status BIMTEK TAHAP 3** mengenali CSV Progres Laporan Sekolah dari kolom `NPSN`, `Capaian (%)`, `L7 Capaian 50% Terisi`, `L8 Capaian 50% Terkirim`, dan `R6 Capaian 50% Direviu`. Hanya sekolah dalam pemetaan yang diperbarui; baris di luar cakupan dilewati dan sekolah yang tidak tercantum tetap. Browser hanya mengirim lima kolom ini, tanpa NIK atau kontak. Nilai `Direviu` tidak otomatis menjadi `Diterima`; hasil reviu dan tanggal kirim sebelumnya tetap tersimpan. Sumber paling baru antara impor progres dan impor status reviu digunakan untuk tampilan. Jalankan `npm run migrate` sebelum deploy untuk membuat tabel `school_progress_report`. Popup hasil menampilkan sekolah diperbarui/dilewati, terkirim, direviu, dan siap kirim.
-
-Impor Rekap Kehadiran menggunakan sheet **Ringkasan** sebagai acuan angka per venue dan peran, serta **Detail Peserta** untuk daftar dan pencocokan profil. Jumlah Pengawas pada Ringkasan adalah akun terdaftar, bukan undangan. Kolom Tiba pada dashboard menghitung yang selesai/sudah tiba di luar antrean; kolom Sudah Tiba pada Ringkasan sumber mencakup antrean, sehingga importer mengurangkan antrean sekali. Jalankan migrasi sebelum men-deploy perubahan importer (`source_summary`). Impor tidak mengganti identitas peserta atau riwayat absensi; profil yang tidak cocok harus diperiksa terpisah.
-
-File **Pemetaan Sekolah** (CSV dari Excel) bisa langsung diimpor di *Peserta & Panitia → Pilih file CSV…*. Formatnya dikenali otomatis:
-
-- **Bendahara**: 1 orang per sekolah, kode `B-<NPSN>`.
-- **Pengawas**: dikelompokkan per kolom *Pengawas — Nama Gabungan*, karena satu pengawas bisa membawahi beberapa sekolah. Kodenya `P-<NPSN terkecil>`. Saat absen, `P-<NPSN sekolah binaan mana pun>` juga diterima. Tanda hubung boleh tidak diketik.
-- **Perencana** (tidak diundang) dan nama "(BELUM ADA)" dilewati.
-- Kolom NPSN, region, ruangan, peringkat, provinsi, kab/kota, PTN, koor/fasil pelaporan, dan status penggabungan nama ikut disimpan, lalu tampil di tabel, filter, dan ekspor CSV.
-- Nama hotel dipetakan ke nama venue yang sama dengan data LO (mis. *Mercure Harmoni* → *Grand Mercure Jakarta Harmoni*). Buat venue dengan nama itu terlebih dahulu, lalu impor ulang untuk menautkan venue.
-- Pengawas yang terdaftar di lebih dari satu hotel dibuat bebas venue dan diberi catatan untuk dicek.
-
-Hasil konversinya juga tersedia di `data/peserta-bendahara-pengawas.csv`: 2.031 Bendahara + 1.559 Pengawas.
-
-## Alur absen
-
-1. Peserta/panitia memasukkan **kode** → server mengecek kode terdaftar, perannya sesuai halaman, ada sesi yang sedang dibuka, dan orang tersebut belum absen. Server lalu memberi token absen yang berlaku 5 menit.
-2. Kamera depan terbuka (tidak ada opsi unggah dari galeri) dan GPS dipantau terus untuk mengumpulkan beberapa sampel.
-3. **Ambil Foto**: watermark berisi nama, waktu, koordinat, dan kode unik dibakar ke foto.
-4. **Kirim**: server memvalidasi lalu menyimpan absen dengan status `valid`, `review`, atau menolaknya.
-
-## Lapisan anti Fake GPS
-
-Browser **tidak bisa** membaca langsung apakah aplikasi Fake GPS terpasang (itu hanya bisa dilakukan aplikasi Android native). Karena itu sistem ini memakai beberapa lapisan, dan semuanya dinilai di **server**:
-
-| Lapisan | Hasil |
-|---|---|
-| Jarak dari venue > radius (dihitung server dengan haversine dari median sampel) | **Ditolak** |
-| Akurasi GPS lebih buruk dari batas | **Ditolak** |
-| Token kedaluwarsa atau sesi sudah ditutup | **Ditolak** |
-| Sampel koordinat identik persis (GPS asli selalu bergoyang) | Perlu dicek |
-| Koordinat ≤ 4 desimal (diketik manual) | Perlu dicek |
-| Lokasi melompat jauh antar-sampel, atau kecepatan tidak wajar | Perlu dicek |
-| "Teleport": lokasi absen sebelumnya mustahil dicapai | Perlu dicek |
-| Satu HP dipakai beberapa orang dalam satu sesi (titip absen) | Perlu dicek |
-| Kamera virtual (OBS, ManyCam, DroidCam, dll.) atau browser otomatis | Perlu dicek |
-| Akurasi tinggi tanpa altitude, timestamp GPS janggal, jam HP tidak sinkron | Sinyal lemah (bobot 1) |
-
-Absen yang skor tandanya ≥ 2 masuk status **review**, dan panitia memeriksa fotonya di `/admin/absensi`. Percobaan yang ditolak dicatat di tab *Percobaan diblokir*.
-
+Venue yang sudah dipakai absensi tidak dapat dihapus; nonaktifkan. Jika opsi **Maksimal satu sesi resmi per hari** aktif, batas berlaku lintas venue/peran menurut tanggal WIB; gunakan peran Semua untuk peserta dan panitia. Sesi uji coba dikecualikan dan tidak masuk rekap resmi.
 
 ## Menjalankan (development)
 
@@ -171,12 +161,14 @@ npm start            # Express menyajikan API + build React di port $PORT
 ```
 Jalankan di belakang Caddy/Nginx dengan HTTPS. Kalau `R2_BUCKET` dikosongkan, foto disimpan ke `UPLOAD_DIR`.
 
-## Persiapan acara (checklist)
+## Persiapan acara
 
-1. Jalankan `npm run migrate` setiap kali ada update skema (misalnya fitur Akun LO).
-2. **Pengaturan**: isi nama acara, penyelenggara, dan tanggal acara.
-2. **Venue**: tambah setiap lokasi. Koordinat bisa ditempel dari Google Maps atau diambil dengan "Pakai lokasi saya" saat berada di venue. Radius 100–200 m cocok untuk hotel atau aula.
-3. **Peserta & Panitia**: impor CSV dengan format `kode,nama,peran,instansi,jabatan,telepon,venue`. Kolom venue berisi nama venue persis, atau dikosongkan agar bebas.
-4. **Sesi**: buat sesi masuk/pulang per hari, misalnya panitia dibuka 06.30 dan peserta 07.30–09.00. Sesi bisa dibatasi ke venue tertentu.
-5. Bagikan link `/absen/peserta` dan `/absen/panitia` (bisa dibuat QR code).
-6. Pantau `/admin` dan cek absen berstatus *Perlu dicek* di `/admin/absensi`.
+1. Jalankan `npm run migrate` setelah perubahan skema.
+2. Atur identitas acara dan kebijakan sesi di Pengaturan. Cocokkan hari rekap di `reportingDays.js`.
+3. Periksa venue aktif, koordinat dan radius GPS.
+4. Impor pemetaan/profil; pratinjau sinkronisasi dan selesaikan data yang perlu diperiksa.
+5. Buat akun LO dan pastikan penempatan sesuai pemetaan.
+6. Buat sesi resmi; jika satu sesi per hari aktif, gunakan peran Semua. Gunakan sesi uji coba untuk latihan.
+7. Bagikan URL login kepada LO. Peserta menemui LO dengan nama/kode; scan QR dan absensi mandiri peserta tidak aktif.
+8. Impor laporan terbaru dan kedatangan, baca ringkasan popup, lalu muat ulang rekap jika diperlukan.
+9. Periksa status Perlu dicek, kelengkapan catatan/foto, dan unduh rekap sesuai kebutuhan.

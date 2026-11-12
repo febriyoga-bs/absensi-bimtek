@@ -111,6 +111,7 @@ r.get('/assignments/mine', ah(async (req, res) => {
     venues: [own.venue],
     facilitators: roster.data.facilitators.filter(belongsToLo),
     schools: roster.data.schools.filter(belongsToLo),
+    check_in_days: reportingDays,
   });
 }));
 
@@ -597,8 +598,12 @@ r.get('/scan/participants', ah(async (req, res) => {
   }
   const limit = 30;
   const term = String(req.query.q || '').trim().slice(0, 150);
-  const assignedOnly = req.user.role === 'lo' && req.query.scope !== 'all';
-  const ownerId = req.query.lo_id == null || req.query.lo_id === '' ? null : Number(req.query.lo_id);
+  const ownerId = req.query.lo_id === 'mine' && req.user.role === 'lo' ? req.user.lo
+    : req.query.lo_id == null || req.query.lo_id === '' ? null : Number(req.query.lo_id);
+  const positionFilter = req.query.position || '';
+  if (!['', 'bendahara', 'pengawas'].includes(positionFilter) || (positionFilter && category !== 'sekolah')) {
+    throw new HttpError(400, 'Filter jabatan peserta tidak valid.');
+  }
   const attendanceFilter = req.query.attendance || '';
   const facilitatorFilter = req.query.facilitator || '';
   if (typeof facilitatorFilter !== 'string' || facilitatorFilter.length > 400) throw new HttpError(400, 'Filter fasilitator tidak valid.');
@@ -680,7 +685,7 @@ r.get('/scan/participants', ah(async (req, res) => {
         ORDER BY s.starts_at,s.id LIMIT 1
       ) selected_session ON true
       WHERE p.role='peserta' AND p.archived_at IS NULL AND (${scanCategories[category]})
-        AND (NOT $7::boolean OR ($5::int IS NULL OR (p.venue_id=$6::int AND COALESCE(assignment.owned,false))))
+        AND ($7::text='' OR lower(trim(p.position))=$7)
         AND ($2::int IS NULL OR p.venue_id=$2)
         AND ($10::int IS NULL OR EXISTS (SELECT 1 FROM assigned_people ap WHERE ap.id=p.id AND ap.account_id=$10))
         AND ($1='' OR p.name ILIKE '%'||$1||'%' OR p.code ILIKE '%'||$1||'%'
@@ -746,10 +751,10 @@ r.get('/scan/participants', ah(async (req, res) => {
       COALESCE((SELECT jsonb_agg(jsonb_build_object('id',l.id,'name',l.name) ORDER BY l.name) FROM active_owners l
         WHERE ($2::int IS NULL OR l.venue_id=$2)),'[]') AS owners,
       COALESCE((SELECT jsonb_agg(jsonb_build_object('id',v.id,'name',v.name) ORDER BY v.name) FROM venues v),'[]') AS venues`,
-    [term, venueId, limit, (page - 1) * limit, req.user.lo, req.user.venue, assignedOnly,
+    [term, venueId, limit, (page - 1) * limit, req.user.lo, req.user.venue, positionFilter,
       ['present', 'arrived', 'queued', 'unrecorded'].includes(req.query.arrival) ? req.query.arrival : '', testSessionId, ownerId, attendanceFilter, facilitatorFilter]);
   res.json({
-    total: list.total, limit, venues: list.venues, owners: list.owners, facilitators: list.facilitators, arrival_summary: list.arrival_summary,
+    total: list.total, limit, current_lo_id: req.user.lo, venues: list.venues, owners: list.owners, facilitators: list.facilitators, arrival_summary: list.arrival_summary,
     rows: list.rows.map(({ recorded, phone, sort_order, ...person }) => ({
       ...person,
       session: withReportingDay(person.session),
