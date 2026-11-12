@@ -13,8 +13,8 @@ const sessionStatuses = [
   ['rejected', 'Ditolak', 'circle-xmark'], ['unavailable', 'Berhalangan', 'user-slash'], ['blocked', 'Diblokir', 'ban'],
 ];
 
-function VenueAttendanceCard({ venue, day, onDetails }) {
-  const participantGroups = venueGroups.filter(([key]) => key !== 'lo');
+function VenueAttendanceCard({ venue, day, onDetails, visibleGroups }) {
+  const participantGroups = visibleGroups.filter(([key]) => key !== 'lo');
   const total = participantGroups.reduce((sum, [key]) => sum + venue[key].total, 0);
   const attended = participantGroups.reduce((sum, [key]) => sum + venue[key].attended, 0);
 
@@ -24,12 +24,12 @@ function VenueAttendanceCard({ venue, day, onDetails }) {
         <span className="kpi__icon"><FontIcon name="location-dot" /></span>
         <div>
           <h4>{venue.name}</h4>
-          <div className="muted small"><b>{number.format(attended + venue.lo.attended)}</b> dari {number.format(total + venue.lo.total)} orang sudah absen</div>
-          <div className="muted small">{number.format(total)} peserta dan {number.format(venue.lo.total)} LO</div>
+          <div className="muted small"><b>{number.format(attended + (visibleGroups.some(([key]) => key === 'lo') ? venue.lo.attended : 0))}</b> dari {number.format(total + (visibleGroups.some(([key]) => key === 'lo') ? venue.lo.total : 0))} orang sudah absen</div>
+          <div className="muted small">{number.format(total)} peserta{visibleGroups.some(([key]) => key === 'lo') && ` dan ${number.format(venue.lo.total)} LO`}</div>
         </div>
       </header>
       <div className="venue-attendance__groups">
-        {venueGroups.map(([key, label]) => {
+        {visibleGroups.map(([key, label]) => {
           const { total, attended, registered } = venue[key];
           return (
             <button type="button" key={key} aria-haspopup="dialog" aria-label={`Lihat daftar ${label} di ${venue.name}`}
@@ -66,6 +66,16 @@ export default function Dashboard() {
   const [sessionsError, setSessionsError] = useState(false);
   const [revision, setRevision] = useState(0);
   const [details, setDetails] = useState(null);
+  const [hiddenGroups, setHiddenGroups] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('bimtek-venue-hidden-groups') || '[]');
+      return Array.isArray(saved) ? saved.filter((key) => venueGroups.some(([group]) => group === key)) : [];
+    } catch { return []; }
+  });
+  const visibleGroups = venueGroups.filter(([key]) => !hiddenGroups.includes(key));
+  useEffect(() => {
+    try { localStorage.setItem('bimtek-venue-hidden-groups', JSON.stringify(hiddenGroups)); } catch { /* storage unavailable */ }
+  }, [hiddenGroups]);
 
   useEffect(() => {
     api('/admin/venues', { admin: true }).then(setVenues);
@@ -191,11 +201,25 @@ export default function Dashboard() {
       <section className="venue-attendance-section" aria-labelledby="venue-attendance-title">
         <h3 id="venue-attendance-title">Ringkasan per venue</h3>
         <p className="muted small">{day === null ? 'Menentukan hari absensi…' : selectedDay ? `Ringkasan ${checkInDayLabel(selectedDay)}.` : 'Gabungan semua sesi resmi.'} Setiap orang dihitung sekali per venue.</p>
+        <div className="scan-display-controls">
+          <details className="scan-column-picker">
+            <summary className="btn btn--sm">Atur jenis peserta ({visibleGroups.length}/{venueGroups.length})</summary>
+            <div className="scan-column-options">
+              {venueGroups.map(([key, label]) => <label className="check" key={key}>
+                <input type="checkbox" checked={!hiddenGroups.includes(key)} disabled={visibleGroups.length === 1 && !hiddenGroups.includes(key)}
+                  onChange={(event) => setHiddenGroups((current) => event.target.checked ? current.filter((item) => item !== key) : [...current, key])} />
+                <span>{label}</span>
+              </label>)}
+            </div>
+          </details>
+          <button type="button" className="btn btn--sm" onClick={() => setHiddenGroups([])}>Tampilkan semua</button>
+        </div>
+        {hiddenGroups.length > 0 && <p className="muted small">Total pada kartu mengikuti jenis peserta yang ditampilkan.</p>}
         {summaryError && <p className="alert alert--warn" role="status">Ringkasan venue gagal diperbarui.</p>}
         {!venueAttendance && !summaryError && <div className="stats"><SkelCards n={2} h={190} /></div>}
         {venueAttendance && !shownVenues.length && <p className="muted">Belum ada venue untuk ditampilkan.</p>}
         <div className="venue-attendance-grid">
-          {shownVenues.map((venue) => <VenueAttendanceCard key={venue.id} venue={venue} day={selectedDay} onDetails={setDetails} />)}
+          {shownVenues.map((venue) => <VenueAttendanceCard key={venue.id} venue={venue} day={selectedDay} onDetails={setDetails} visibleGroups={visibleGroups} />)}
         </div>
       </section>
       </div>

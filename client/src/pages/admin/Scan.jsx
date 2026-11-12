@@ -44,6 +44,14 @@ const categories = {
 const number = new Intl.NumberFormat('id-ID');
 const directoryHeaders = ['Peserta', 'Sekolah / Instansi', 'Venue', 'LO bertugas', 'Fasilitator', 'Status Laporan 50%', 'Sesi', 'Kehadiran di venue', 'Status absensi'];
 const sortKeys = ['name','institution','venue','lo','facilitator','report','session','arrival','attendance'];
+const columnWidths = [240,260,190,180,220,240,190,160,160,220];
+function savedDisplay() {
+  try {
+    const value = JSON.parse(localStorage.getItem('bimtek-scan-display') || '{}');
+    return { showFilters: value.showFilters !== false, hiddenColumns: Array.isArray(value.hiddenColumns)
+      ? value.hiddenColumns.filter((name) => directoryHeaders.includes(name) && name !== 'Peserta') : [] };
+  } catch { return { showFilters: true, hiddenColumns: [] }; }
+}
 const reportLabels = { belum_kirim: 'Belum kirim', menunggu_reviu: 'Menunggu reviu', ditolak: 'Ditolak', diterima: 'Diterima', belum_ada_data: 'Belum ada data' };
 
 function attendanceStatus(person) {
@@ -70,6 +78,12 @@ export default function Scan() {
   const [filterVenue, setFilterVenue] = useState('');
   const [filterArrival, setFilterArrival] = useState('');
   const [filterLo, setFilterLo] = useState('');
+  const [showFilters, setShowFilters] = useState(() => savedDisplay().showFilters);
+  const [hiddenColumns, setHiddenColumns] = useState(() => savedDisplay().hiddenColumns);
+  useEffect(() => {
+    try { localStorage.setItem('bimtek-scan-display', JSON.stringify({ showFilters, hiddenColumns })); } catch { /* storage unavailable */ }
+  }, [showFilters, hiddenColumns]);
+  const columnHidden = (name) => hiddenColumns.includes(name);
   const [filterFacilitator, setFilterFacilitator] = useState('');
   const [filterAttendance, setFilterAttendance] = useState('');
   const [sort, setSort] = useState('name');
@@ -230,6 +244,10 @@ export default function Scan() {
   const pages = list ? Math.ceil(list.total / list.limit) : 0;
   const organizationTab = tab === 'dinas' || tab === 'bpmp';
   const headers = lo ? [...directoryHeaders, 'Tindakan'] : directoryHeaders;
+  const visibleCount = headers.filter((name) => !columnHidden(name)).length;
+  const tableWidth = headers.reduce((width, name, index) => width + (columnHidden(name) ? 0 : columnWidths[index]), 0);
+  const activeFilterCount = [search.trim(), filterVenue, filterArrival, filterLo, filterAttendance,
+    tab === 'sekolah' && filterFacilitator, testSessionId, lo && showAll].filter(Boolean).length;
 
   return (
     <>
@@ -257,8 +275,27 @@ export default function Scan() {
       <div className={tab === 'qr' ? 'scan' : 'scan scan--table'}>
         {tab !== 'qr' && (
           <section className="scan__directory">
-            <div className="toolbar filters">
-              <select aria-label="Sesi absensi" value={testSessionId} disabled={!!pending || !!shot} onChange={(event) => {
+            <div className="scan-display-controls">
+              <button type="button" className="btn btn--sm" aria-expanded={showFilters} aria-controls="scan-filters" onClick={() => setShowFilters((value) => !value)}>
+                {showFilters ? 'Sembunyikan filter' : 'Tampilkan filter'}{activeFilterCount > 0 ? ` (${activeFilterCount} aktif)` : ''}
+              </button>
+              <details className="scan-column-picker">
+                <summary className="btn btn--sm">Atur kolom ({visibleCount}/{headers.length})</summary>
+                <div className="scan-column-options">
+                  {headers.map((name) => <label className="check" key={name}>
+                    <input type="checkbox" checked={!columnHidden(name)} disabled={name === 'Peserta' || name === 'Tindakan'}
+                      onChange={(event) => setHiddenColumns((current) => event.target.checked ? current.filter((item) => item !== name) : [...current, name])} />
+                    <span>{name}{name === 'Peserta' || name === 'Tindakan' ? ' (tetap)' : ''}</span>
+                  </label>)}
+                </div>
+              </details>
+              <button type="button" className="btn btn--sm" onClick={() => { setHiddenColumns([]); setShowFilters(true); }}>Reset tampilan</button>
+              <button type="button" className="btn btn--sm" disabled={loading || !!pending} onClick={() => setRevision((value) => value + 1)}>
+                <Icon name="refresh" size={15} />Muat ulang
+              </button>
+            </div>
+            <div id="scan-filters" className="toolbar filters" hidden={!showFilters}>
+              <label><span>Sesi absensi</span><select aria-label="Sesi absensi" value={testSessionId} disabled={!!pending || !!shot} onChange={(event) => {
                 setTestSessionId(event.target.value); setLoading(true); setPage(1); setResult(null);
               }}>
                 <option value="">Sesi resmi yang sedang dibuka</option>
@@ -266,36 +303,36 @@ export default function Scan() {
                 {!testSessions.length && <option disabled>Belum ada sesi uji coba yang dibuka</option>}
                 {testSessionId && !testSessions.some((session) => String(session.id) === testSessionId) &&
                   <option value={testSessionId}>Sesi uji coba dipilih · tidak tersedia</option>}
-              </select>
-              {lo && <select aria-label="Cakupan peserta" value={showAll ? 'all' : 'assigned'} onChange={(e) => {
+              </select></label>
+              {lo && <label><span>Cakupan peserta</span><select aria-label="Cakupan peserta" value={showAll ? 'all' : 'assigned'} onChange={(e) => {
                 setLoading(true); setShowAll(e.target.value === 'all'); setFilterVenue(''); setPage(1);
               }}>
                 <option value="assigned">{organizationTab ? 'Venue saya' : 'Binaan saya'}</option>
                 <option value="all">Semua peserta</option>
-              </select>}
-              <input type="search" aria-label="Cari peserta" placeholder={categories[tab].placeholder} value={search} maxLength={150}
-                onChange={(e) => { setLoading(true); setSearch(e.target.value); setPage(1); }} />
-              {(!lo || showAll) && <select aria-label="Filter venue" value={filterVenue}
+              </select></label>}
+              <label><span>Pencarian peserta</span><input type="search" aria-label="Cari peserta" placeholder={categories[tab].placeholder} value={search} maxLength={150}
+                onChange={(e) => { setLoading(true); setSearch(e.target.value); setPage(1); }} /></label>
+              {(!lo || showAll) && <label><span>Venue</span><select aria-label="Filter venue" value={filterVenue}
                 onChange={(e) => { setLoading(true); setFilterVenue(e.target.value); setPage(1); }}>
                 <option value="">Semua venue</option>
                 {list?.venues.map((venue) => <option key={venue.id} value={venue.id}>{venue.name}</option>)}
-              </select>}
-              <select aria-label="Filter LO bertugas" value={filterLo} onChange={(e) => {
+              </select></label>}
+              <label><span>LO bertugas</span><select aria-label="Filter LO bertugas" value={filterLo} onChange={(e) => {
                 setLoading(true); setFilterLo(e.target.value); setPage(1);
               }}>
                 <option value="">Semua LO bertugas</option>
                 {filterLo && !list?.owners?.some((owner) => String(owner.id) === filterLo) &&
                   <option value={filterLo}>LO dipilih (di luar venue)</option>}
                 {list?.owners?.map((owner) => <option key={owner.id} value={owner.id}>{owner.name}</option>)}
-              </select>
-              {tab === 'sekolah' && <select aria-label="Filter fasilitator" value={filterFacilitator} onChange={(e) => {
+              </select></label>
+              {tab === 'sekolah' && <label><span>Fasilitator</span><select aria-label="Filter fasilitator" value={filterFacilitator} onChange={(e) => {
                 setLoading(true); setFilterFacilitator(e.target.value); setPage(1);
               }}>
                 <option value="">Semua fasilitator</option>
                 {filterFacilitator && !list?.facilitators?.includes(filterFacilitator) && <option value={filterFacilitator}>{filterFacilitator} (di luar filter saat ini)</option>}
                 {list?.facilitators?.map((name) => <option key={name} value={name}>{name}</option>)}
-              </select>}
-              <select aria-label="Filter status absensi" value={filterAttendance} onChange={(e) => {
+              </select></label>}
+              <label><span>Status absensi</span><select aria-label="Filter status absensi" value={filterAttendance} onChange={(e) => {
                 setLoading(true); setFilterAttendance(e.target.value); setPage(1);
               }}>
                 <option value="">Semua status absensi</option>
@@ -305,18 +342,15 @@ export default function Scan() {
                 <option value="ditolak">Ditolak</option>
                 <option value="berhalangan">Mundur/Berhalangan Hadir</option>
                 <option value="no_session">Belum ada sesi</option>
-              </select>
-              <select aria-label="Filter kehadiran dari rekap" value={filterArrival} onChange={(e) => {
+              </select></label>
+              <label><span>Status kedatangan</span><select aria-label="Filter kehadiran dari rekap" value={filterArrival} onChange={(e) => {
                 setLoading(true); setFilterArrival(e.target.value); setPage(1);
               }}>
                 <option value="">SEMUA STATUS KEDATANGAN</option>
                 <option value="arrived">SUDAH TIBA</option>
                 <option value="queued">SEDANG ANTRE</option>
                 <option value="unrecorded">BELUM TERDATA</option>
-              </select>
-              <button type="button" className="btn btn--sm" disabled={loading || !!pending} onClick={() => setRevision((value) => value + 1)}>
-                <Icon name="refresh" size={15} />Muat ulang
-              </button>
+              </select></label>
             </div>
             {sessionError && <p className="alert alert--warn" role="status">Daftar sesi uji coba gagal dimuat. {sessionError}</p>}
             {testSessionId && <p className="alert alert--warn" role="status">Mode uji coba aktif. Pencatatan masuk ke sesi uji coba yang dipilih.</p>}
@@ -336,10 +370,10 @@ export default function Scan() {
               {loading ? 'Memuat daftar peserta…' : `${number.format(list?.total || 0)} peserta`}
             </p>
             <div className="assignment-table">
-              <table className="table stack-table scan-table" role="table" aria-label={`Daftar ${categories[tab].label}`} aria-busy={loading}>
+              <table className="table stack-table scan-table" style={{ '--scan-table-width': `${tableWidth}px` }} role="table" aria-label={`Daftar ${categories[tab].label}`} aria-busy={loading}>
                 <thead role="rowgroup"><tr role="row">
                   {headers.map((name, index) => (
-                    <th key={name} scope="col" role="columnheader"
+                    <th key={name} scope="col" role="columnheader" hidden={columnHidden(name)}
                       aria-sort={sortKeys[index] ? sort === sortKeys[index] ? direction === 'asc' ? 'ascending' : 'descending' : 'none' : undefined}>
                       {sortKeys[index] ? <button type="button" className="scan-sort" onClick={() => {
                         setLoading(true); setPage(1);
@@ -349,8 +383,8 @@ export default function Scan() {
                   ))}
                 </tr></thead>
                 <tbody role="rowgroup">
-                  {loading && <SkelRows rows={4} cols={headers.length} />}
-                  {!loading && !listError && !list?.rows.length && <tr role="row"><td role="cell" colSpan={headers.length}>
+                  {loading && <SkelRows rows={4} cols={visibleCount} />}
+                  {!loading && !listError && !list?.rows.length && <tr role="row"><td role="cell" colSpan={visibleCount}>
                     {lo && !showAll && !search.trim() && !filterArrival
                       ? `Tidak ada ${organizationTab ? 'peserta kategori ini di venue Anda' : 'binaan di kategori ini'}. Pilih Semua peserta untuk melihat daftar lengkap.`
                       : 'Tidak ada peserta yang cocok.'}
@@ -365,25 +399,25 @@ export default function Scan() {
                             <div className="muted small">Mewakili {personName(p.name)}</div></>}
                           {!p.representative && <WhatsAppLink name={p.name} phone={p.phone} />}
                           <div className="muted small">{[p.position, p.code].filter(Boolean).join(' · ')}</div></td>
-                        <td role="cell" data-label="Sekolah / Instansi" className="cell-clamp">{p.institution || '—'}
+                        <td role="cell" data-label="Sekolah / Instansi" hidden={columnHidden('Sekolah / Instansi')} className="cell-clamp">{p.institution || '—'}
                           {p.npsn && <div className="muted small">NPSN {p.npsn}</div>}
                         </td>
-                        <td role="cell" data-label="Venue">
+                        <td role="cell" data-label="Venue" hidden={columnHidden('Venue')}>
                           {p.venue_name ? <span className="tag tag--venue">{p.venue_name}</span> : '—'}
                           {p.ruangan && <div className="muted small">{formatRoom(p.ruangan)}</div>}
                         </td>
-                        <td role="cell" data-label="LO bertugas" className="small">
+                        <td role="cell" data-label="LO bertugas" hidden={columnHidden('LO bertugas')} className="small">
                           {p.assigned_los?.length ? <>
                             {organizationTab && <div className="muted small">LO venue</div>}
                             {p.assigned_los.map((name) => <div key={name}>{name}</div>)}
                           </> : <span className="muted">Belum terpetakan</span>}
                         </td>
-                        <td role="cell" data-label="Fasilitator" className="small">
+                        <td role="cell" data-label="Fasilitator" hidden={columnHidden('Fasilitator')} className="small">
                           {p.assigned_facilitators?.length
                             ? p.assigned_facilitators.map((name) => <div key={name}>{name}</div>)
                             : <span className="muted">{tab === 'sekolah' ? 'Belum terpetakan' : '—'}</span>}
                         </td>
-                        <td role="cell" data-label="Status Laporan 50%" className="small">
+                        <td role="cell" data-label="Status Laporan 50%" hidden={columnHidden('Status Laporan 50%')} className="small">
                           {p.school_reports?.length ? p.school_reports.map((report) => <div key={report.npsn}>
                             {p.school_reports.length > 1 && <div className="muted small">{report.name} · {report.npsn}</div>}
                             <span className={`tag ${report.status === 'diterima' ? 'tag--open' : report.status === 'menunggu_reviu' ? 'tag--venue' : 'tag--off'}`}>
@@ -392,15 +426,15 @@ export default function Scan() {
                             </span>
                           </div>) : <span className="muted">{tab === 'sekolah' ? 'Belum ada data' : '—'}</span>}
                         </td>
-                        <td role="cell" data-label="Sesi" className="small">{sessionTitle(p.session)}
+                        <td role="cell" data-label="Sesi" hidden={columnHidden('Sesi')} className="small">{sessionTitle(p.session)}
                           {p.session?.is_test && <div><span className="tag tag--venue">Uji coba</span></div>}
                         </td>
-                        <td role="cell" data-label="Kehadiran di venue">
+                        <td role="cell" data-label="Kehadiran di venue" hidden={columnHidden('Kehadiran di venue')}>
                           <span className={`tag ${arrivalStyle}`}>
                             {arrival.toUpperCase()}
                           </span>
                         </td>
-                        <td role="cell" data-label="Status absensi"><span className={`tag ${style}`}>{status}</span></td>
+                        <td role="cell" data-label="Status absensi" hidden={columnHidden('Status absensi')}><span className={`tag ${style}`}>{status}</span></td>
                         {lo && <td role="cell" className="stack-full">
                           {p.attended?.can_edit_note && <button type="button" className="btn btn--sm"
                             onClick={() => { setNoteNotice(''); setNoteTarget({ ...p.attended, name: p.name }); }}>Ubah catatan</button>}

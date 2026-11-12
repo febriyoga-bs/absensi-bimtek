@@ -670,6 +670,8 @@ select:disabled { background-color: var(--surface-2); color: var(--muted); curso
 .scan--table .scan__result { grid-row: 1; margin-bottom: 0; }
 .scan__directory { min-width: 0; }
 .scan__directory .toolbar { margin-top: 0; }
+.scan__directory .toolbar > label { text-align: left; align-items: stretch; }
+.scan__directory .toolbar > label > span { font-size: 12px; line-height: 1.4; font-weight: 600; color: var(--muted); }
 .scan__directory .tag { white-space: normal; }
 .scan__directory .tag { white-space: nowrap; }
 .admin .toolbar { align-items: end; gap: 10px; }
@@ -691,7 +693,7 @@ select:disabled { background-color: var(--surface-2); color: var(--muted); curso
   .admin .toolbar > label { flex: 0 1 240px; }
   .scan__directory .toolbar { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); align-items: stretch; }
   .scan__directory .toolbar > :is(input, select, button) { min-width: 0; width: 100%; }
-  .scan__directory .scan-table { min-width: 1980px; table-layout: fixed; font-size: 13px; }
+  .scan__directory .scan-table { min-width: var(--scan-table-width, 1980px); table-layout: fixed; font-size: 13px; }
   .scan-table :is(th,td) { vertical-align: top; padding: 14px 12px; line-height: 1.55; overflow-wrap: break-word; }
   .scan-table th { white-space: nowrap; }
   .scan-table :is(th,td):first-child { width: 240px; }
@@ -723,6 +725,13 @@ select:disabled { background-color: var(--surface-2); color: var(--muted); curso
 .scan__arrival-recap { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fff; }
 .scan__arrival-recap .btn { margin-inline-start: auto; }
 .scan__arrival-note { flex-basis: 100%; }
+.scan-display-controls { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.scan-column-picker { max-width: 100%; }
+.scan-column-picker summary { cursor: pointer; list-style: none; }
+.scan-column-picker summary::-webkit-details-marker { display: none; }
+.scan-column-options { display: grid; gap: 10px; padding: 14px; margin-top: 8px; background: #fff; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.scan-column-options .check { margin: 0; }
+.scan-table [hidden], #scan-filters[hidden] { display: none !important; }
 .tag--arrival { color: var(--ok); background: var(--ok-soft); }
 .scan__unavailable { background: #fff1f0; color: #a12a24; border-color: #efbeb9; }
 .scan__unavailable:hover:not(:disabled) { background: #ffe2df; border-color: #c96861; }
