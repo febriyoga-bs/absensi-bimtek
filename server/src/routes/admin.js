@@ -604,8 +604,11 @@ r.get('/scan/participants', ah(async (req, res) => {
     institution: 'lower(institution)', venue: 'lower(venue_name)',
     lo: "lower(assigned_los->>0)",
     facilitator: `(SELECT min(lower(sf.facilitator)) FROM school_facilitators sf
-      WHERE sf.venue=venue_name AND sf.npsn=ANY(string_to_array(replace(npsn,' ',''),';')))`,
+      WHERE sf.venue=venue_name AND sf.npsn=ANY(string_to_array(replace(filtered.npsn,' ',''),';')))`,
     session: 'lower(selected_session_name)',
+    report: `(SELECT min(COALESCE(report.status,'belum_ada_data')) FROM school_facilitators school
+      LEFT JOIN school_reporting report ON report.npsn=school.npsn
+      WHERE school.venue=venue_name AND school.npsn=ANY(string_to_array(replace(filtered.npsn,' ',''),';')))`,
     arrival: "CASE WHEN arrival_status IN ('selesai','sudah_tiba') THEN 'Sudah tiba' WHEN arrival_status='sedang_antre' THEN 'Sedang antre' ELSE 'Belum terdata' END",
     attendance: "CASE WHEN selected_session_id IS NULL THEN 'Belum ada sesi' WHEN selected_status IS NULL THEN 'Belum absen' WHEN selected_status='valid' THEN 'Sudah absen' WHEN selected_status='review' THEN 'Perlu dicek' WHEN selected_status='ditolak' THEN 'Ditolak' ELSE 'Mundur/Berhalangan Hadir' END",
   };
@@ -685,11 +688,11 @@ r.get('/scan/participants', ah(async (req, res) => {
           OR ($11 IN ('review','ditolak','berhalangan') AND selected_status=$11)
           OR ($11='no_session' AND selected_session_id IS NULL))
     ), school_facilitators AS MATERIALIZED (
-      SELECT school.npsn,school.venue,school.facilitator
+      SELECT school.npsn,school.name,school.venue,school.facilitator
       FROM assignment_roster roster
       CROSS JOIN LATERAL jsonb_to_recordset(roster.data->'schools')
-        AS school(npsn text,venue text,facilitator text)
-      WHERE roster.id=1 AND nullif(trim(school.facilitator),'') IS NOT NULL
+        AS school(npsn text,name text,venue text,facilitator text)
+      WHERE roster.id=1
     ), page_rows AS (
       SELECT *,row_number() OVER (ORDER BY ${order}) AS sort_order
       FROM filtered ORDER BY ${order} LIMIT $3 OFFSET $4
@@ -701,6 +704,11 @@ r.get('/scan/participants', ah(async (req, res) => {
           WHERE school.venue=p.venue_name
             AND school.npsn=ANY(string_to_array(replace(p.npsn,' ',''),';'))
         ) names),'[]'::jsonb) AS assigned_facilitators,
+        COALESCE((SELECT jsonb_agg(jsonb_build_object('npsn',school.npsn,'name',school.name,
+          'status',COALESCE(report.status,'belum_ada_data'),'progress',report.progress) ORDER BY school.name,school.npsn)
+          FROM school_facilitators school LEFT JOIN school_reporting report ON report.npsn=school.npsn
+          WHERE school.venue=p.venue_name
+            AND school.npsn=ANY(string_to_array(replace(p.npsn,' ',''),';'))),'[]'::jsonb) AS school_reports,
         CASE WHEN s.id IS NOT NULL THEN json_build_object('id',s.id,'name',s.name,'type',s.type,'starts_at',s.starts_at,'is_test',s.is_test) END AS session,
         CASE WHEN a.id IS NOT NULL THEN json_build_object('id',a.id,'at',a.created_at,'status',a.status,'method',a.method,
           'participant_note',CASE WHEN p.can_check_in THEN a.participant_note END,

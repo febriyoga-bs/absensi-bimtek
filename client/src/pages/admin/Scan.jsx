@@ -42,8 +42,9 @@ const categories = {
   bpmp: { label: 'BB/BPMP', icon: 'building', placeholder: 'Cari nama atau kode BB/BPMP' },
 };
 const number = new Intl.NumberFormat('id-ID');
-const directoryHeaders = ['Peserta', 'Sekolah / Instansi', 'Venue', 'LO bertugas', 'Fasilitator', 'Sesi', 'Kehadiran di venue', 'Status absensi'];
-const sortKeys = ['name','institution','venue','lo','facilitator','session','arrival','attendance'];
+const directoryHeaders = ['Peserta', 'Sekolah / Instansi', 'Venue', 'LO bertugas', 'Fasilitator', 'Status Laporan 50%', 'Sesi', 'Kehadiran di venue', 'Status absensi'];
+const sortKeys = ['name','institution','venue','lo','facilitator','report','session','arrival','attendance'];
+const reportLabels = { belum_kirim: 'Belum kirim', menunggu_reviu: 'Menunggu reviu', ditolak: 'Ditolak', diterima: 'Diterima', belum_ada_data: 'Belum ada data' };
 
 function attendanceStatus(person) {
   if (person.unavailable) return ['Mundur/Berhalangan Hadir', 'tag--off'];
@@ -373,6 +374,15 @@ export default function Scan() {
                           {p.assigned_facilitators?.length
                             ? p.assigned_facilitators.map((name) => <div key={name}>{name}</div>)
                             : <span className="muted">{tab === 'sekolah' ? 'Belum terpetakan' : '—'}</span>}
+                        </td>
+                        <td role="cell" data-label="Status Laporan 50%" className="small">
+                          {p.school_reports?.length ? p.school_reports.map((report) => <div key={report.npsn}>
+                            {p.school_reports.length > 1 && <div className="muted small">{report.name} · {report.npsn}</div>}
+                            <span className={`tag ${report.status === 'diterima' ? 'tag--open' : report.status === 'menunggu_reviu' ? 'tag--venue' : 'tag--off'}`}>
+                              {report.status === 'belum_kirim' && report.progress != null && Number(report.progress) >= 50
+                                ? 'Siap kirim, belum diajukan' : reportLabels[report.status] || 'Belum ada data'}
+                            </span>
+                          </div>) : <span className="muted">{tab === 'sekolah' ? 'Belum ada data' : '—'}</span>}
                         </td>
                         <td role="cell" data-label="Sesi" className="small">{sessionTitle(p.session)}
                           {p.session?.is_test && <div><span className="tag tag--venue">Uji coba</span></div>}
