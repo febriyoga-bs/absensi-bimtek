@@ -1173,6 +1173,12 @@ r.get('/export', ah(async (req, res) => {
   const { rows } = await q(
     `SELECT p.name, p.role, p.institution, p.position, pv.name AS assigned_venue,
             p.npsn, p.provinsi, p.kab_kota, p.ptn,
+            CASE WHEN p.role='peserta' THEN (
+              SELECT string_agg(DISTINCT owner.name, '; ' ORDER BY owner.name)
+              FROM lo_accounts owner
+              WHERE owner.active AND owner.venue_id=p.venue_id
+                AND ${canCheckInForLo('owner.id', 'owner.venue_id')}
+            ) END AS assigned_lo,
             a.id AS attendance_id, a.photo_path IS NOT NULL AS has_photo,
             a.status, a.created_at, av.name AS venue, a.flags, a.method, a.participant_note
      FROM people p
@@ -1192,13 +1198,13 @@ r.get('/export', ah(async (req, res) => {
   const safeNote = (note) => note && /^(?:\s*[=+@-]|[\t\r\n])/.test(note) ? "'" + note : note;
   const fmt = (d) => d ? new Date(d).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) : '';
   const header = ['Nama', 'Peran', 'Instansi / Sekolah', 'Jabatan', 'NPSN', 'Provinsi',
-    'Kab/Kota', 'PTN', 'Venue Ditetapkan', 'Status Absensi', 'Metode',
+    'Kab/Kota', 'PTN', 'Venue Ditetapkan', 'LO Bertugas', 'Status Absensi', 'Metode',
     'Waktu (WIB)', 'Venue Absen', 'Catatan', 'Catatan peserta', 'URL Foto'];
   const host = req.get('host');
   const origin = /^(?:[\w.-]+|\[[0-9a-f:]+\])(?::\d+)?$/i.test(host || '') ? `${req.secure ? 'https' : 'http'}://${host}` : '';
   const lines = rows.map((x) => [
     x.name, x.role, x.institution, x.position, x.npsn, x.provinsi,
-    x.kab_kota, x.ptn, x.assigned_venue || 'Semua',
+    x.kab_kota, x.ptn, x.assigned_venue || 'Semua', safeNote(x.assigned_lo) || '',
     ({ valid: 'Sudah absen', review: 'Sudah absen', berhalangan: 'Mundur/Berhalangan Hadir', ditolak: 'Absensi ditolak' })[x.status] || 'Belum absen',
     ({ qr: 'Scan QR (LO)', manual: 'Diabsenkan LO', selfie: 'Selfie + GPS' })[x.method] || '',
     fmt(x.created_at), x.venue || '',
