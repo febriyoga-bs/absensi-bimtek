@@ -2,7 +2,11 @@
 
 Sistem pendampingan sekolah, pemantauan Laporan 50%, kedatangan peserta, dan absensi resmi. Stack: React/Vite, Node.js/Express, PostgreSQL; penyimpanan foto melalui Cloudflare R2 atau direktori lokal.
 
-## Alur yang aktif
+## Versi tampilan
+
+Pilihan **Classic / Modern** tersedia di bagian atas semua halaman. Classic menggunakan desain sebelumnya; Modern menggunakan navigasi terang, aksen hijau, kartu ringkasan dan tabel yang diperbarui. Modern menjadi pilihan awal jika belum ada preferensi. Pilihan disimpan per browser dan tidak mengubah data, hak akses, atau alur absensi. Jika penyimpanan browser dibatasi, pilihan berlaku selama halaman tetap terbuka.
+
+## Alur penggunaan
 
 1. LO login di `/admin/login` menggunakan username dan kata sandi akun LO.
 2. Setelah login, **Pantau Pelaporan** menjadi halaman awal. Lihat sekolah binaan, fasilitator, ruangan, dan status laporan; gunakan filter venue/LO untuk mengubah cakupan.
