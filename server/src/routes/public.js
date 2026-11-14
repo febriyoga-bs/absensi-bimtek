@@ -10,11 +10,52 @@ import { reportingDates, reportingDays, withReportingDay } from '../reportingDay
 import { getPublicReporting } from '../reporting.js';
 import { getVenueAttendance, getVenueAttendanceDetails } from '../venueAttendance.js';
 import { getArrivalRecap } from '../arrivalRecap.js';
+import { getVerval } from '../verval.js';
 
 const r = Router();
 const ROLES = ['peserta', 'panitia'];
 const PUBLIC_SELF_CHECK_IN_ENABLED = false;
 const publicAttendanceGroups = ['bendahara','pengawas','fasil','lo'];
+
+let vervalCache = null;
+let vervalRequest = null;
+r.get('/verval/overview', ah(async (req, res) => {
+  if (!vervalCache || Date.now() - vervalCache.time > 300000) {
+    if (!vervalRequest) vervalRequest = (async () => {
+      const response = await fetch('https://verval.azurewebsites.net/api/public/peta-revitalisasi/overview', {
+        signal: AbortSignal.timeout(20000),
+      });
+      if (!response.ok) throw new Error('Sumber Verval tidak tersedia');
+      const data = await response.json();
+      if (!data.meta || !data.prov || !Array.isArray(data.parts)
+        || !data.parts.every((part) => typeof part.j === 'string' && typeof part.p === 'string' && Number.isFinite(part.n))) {
+        throw new Error('Format sumber Verval tidak valid');
+      }
+      vervalCache = { time: Date.now(), data: {
+        updated_at: data.meta.generated_at,
+        provinces: data.prov,
+        districts: data.kab,
+        levels: data.meta.jenjang,
+        parts: data.parts.map(({ j, p, n }) => ({ level: j, province: p, count: n })),
+      } };
+    })().finally(() => { vervalRequest = null; });
+    try { await vervalRequest; }
+    catch { throw new HttpError(502, 'Data Verval belum dapat dimuat. Silakan coba lagi.'); }
+  }
+  res.json(vervalCache.data);
+}));
+
+r.get('/verval/parts/:key', ah(async (req, res) => {
+  const key = req.params.key;
+  if (!/^(PAUD|SD|SMP|SMA|SMK|SLB|PNFI)-\d{2}$/.test(key)) throw new HttpError(400, 'Wilayah Verval tidak valid.');
+  const data = await getVerval(`/parts/${key}`);
+  res.json({ rows: data.rows.map((row) => ({ ...row, jenjang: data.j })) });
+}));
+
+r.get('/verval/schools/:npsn', ah(async (req, res) => {
+  if (!/^[A-Za-z0-9_-]{4,24}$/.test(req.params.npsn)) throw new HttpError(400, 'NPSN tidak valid.');
+  res.json(await getVerval(`/schools/${encodeURIComponent(req.params.npsn)}`));
+}));
 
 r.get('/dashboard/absensi/:venueId/participants', ah(async (req, res) => {
   const venueId = Number(req.params.venueId);

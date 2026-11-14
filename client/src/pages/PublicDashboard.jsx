@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
+import { Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
-import BrandMark from '../components/BrandMark.jsx';
 import FontIcon from '../components/FontIcon.jsx';
 import ArrivalBreakdown from '../components/ArrivalBreakdown.jsx';
 import ArrivalTotals from '../components/ArrivalTotals.jsx';
@@ -27,16 +26,12 @@ const sections = {
   },
 };
 
-export default function PublicDashboard() {
-  const [params, setParams] = useSearchParams();
-  const { section: routeSection } = useParams();
-  const requested = routeSection || params.get('bagian');
-  const section = Object.hasOwn(sections, requested) ? requested : 'pelaporan';
+export function PublicDashboardSection({ section, info, initialPeriod }) {
   const { label, description, columns = [] } = sections[section];
   const [days, setDays] = useState([]);
-  const [menuOpen, setMenuOpen] = useState(false);
+
   const periods = section === 'absensi' ? days : sections[section].periods;
-  const selected = params.get('periode');
+  const [selected, setSelected] = useState(initialPeriod);
   const period = periods?.some(([value]) => value === selected) ? selected : periods?.[0]?.[0];
   const path = `/dashboard/${section}${period ? `?period=${encodeURIComponent(period)}` : ''}`;
   const [result, setResult] = useState(null);
@@ -45,25 +40,16 @@ export default function PublicDashboard() {
   const current = result?.path === path ? result : null;
 
   useEffect(() => {
-    api('/info').then((data) => setDays((data.check_in_days || []).map(({ date, label, shortDate }) =>
-      [date, `${label} · ${shortDate}`]))).catch(() => {});
-  }, []);
+    setDays((info?.check_in_days || []).map(({ date, label, shortDate }) => [date, `${label} · ${shortDate}`]));
+  }, [info]);
 
   useEffect(() => {
-    if (routeSection !== section) return;
     let active = true;
     api(path).then((data) => {
       if (active) setResult({ path, ...(section === 'pelaporan' ? { report: data } : data) });
-    })
-      .catch((error) => { if (active) setResult({ path, error: error.message }); });
+    }).catch((error) => { if (active) setResult({ path, error: error.message }); });
     return () => { active = false; };
-  }, [path, reload, routeSection, section]);
-
-  if (routeSection !== section) {
-    const search = selected ? `?${new URLSearchParams({ periode: selected })}` : '';
-    return <Navigate to={`/dashboard/${section}${search}`} replace />;
-  }
-
+  }, [path, reload, section]);
   const rows = current?.rows || [];
   const sourceStamp = section === 'pelaporan' ? current?.report?.stamp : current?.updated_at;
   const updateLabel = section === 'pelaporan' ? 'Monitoring terakhir' : section === 'kehadiran' ? 'Impor terakhir' : 'Absensi terakhir';
@@ -71,41 +57,17 @@ export default function PublicDashboard() {
     ? section === 'pelaporan' && period === 'k3' ? sourceStamp : fmtFull(sourceStamp)
     : section === 'absensi' ? 'Belum ada absensi' : 'Belum ada data';
 
-  return <div className="admin">
-    <aside className="admin__nav" onKeyDown={(event) => {
-      if (event.key === 'Escape' && menuOpen) {
-        setMenuOpen(false);
-        event.currentTarget.querySelector('.admin__menu-toggle')?.focus();
-      }
-    }}>
-      <div className="admin__nav-head">
-        <div className="admin__brand"><BrandMark size={38} />
-          <span>Dashboard Publik<small>BIMTEK Revitalisasi SD</small></span>
-        </div>
-        <button className="admin__menu-toggle" type="button" aria-expanded={menuOpen}
-          aria-controls="public-dashboard-menu" onClick={() => setMenuOpen(!menuOpen)}>
-          <FontIcon name={menuOpen ? 'xmark' : 'bars'} /> {menuOpen ? 'Tutup' : 'Menu'}
-        </button>
-      </div>
-      <nav id="public-dashboard-menu" className={`admin__menu${menuOpen ? ' is-open' : ''}`} aria-label="Menu dashboard publik">
-        {Object.entries(sections).map(([key, item]) => <Link key={key} to={`/dashboard/${key}`}
-          aria-current={section === key ? 'page' : undefined} className={section === key ? 'active' : undefined}
-          onClick={() => setMenuOpen(false)}>
-          <FontIcon name={item.icon} /> {item.label}
-        </Link>)}
-        <Link to="/" className="link"><FontIcon name="house" /> Beranda</Link>
-      </nav>
-    </aside>
-    <main className={`admin__main${section === 'pelaporan' ? ' reporting-page' : ' attendance-dashboard'}`}>
+  return <section aria-labelledby={`public-${section}-title`}
+    className={`landing-dashboard panel ${section === 'pelaporan' ? 'reporting-page' : 'attendance-dashboard'}`}>
       <div className="page-head">
-        <div><h2 id="public-dashboard-title">{label}</h2><p className="muted">{description}</p></div>
+        <div><h2 id={`public-${section}-title`}>{label}</h2><p className="muted">{description}</p></div>
         <div className="public-dashboard__tools">
         {current && !current.error && <p className="muted small public-dashboard__updated" role="status">
           {updateLabel} · {updateTime}
         </p>}
         <div className="row public-dashboard__filters">
           {section === 'absensi' && !!periods?.length && <select value={period} aria-label="Periode" onChange={(event) =>
-            setParams({ periode: event.target.value })}>
+            setSelected(event.target.value)}>
             {periods.map(([value, title]) => <option key={value} value={value}>{title}</option>)}
           </select>}
           <button className="btn btn--sm" type="button" onClick={() => { setResult(null); setReload((value) => value + 1); }}>
@@ -116,7 +78,7 @@ export default function PublicDashboard() {
       </div>
       {section === 'pelaporan' && <div className="reporting-datasets" role="group" aria-label="Tahap Bimtek">
         {periods.map(([value, title]) => <button type="button" key={value} className={period === value ? 'on' : undefined}
-          aria-pressed={period === value} onClick={() => setParams({ periode: value })}>{title}</button>)}
+          aria-pressed={period === value} onClick={() => setSelected(value)}>{title}</button>)}
       </div>}
       {!current && <p className="muted" role="status">Memuat ringkasan…</p>}
       {current?.error && <p className="alert alert--err" role="alert">{current.error}</p>}
@@ -146,7 +108,7 @@ export default function PublicDashboard() {
         })}
       </div>}
       {attendanceSelection && <PublicAttendanceNames key={JSON.stringify(attendanceSelection)} selection={attendanceSelection} onClose={() => setAttendanceSelection(null)} />}
-      {section === 'kehadiran' && <ArrivalTotals venues={rows.filter(({ counts }) => counts)
+      {section === 'kehadiran' && <ArrivalTotals compact venues={rows.filter(({ counts }) => counts)
         .map(({ counts, breakdown }) => ({ ...counts, breakdown }))} />}
       {section === 'kehadiran' && !!rows.length && <div className="venue-attendance-grid">
         {rows.map(({ venue, counts, breakdown }) => <article key={venue} className="venue-attendance">
@@ -160,9 +122,17 @@ export default function PublicDashboard() {
               <dd className="arrival-metric__value"><b>{number.format(counts[key])}</b></dd>
             </div>)}
           </dl> : <p className="muted small">Belum ada data impor.</p>}
-          <ArrivalBreakdown rows={breakdown} />
+          <details className="public-arrival-breakdown"><summary>Rincian jenis peserta</summary><ArrivalBreakdown rows={breakdown} /></details>
         </article>)}
       </div>}
-    </main>
-  </div>;
+  </section>;
+}
+
+export default function PublicDashboard() {
+  const { section } = useParams();
+  const [params] = useSearchParams();
+  const requested = section || params.get('bagian');
+  const target = Object.hasOwn(sections, requested) ? requested : 'pelaporan';
+  const search = params.get('periode') ? `?${new URLSearchParams({ periode: params.get('periode') })}` : '';
+  return <Navigate to={`/${search}#public-${target}`} replace />;
 }

@@ -8,7 +8,7 @@ const metrics = [
   ['queued', 'Sedang antre', 'clock'],
 ];
 
-export default function ArrivalTotals({ venues }) {
+export default function ArrivalTotals({ venues, compact = false }) {
   if (!venues.length) return null;
 
   const byPosition = new Map();
@@ -31,6 +31,6 @@ export default function ArrivalTotals({ venues }) {
         </dd>
       </div>)}
     </dl>
-    <ArrivalBreakdown rows={breakdown} />
+    {compact ? <details className="public-arrival-breakdown"><summary>Rincian seluruh peserta</summary><ArrivalBreakdown rows={breakdown} /></details> : <ArrivalBreakdown rows={breakdown} />}
   </section>;
 }

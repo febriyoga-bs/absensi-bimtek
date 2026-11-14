@@ -3,6 +3,7 @@ import { useOutletContext } from 'react-router-dom';
 import { api } from '../../api.js';
 import { formatRoom } from '../../lib/room.js';
 import { fmtFull } from '../../lib/time.js';
+import { reportingDates } from '../../lib/bimtekSchedule.js';
 import { readMonitoringCsv } from '../../lib/reportingFiles.js';
 import { SkelCards, Spinner } from '../../components/Skeleton.jsx';
 import AttendanceDetailDialog from './AttendanceDetailDialog.jsx';
@@ -42,11 +43,11 @@ function grouped(rows, keyOf) {
   return groups;
 }
 
-function ReportingTable({ headers, rows, fullWidthColumn }) {
+function ReportingTable({ headers, rows, fullWidthColumn, pageSize = PAGE_SIZE }) {
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState({ column: null, direction: 'asc' });
   const orderedRows = sortTableRows(rows, sort.column, sort.direction);
-  const pages = Math.ceil(rows.length / PAGE_SIZE);
+  const pages = Math.ceil(rows.length / pageSize);
   const active = Math.min(page, pages || 1);
   return (
     <>
@@ -70,7 +71,7 @@ function ReportingTable({ headers, rows, fullWidthColumn }) {
               {heading} <span aria-hidden="true">{sort.column !== column ? '↕' : sort.direction === 'asc' ? '↑' : '↓'}</span>
             </button>
           </th>)}</tr></thead>
-          <tbody role="rowgroup">{orderedRows.slice((active - 1) * PAGE_SIZE, active * PAGE_SIZE).map(({ key, cells, onOpen, name }) => (
+          <tbody role="rowgroup">{orderedRows.slice((active - 1) * pageSize, active * pageSize).map(({ key, cells, onOpen, name }) => (
             <tr key={key} role="row" className={onOpen ? 'reporting-clickable-row' : undefined}
               tabIndex={onOpen ? 0 : undefined} aria-label={onOpen ? `Lihat sekolah binaan ${name}` : undefined}
               onClick={onOpen ? (event) => { if (!event.target.closest('button,a,input,select,textarea')) onOpen(); } : undefined}
@@ -397,7 +398,7 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
       <section className="reporting-hero" aria-label="Ringkasan pelaporan">
         <header className="reporting-hero-head">
           <div>
-            <div className="reporting-eyebrow">{datasetNames[dataset]}{dataset === 'k3' && ' · Arsip'}</div>
+            <div className="reporting-eyebrow">{datasetNames[dataset]} · {reportingDates[dataset]}{dataset === 'k3' && ' · Arsip'}</div>
             <h3>{scopeTitle}</h3>
             <p>{nf.format(schools.length)} sekolah{selectedOwner && ` · ${selectedOwner.venue}`}</p>
             {dataset === 'k3' && <p>{data.title}</p>}
@@ -492,7 +493,7 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
       </div>
       {view === 'ranking' && !attendanceRanking && <p className="muted small">Capaian dihitung dari laporan yang sudah dikirim dibanding seluruh sekolah binaan. LO tanpa data monitoring belum masuk peringkat.</p>}
       {view === 'ranking' ? (attendanceRanking && current && !publicView ? <AttendanceRanking venue={venue} query={query} /> : <ReportingRanking rows={ranking} movement={movement} movementLabel={movementLabel} own={own} />)
-        : <ReportingTable key={JSON.stringify([view, venue, lo, status, attendance, checkInFilters, term, threshold])}
+        : <ReportingTable pageSize={publicView ? 5 : PAGE_SIZE} key={JSON.stringify([view, venue, lo, status, attendance, checkInFilters, term, threshold])}
           headers={headers} rows={rows} fullWidthColumn={current && view === 'schools' ? 'Kehadiran di venue' : undefined} />}
       {detail && <section ref={facilitatorDetail} tabIndex={-1} className="card reporting-detail" aria-label={`Sekolah binaan ${selectedFacilitator.name}`}>
         <div className="page-head"><h3>Sekolah binaan {selectedFacilitator.name}</h3>
