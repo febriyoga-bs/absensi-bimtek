@@ -1,3 +1,4 @@
+import FilterField from '../../components/FilterField.jsx';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import { api } from '../../api.js';
@@ -179,18 +180,18 @@ export default function ArrivalRecap() {
             <form method="dialog"><button className="btn btn--sm" autoFocus>Tutup</button></form>
           </header>
           {!!entries?.length && <div className="arrival-detail-filters" role="group" aria-label="Filter peserta">
-            <input type="search" aria-label="Cari nama atau instansi" placeholder="Cari nama atau instansi"
-              value={query} onChange={(e) => setQuery(e.target.value)} />
-            <select aria-label="Jenis peserta" value={position} onChange={(e) => setPosition(e.target.value)}>
+            <FilterField label="Cari nama atau instansi"><input type="search" aria-label="Cari nama atau instansi" placeholder="Cari nama atau instansi"
+              value={query} onChange={(e) => setQuery(e.target.value)} /></FilterField>
+            <FilterField label="Jenis peserta"><select aria-label="Jenis peserta" value={position} onChange={(e) => setPosition(e.target.value)}>
               <option value="">Semua jenis peserta</option>
               {positions.map((item) => <option key={item}>{item}</option>)}
-            </select>
-            {selection.group.key === 'invited' && <select aria-label="Status kedatangan" value={arrival} onChange={(e) => setArrival(e.target.value)}>
+            </select></FilterField>
+            {selection.group.key === 'invited' && <FilterField label="Status kedatangan"><select aria-label="Status kedatangan" value={arrival} onChange={(e) => setArrival(e.target.value)}>
               <option value="">Semua status kedatangan</option>
               <option>Sudah tiba</option>
               <option>Sedang antre</option>
               <option>Belum terdata</option>
-            </select>}
+            </select></FilterField>}
           </div>}
           {!participants && <p className="muted" role="status">Memuat daftar peserta…</p>}
           {participants?.error && <p className="alert alert--err" role="alert">{participants.error}</p>}

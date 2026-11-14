@@ -1166,6 +1166,7 @@ r.get('/photo/:id', ah(async (req, res) => {
  */
 r.get('/export', ah(async (req, res) => {
   const v = scopeVenue(req);
+  const exportStatus = ['valid', 'review', 'ditolak', 'berhalangan'].includes(req.query.status) ? req.query.status : null;
   const recordedBy = typeof req.query.recorded_by === 'string' ? req.query.recorded_by.trim().slice(0, 300) : '';
   const positionFilter = attendancePositionFilter(req);
   const { rows: [s] } = await q('SELECT * FROM sessions WHERE id=$1', [req.query.session_id]);
@@ -1185,12 +1186,13 @@ r.get('/export', ah(async (req, res) => {
      LEFT JOIN venues pv ON pv.id=p.venue_id
      LEFT JOIN attendance a ON a.person_id=p.id AND a.session_id=$1
      LEFT JOIN venues av ON av.id=a.venue_id
-     WHERE (${positionFilter}) AND ($7::text='' OR a.scanned_by=$7) AND ((a.id IS NOT NULL AND ($6::boolean OR a.status IN ('valid','review')) AND ($4::int IS NULL OR a.venue_id=$4))
+     WHERE (${positionFilter}) AND ($7::text='' OR a.scanned_by=$7) AND ($8::text IS NULL OR a.status=$8)
+       AND ((a.id IS NOT NULL AND ($6::boolean OR $9::boolean OR a.status IN ('valid','review')) AND ($4::int IS NULL OR a.venue_id=$4))
         OR ($6::boolean AND a.id IS NULL AND ($2='semua' OR p.role=$2) AND ${inRosterAt('LEAST(now(), $5::timestamptz)')}
             AND (cardinality(COALESCE($3::int[],'{}'))=0 OR p.venue_id IS NULL OR p.venue_id = ANY($3::int[]))
             AND ($4::int IS NULL OR p.venue_id IS NULL OR p.venue_id=$4)))
      ORDER BY p.role, p.name`,
-    [s.id, s.role, s.venue_ids, v, s.ends_at, req.query.include_all === 'true', recordedBy]
+    [s.id, s.role, s.venue_ids, v, s.ends_at, req.query.include_all === 'true', recordedBy, exportStatus, req.query.recorded_only === 'true']
   );
   let venueName = '';
   if (v) venueName = (await q('SELECT name FROM venues WHERE id=$1', [v])).rows[0]?.name || '';

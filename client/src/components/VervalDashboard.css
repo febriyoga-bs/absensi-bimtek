@@ -24,7 +24,7 @@
 .verval-view-bar > div button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 .verval-load-status { font-size: 12px; color: var(--muted); }
 .verval-workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; }
-.verval-workspace.has-detail { grid-template-columns: minmax(0, 1fr) 340px; }
+.verval-workspace.has-detail { grid-template-columns: minmax(0, 1.4fr) minmax(320px, 1fr); }
 .verval-map-column { min-width: 0; }
 .verval-map-wrap { position: relative; border: 1px solid var(--line); border-radius: 18px; overflow: hidden; isolation: isolate; }
 .verval-map-wrap:fullscreen { border-radius: 0; background: var(--vm-ocean); }
@@ -38,7 +38,16 @@
 .verval-map-error { position: absolute; bottom: 28px; left: 14px; z-index: 800; padding: 8px; background: var(--err-soft); color: var(--err); font-size: 12px; }
 .verval-map .leaflet-control-zoom a { background: var(--surface); color: var(--text); border-color: var(--line); }
 .verval-map .leaflet-tooltip { color: #183247; font-size: 11px; border-radius: 8px; }
-.verval-school-icon svg { width: 28px; height: 28px; filter: drop-shadow(0 2px 2px #152e4640); }
+.verval-school-visual { display: block; width: 48px; height: 62px; transform-origin: 50% 72%; }
+.verval-school-icon svg { width: 48px; height: 62px; overflow: visible; filter: drop-shadow(0 2px 2px #152e4640); }
+.verval-building-fill { transform: scaleY(var(--building-progress)); transform-origin: 24px 45px; }
+.verval-school-visual.is-animating { animation: verval-marker-select 700ms ease-out both; }
+.is-animating .verval-building-fill { animation: verval-building-progress 650ms ease-out both; }
+.is-animating .verval-selection-ring { animation: verval-marker-ring 700ms ease-out both; transform-origin: 24px 28px; }
+@keyframes verval-building-progress { from { transform: scaleY(0); } to { transform: scaleY(var(--building-progress)); } }
+@keyframes verval-marker-select { 0% { transform: translateY(0) scale(1); } 45% { transform: translateY(-9px) scale(1.12); } 100% { transform: translateY(0) scale(1); } }
+@keyframes verval-marker-ring { from { opacity: 0; transform: scale(.55); } to { opacity: 1; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .verval-school-visual.is-animating, .is-animating .verval-building-fill, .is-animating .verval-selection-ring { animation: none; } }
 .verval-cluster-icon { display: grid; place-items: center; }
 .verval-cluster-icon span { display: grid; place-items: center; min-width: 38px; height: 38px; padding: 2px 6px; border-radius: 50%; background: #1b4e80; color: #fff; border: 3px solid #fff; box-shadow: 0 0 0 5px #2563eb24, 0 2px 7px #14203330; font-size: 11px; font-weight: 800; }
 .verval-province-label { display: grid; justify-items: center; gap: 2px; color: #26473a; text-shadow: 0 1px 2px #fff; }

@@ -28,6 +28,8 @@
 .reporting-scope--public select { flex: 0 1 270px; width: 270px; max-width: 100%; }
 .reporting-scope--public select:first-child { flex-basis: 220px; width: 220px; }
 .reporting-scope--public select:last-child { flex: 0 1 350px; width: 350px; }
+.reporting-scope--public > .filter-field { flex: 0 1 270px; }
+.reporting-scope--public .filter-field select { width: 100%; max-width: 100%; }
 @media (max-width: 600px) {
   .reporting-scope--public select, .reporting-scope--public select:first-child, .reporting-scope--public select:last-child {
     flex: 1 1 100%; width: 100%; max-width: 100%;

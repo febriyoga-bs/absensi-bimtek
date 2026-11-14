@@ -9,7 +9,7 @@ const statuses = { valid: 'Valid', review: 'Perlu dicek', ditolak: 'Ditolak', be
 export async function printAttendance({ filters, title, onProgress }) {
   // Open during the click so the browser does not block the report window.
   const report = window.open('', '_blank');
-  if (!report) throw new Error('Jendela ekspor diblokir. Izinkan popup untuk web ini, lalu coba lagi.');
+  if (!report) throw new Error('Jendela unduhan diblokir. Izinkan popup untuk web ini, lalu coba lagi.');
   report.opener = null;
   report.document.title = 'Menyiapkan PDF absensi';
   report.document.body.textContent = 'Mengumpulkan seluruh hasil absensi sesuai filter…';
@@ -18,26 +18,28 @@ export async function printAttendance({ filters, title, onProgress }) {
     const seen = new Set();
     let total = 0;
     do {
-      if (report.closed) throw new Error('Jendela ekspor ditutup.');
+      if (report.closed) throw new Error('Jendela unduhan ditutup.');
       const params = new URLSearchParams({ ...filters, limit: '200', offset: String(records.length) });
       const page = await api(`/admin/attendance?${params}`, { admin: true });
       total = page.total;
-      if (page.rows.some((row) => seen.has(row.id))) throw new Error('Data absensi berubah saat ekspor. Silakan coba lagi.');
+      if (page.rows.some((row) => seen.has(row.id))) throw new Error('Data absensi berubah saat menyiapkan unduhan. Silakan coba lagi.');
       page.rows.forEach((row) => { seen.add(row.id); records.push(row); });
       onProgress?.(`${records.length}/${total}`);
-      if (!page.rows.length && records.length < total) throw new Error('Data absensi berubah saat ekspor. Silakan coba lagi.');
+      if (!page.rows.length && records.length < total) throw new Error('Data absensi berubah saat menyiapkan unduhan. Silakan coba lagi.');
     } while (records.length < total);
-    if (!records.length) throw new Error('Tidak ada absensi yang cocok dengan filter untuk diekspor.');
+    if (!records.length) throw new Error('Tidak ada absensi yang cocok dengan filter untuk diunduh.');
     report.document.open();
     report.document.write(`<!doctype html><html lang="id"><head><meta charset="utf-8"><title>Rekap Absensi BIMTEK</title>
       <style>
       *{box-sizing:border-box}body{font:12px Arial,sans-serif;color:#172c47;margin:24px}h1{font-size:21px;margin:0 0 8px}
       header{margin-bottom:20px}header p{margin:5px 0}.tools{padding:14px;background:#eef3fa;margin-bottom:18px}
-      button{padding:10px 18px;cursor:pointer}.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+      button{padding:10px 18px;cursor:pointer}.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:start}
       article{border:1px solid #ccd6e3;border-radius:8px;overflow:hidden;break-inside:avoid;min-width:0}
       article img{display:block;width:100%;height:210px;object-fit:contain;background:#101826}.body{padding:12px}
       h2{font-size:14px;margin:0 0 8px}p{margin:5px 0;overflow-wrap:anywhere}.note{white-space:pre-wrap;overflow-wrap:anywhere;background:#f1f4f8;padding:9px}
-      @page{size:A4;margin:12mm}@media print{body{margin:0;font-size:9pt}.tools{display:none}.cards{gap:5mm}article img{height:55mm}article{border-radius:2mm}h2{font-size:11pt}}
+      @media screen and (max-width:900px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+      @media screen and (max-width:520px){body{margin:12px}.cards{grid-template-columns:minmax(0,1fr)}}
+      @page{size:A4 landscape;margin:10mm}@media print{body{margin:0;font-size:8pt}.tools{display:none}.cards{grid-template-columns:repeat(4,minmax(0,1fr));gap:3mm}article img{height:42mm}article{border-radius:2mm}.body{padding:3mm}h1{font-size:15pt}h2{font-size:9pt}}
       </style></head><body><div class="tools"><button id="print" disabled>Cetak / Simpan sebagai PDF</button>
       <p id="ready">Memuat foto…</p></div><header><h1>Rekap Absensi BIMTEK Revitalisasi SD</h1>
       <p>${escape(title)}</p><p>${records.length} catatan absensi · Dicetak ${escape(time(Date.now()))} WIB</p></header>
@@ -61,7 +63,7 @@ export async function printAttendance({ filters, title, onProgress }) {
     const missing = images.filter((img) => !img.complete || !img.naturalWidth).length;
     const ready = report.document.getElementById('ready');
     ready.textContent = missing
-      ? `${missing} foto gagal dimuat. Tutup jendela ini dan ulangi ekspor agar PDF lengkap.`
+      ? `${missing} foto gagal dimuat. Tutup jendela ini dan ulangi unduhan agar PDF lengkap.`
       : 'Siap. Klik tombol, lalu pilih Simpan sebagai PDF pada tujuan cetak.';
     const button = report.document.getElementById('print');
     button.disabled = missing > 0;

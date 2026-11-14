@@ -1,3 +1,4 @@
+import FilterField from '../../components/FilterField.jsx';
 import { useEffect, useState } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
 import { api } from '../../api.js';
@@ -169,19 +170,19 @@ export default function Assignments() {
             ))}
           </div>
           <div id="assignment-filters" className={`toolbar assignment-filters${filtersOpen ? ' is-open' : ''}`}>
-            {!personal && <select aria-label="Filter venue" value={venue} onChange={(e) => {
+            {!personal && <FilterField label="Filter venue"><select aria-label="Filter venue" value={venue} onChange={(e) => {
               setVenue(e.target.value); setLo(''); setPage(1);
             }}>
               <option value="">Semua venue</option>
               {data.venues.map((name) => <option key={name}>{name}</option>)}
-            </select>}
-            {!personal && <select aria-label="Filter LO" value={lo} onChange={(e) => { setLo(e.target.value); setPage(1); }}>
+            </select></FilterField>}
+            {!personal && <FilterField label="Filter LO"><select aria-label="Filter LO" value={lo} onChange={(e) => { setLo(e.target.value); setPage(1); }}>
               <option value="">Semua LO</option>
               {data.lo.filter((row) => !venue || row.venue === venue)
                 .map(({ name }) => <option key={name}>{name}</option>)}
-            </select>}
-            <input type="search" aria-label={`Cari ${report.label}`} placeholder={`Cari ${report.label}…`}
-              value={query} onChange={(e) => { setQuery(e.target.value); setPage(1); }} />
+            </select></FilterField>}
+            <FilterField label={`Cari ${report.label}`}><input type="search" aria-label={`Cari ${report.label}`} placeholder={`Cari ${report.label}…`}
+              value={query} onChange={(e) => { setQuery(e.target.value); setPage(1); }} /></FilterField>
             {!isLo && !personal && <button type="button" className="btn" disabled={!rows.length} onClick={exportCsv}>
               <Icon name="download" size={16} />Unduh CSV sesuai filter
             </button>}

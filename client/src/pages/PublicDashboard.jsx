@@ -1,3 +1,4 @@
+import FilterField from '../components/FilterField.jsx';
 import { useEffect, useState } from 'react';
 import { Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
@@ -66,10 +67,10 @@ export function PublicDashboardSection({ section, info, initialPeriod }) {
           {updateLabel} · {updateTime}
         </p>}
         <div className="row public-dashboard__filters">
-          {section === 'absensi' && !!periods?.length && <select value={period} aria-label="Periode" onChange={(event) =>
+          {section === 'absensi' && !!periods?.length && <FilterField label="Periode"><select value={period} aria-label="Periode" onChange={(event) =>
             setSelected(event.target.value)}>
             {periods.map(([value, title]) => <option key={value} value={value}>{title}</option>)}
-          </select>}
+          </select></FilterField>}
           <button className="btn btn--sm" type="button" onClick={() => { setResult(null); setReload((value) => value + 1); }}>
             <FontIcon name="rotate" /> Muat ulang
           </button>

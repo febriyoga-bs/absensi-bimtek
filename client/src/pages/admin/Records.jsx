@@ -1,3 +1,4 @@
+import FilterField from '../../components/FilterField.jsx';
 import { useEffect, useRef, useState } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
 import { api, adminUrl } from '../../api.js';
@@ -6,7 +7,7 @@ import { MapModal } from '../../components/MapEmbed.jsx';
 import { fmtDT, FLAG_LABEL, sessionTitle } from './shared.js';
 import { SkelCards } from '../../components/Skeleton.jsx';
 import EditAttendanceNote from './EditAttendanceNote.jsx';
-import { printAttendance } from '../../lib/printAttendance.js';
+import AttendanceDownloadDialog from './AttendanceDownloadDialog.jsx';
 
 const ST_LABEL = { valid: 'Valid', review: 'Perlu dicek', ditolak: 'Ditolak', berhalangan: 'Mundur/Berhalangan Hadir' };
 const PAGE = 48;
@@ -18,9 +19,7 @@ export default function Records() {
   const [sessions, setSessions] = useState([]);
   const [venues, setVenues] = useState([]);
   const [recorders, setRecorders] = useState([]);
-  const [pdfBusy, setPdfBusy] = useState(false);
-  const [pdfProgress, setPdfProgress] = useState('');
-  const [pdfError, setPdfError] = useState('');
+  const [downloadOpen, setDownloadOpen] = useState(false);
   const { lo } = useOutletContext() || {};
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
@@ -30,7 +29,6 @@ export default function Records() {
   const [tab, setTab] = useState('absen');
   const [zoom, setZoom] = useState(null);
   const [mapPoint, setMapPoint] = useState(null);
-  const [exportAll, setExportAll] = useState(false);
   const deleteDialog = useRef(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [confirmation, setConfirmation] = useState('');
@@ -85,19 +83,6 @@ export default function Records() {
     });
   }
 
-  async function exportPdf() {
-    setPdfBusy(true); setPdfError(''); setPdfProgress('');
-    try {
-      await printAttendance({ filters: { session_id: sid, ...(venue && { venue_id: venue }),
-        ...(status && { status }), ...(position && { position }), ...(recordedBy && { recorded_by: recordedBy }) },
-        title: [sessionTitle(sessions.find((session) => String(session.id) === String(sid))),
-          venue ? venues.find((item) => String(item.id) === String(venue))?.name : 'Semua venue yang dapat diakses',
-          recordedBy || 'Semua LO pencatat', position || 'Semua jabatan', ST_LABEL[status] || 'Semua status'].filter(Boolean).join(' · '),
-        onProgress: setPdfProgress });
-    } catch (error) { setPdfError(error.message); }
-    finally { setPdfBusy(false); }
-  }
-
   function openDeleteDialog(record) {
     setDeleteTarget(record);
     setConfirmation('');
@@ -131,51 +116,43 @@ export default function Records() {
       <div className="page-head"><div><h2>Verifikasi Absensi</h2>
         <p className="muted">Absen bertanda kuning terdeteksi mencurigakan. Periksa fotonya, lalu sahkan atau tolak.</p></div></div>
       <div className="toolbar">
-        <select value={sid} onChange={(e) => setParam('sesi', e.target.value)}>
+        <FilterField label="Sesi absensi"><select value={sid} onChange={(e) => setParam('sesi', e.target.value)}>
           {sessions.map((s) => <option key={s.id} value={s.id}>{sessionTitle(s)} ({s.is_test ? 'Uji coba · ' : ''}{s.role})</option>)}
-        </select>
+        </select></FilterField>
         {!lo && venues.length > 1 && (
-          <select value={venue} onChange={(e) => setParam('venue', e.target.value)}>
+          <FilterField label="Venue"><select value={venue} onChange={(e) => setParam('venue', e.target.value)}>
             <option value="">Semua venue</option>
             {venues.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-          </select>
+          </select></FilterField>
         )}
-        <select aria-label="Diabsenkan oleh LO" value={recordedBy} onChange={(e) => setParam('recorded_by', e.target.value)}>
+        <FilterField label="Diabsenkan oleh LO"><select aria-label="Diabsenkan oleh LO" value={recordedBy} onChange={(e) => setParam('recorded_by', e.target.value)}>
           <option value="">Semua LO pencatat</option>
           {recordedBy && !recorders.includes(recordedBy) && <option value={recordedBy}>{recordedBy} (tidak ada di sesi/venue ini)</option>}
           {recorders.map((name) => <option key={name} value={name}>{name}</option>)}
-        </select>
-        <select aria-label="Filter jabatan" value={position} onChange={(e) => setParam('position', e.target.value)}>
+        </select></FilterField>
+        <FilterField label="Filter jabatan"><select aria-label="Filter jabatan" value={position} onChange={(e) => setParam('position', e.target.value)}>
           <option value="">Semua jabatan</option>
           <option value="lo">LO</option>
           <option value="bendahara">Bendahara</option>
           <option value="pengawas">Pengawas</option>
           <option value="fasil">Fasilitator</option>
-        </select>
-        <select value={status} onChange={(e) => setParam('status', e.target.value)}>
+        </select></FilterField>
+        <FilterField label="Status absensi"><select value={status} onChange={(e) => setParam('status', e.target.value)}>
           <option value="">Semua status{counts ? ` (${counts.total})` : ''}</option>
           <option value="review">Perlu dicek{counts ? ` (${counts.review})` : ''}</option>
           <option value="valid">Valid{counts ? ` (${counts.valid})` : ''}</option>
           <option value="ditolak">Ditolak{counts ? ` (${counts.ditolak})` : ''}</option>
           <option value="berhalangan">Mundur/Berhalangan Hadir{counts ? ` (${counts.berhalangan})` : ''}</option>
-        </select>
+        </select></FilterField>
         <button className="btn btn--sm" onClick={load}><Icon name="refresh" size={15} />Muat ulang</button>
-        {sid && <>
-          <button type="button" className="btn btn--sm" disabled={pdfBusy || loading} onClick={exportPdf}>
-            <Icon name="download" size={15} />{pdfBusy ? `Menyiapkan PDF ${pdfProgress}` : 'Export PDF'}
-          </button>
-          <select aria-label="Isi ekspor CSV" value={String(exportAll)} onChange={(e) => setExportAll(e.target.value === 'true')}>
-            <option value="false">CSV: Sudah absen</option>
-            <option value="true">CSV: Semua peserta</option>
-          </select>
-          <a className="btn btn--sm" href={adminUrl(`/export?session_id=${sid}${venue ? `&venue_id=${venue}` : ''}${position ? `&position=${encodeURIComponent(position)}` : ''}${recordedBy ? `&recorded_by=${encodeURIComponent(recordedBy)}` : ''}${exportAll ? '&include_all=true' : ''}`)}><Icon name="download" size={15} />Unduh CSV</a>
-        </>}
+        {sid && <button type="button" className="btn btn--sm" disabled={loading} onClick={() => setDownloadOpen(true)}>
+          <Icon name="download" size={15} />Unduh
+        </button>}
       </div>
       <div className="tabs">
         <button className={tab === 'absen' ? 'on' : ''} onClick={() => setTab('absen')}>Absensi masuk ({total})</button>
         <button className={tab === 'blok' ? 'on' : ''} onClick={() => setTab('blok')}>Percobaan diblokir ({attempts.length})</button>
       </div>
-      {pdfError && <p className="alert alert--err" role="alert">{pdfError}</p>}
 
       {tab === 'absen' && noteNotice && <p className="alert alert--ok" role="status">{noteNotice}</p>}
       {tab === 'absen' && deleteNotice && <p className="alert alert--ok" role="status">{deleteNotice}</p>}
@@ -260,6 +237,8 @@ export default function Records() {
         </>
       )}
 
+      {downloadOpen && <AttendanceDownloadDialog sessions={sessions} venues={venues} lo={lo}
+        initial={{ session_id: String(sid), venue_id: venue, recorded_by: recordedBy, position, status }} onClose={() => setDownloadOpen(false)} />}
       <dialog ref={deleteDialog} className="assignment-dialog" aria-labelledby="delete-attendance-title"
         aria-describedby="delete-attendance-description" onCancel={(event) => { if (deleting) event.preventDefault(); }}>
         <header><h3 id="delete-attendance-title">Hapus absensi</h3></header>

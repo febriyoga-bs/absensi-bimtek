@@ -1,3 +1,4 @@
+import FilterField from '../../components/FilterField.jsx';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api.js';
@@ -102,8 +103,8 @@ export default function ParticipantSync() {
             ))}
           </div>
           <div className="toolbar filters">
-            <input type="search" aria-label="Cari perubahan peserta" placeholder="Cari nama, NPSN, venue, atau ruangan"
-              value={term} onChange={(e) => { setTerm(e.target.value); setPage(1); }} />
+            <FilterField label="Cari perubahan peserta"><input type="search" aria-label="Cari perubahan peserta" placeholder="Cari nama, NPSN, venue, atau ruangan"
+              value={term} onChange={(e) => { setTerm(e.target.value); setPage(1); }} /></FilterField>
             <span className="muted small" aria-live="polite">{number.format(rows.length)} hasil</span>
           </div>
           <div className="assignment-table">

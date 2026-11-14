@@ -1,3 +1,4 @@
+import FilterField from '../../components/FilterField.jsx';
 import { useEffect, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { api } from '../../api.js';
@@ -350,18 +351,12 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
   const selectedOwner = data.lo.find((owner) => ownerKey(owner) === lo);
   const noData = counts.get('belum_ada_data') || 0;
   const scopeTitle = selectedOwner?.name || (lo === UNASSIGNED ? account.name : venue || 'Semua venue');
-  const sourceNote = dataset === 'k3'
-    ? `Laporan 50% per ${data.stamp} · Kehadiran per ${data.attendance_stamp} · Arsip hanya memuat data kedatangan`
-    : [
-      data.stamp ? `Impor monitoring ${fmtFull(data.stamp)}` : 'Monitoring belum diimpor',
-      data.arrival_stamp ? `Impor kehadiran terbaru ${fmtFull(data.arrival_stamp)}` : 'Rekap kehadiran belum diimpor',
-      'Absensi sekolah mengacu pada Bendahara, dari sesi resmi menurut tanggal WIB; status valid dan perlu dicek dihitung sudah absen',
-    ].join(' · ');
+  const sourceNote = data.stamp ? `Data per ${dataset === 'k3' ? data.stamp : `${fmtFull(data.stamp)} WIB`}` : 'Data belum tersedia';
 
   return (
     <>
       {publicView && <div className="toolbar filters reporting-scope reporting-scope--public">
-        <select aria-label="Cakupan progres" value={progressScope} onChange={(event) => {
+        <FilterField label="Cakupan progres"><select aria-label="Cakupan progres" value={progressScope} onChange={(event) => {
           const next = event.target.value;
           setProgressScope(next); setSelectedFacilitator(null);
           if (next === 'all') { setVenue(''); setLo(''); }
@@ -374,8 +369,8 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
           <option value="all">Progres seluruh venue</option>
           <option value="venue">Progres per venue</option>
           <option value="lo">Progres per LO</option>
-        </select>
-        {progressScope !== 'all' && <select aria-label="Filter venue pelaporan" value={venue}
+        </select></FilterField>
+        {progressScope !== 'all' && <FilterField label="Filter venue pelaporan"><select aria-label="Filter venue pelaporan" value={venue}
           onChange={(event) => {
             const nextVenue = event.target.value;
             setVenue(nextVenue); setSelectedFacilitator(null);
@@ -385,14 +380,14 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
             }
           }}>
           {data.venues.map((name) => <option key={name}>{name}</option>)}
-        </select>}
-        {progressScope === 'lo' && <select aria-label="Filter LO pelaporan" value={lo} onChange={(event) => {
+        </select></FilterField>}
+        {progressScope === 'lo' && <FilterField label="Filter LO pelaporan"><select aria-label="Filter LO pelaporan" value={lo} onChange={(event) => {
           setLo(event.target.value);
           setSelectedFacilitator(null);
         }}>
           {!data.lo.some(venueMatch) && <option value="">Belum ada LO di venue ini</option>}
           {data.lo.filter(venueMatch).map((owner) => <option key={ownerKey(owner)} value={ownerKey(owner)}>{owner.name}</option>)}
-        </select>}
+        </select></FilterField>}
       </div>}
       {dataset === 'k3' && <ReportingComparison schools={schools} baseline={data.baseline} stamp={data.stamp} />}
       <section className="reporting-hero" aria-label="Ringkasan pelaporan">
@@ -434,15 +429,15 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
       </section>
       {canImport && <ImportReporting onSaved={refresh} />}
       {!publicView && <div className="toolbar filters reporting-scope">
-        <select aria-label="Filter venue pelaporan" value={venue} onChange={(e) => { setVenue(e.target.value); setLo(''); setSelectedFacilitator(null); }}>
+        <FilterField label="Filter venue pelaporan"><select aria-label="Filter venue pelaporan" value={venue} onChange={(e) => { setVenue(e.target.value); setLo(''); setSelectedFacilitator(null); }}>
           <option value="">Semua venue</option>
           {data.venues.map((name) => <option key={name}>{name}</option>)}
-        </select>
-        {view !== 'ranking' && <select aria-label="Filter LO pelaporan" value={lo} onChange={(e) => { setLo(e.target.value); setSelectedFacilitator(null); }}>
+        </select></FilterField>
+        {view !== 'ranking' && <FilterField label="Filter LO pelaporan"><select aria-label="Filter LO pelaporan" value={lo} onChange={(e) => { setLo(e.target.value); setSelectedFacilitator(null); }}>
           <option value="">Semua LO</option>
           {account && !own && <option value={UNASSIGNED}>Binaan saya</option>}
           {data.lo.filter(venueMatch).map((owner) => <option key={ownerKey(owner)} value={ownerKey(owner)}>{owner.name}{!venue && ` · ${owner.venue}`}</option>)}
-        </select>}
+        </select></FilterField>}
       </div>}
       {lo === UNASSIGNED && <p className="alert alert--warn">Akun ini belum punya pemetaan LO yang cocok pada {datasetNames[dataset]}. Pilih Semua LO untuk melihat daftar lengkap.</p>}
       <h3 className="reporting-section-heading">Alur Laporan 50%</h3>
@@ -468,28 +463,28 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
         {current && !publicView && <button type="button" className={attendanceRanking ? 'on' : ''} aria-pressed={attendanceRanking} onClick={() => setAttendanceRanking(true)}>Absensi</button>}
       </div>}
       <div className={`toolbar filters${view === 'ranking' ? ' reporting-ranking-filters' : ''}`}>
-        <input type="search" aria-label="Cari data pelaporan" placeholder={view === 'ranking' ? 'Cari nama LO' : view === 'schools' ? 'Cari sekolah, NPSN, atau wilayah' : `Cari ${views[view].toLowerCase()}`}
-          value={term} onChange={(e) => { setTerm(e.target.value); setSelectedFacilitator(null); }} />
+        <FilterField label="Cari data pelaporan"><input type="search" aria-label="Cari data pelaporan" placeholder={view === 'ranking' ? 'Cari nama LO' : view === 'schools' ? 'Cari sekolah, NPSN, atau wilayah' : `Cari ${views[view].toLowerCase()}`}
+          value={term} onChange={(e) => { setTerm(e.target.value); setSelectedFacilitator(null); }} /></FilterField>
         {view === 'schools' && <>
-          <select aria-label="Status laporan" value={status} onChange={(e) => setStatus(e.target.value)}>
+          <FilterField label="Status laporan"><select aria-label="Status laporan" value={status} onChange={(e) => setStatus(e.target.value)}>
             <option value="">Semua status laporan</option>
             {reportStatuses.filter((code) => dataset === 'current' || code !== 'belum_ada_data').map((code) => <option key={code} value={code}>{labels[code]}</option>)}
-          </select>
-          <select aria-label="Status kehadiran di venue" value={attendance} onChange={(e) => setAttendance(e.target.value)}>
+          </select></FilterField>
+          <FilterField label="Status kehadiran di venue"><select aria-label="Status kehadiran di venue" value={attendance} onChange={(e) => setAttendance(e.target.value)}>
             <option value="">Semua kehadiran di venue</option>
             {attendanceOptions.map((code) => <option key={code} value={code}>{labels[code]}</option>)}
-          </select>
-          {checkInDays.map((day) => <select key={day.date} aria-label={`Status ${day.label}`}
+          </select></FilterField>
+          {checkInDays.map((day) => <FilterField label={`Status ${day.label}`} key={day.date}><select key={day.date} aria-label={`Status ${day.label}`}
             value={checkInFilters[day.date] || ''} onChange={(e) => setCheckInFilters({ ...checkInFilters, [day.date]: e.target.value })}>
             <option value="">{day.label} · Semua status</option>
             {['sudah_absen', 'belum_absen'].map((code) => <option key={code} value={code}>{labels[code]}</option>)}
-          </select>)}
+          </select></FilterField>)}
         </>}
-        {view === 'facilitators' && <select aria-label="Ambang tunggakan" value={threshold} onChange={(e) => setThreshold(Number(e.target.value))}>
+        {view === 'facilitators' && <FilterField label="Ambang tunggakan"><select aria-label="Ambang tunggakan" value={threshold} onChange={(e) => setThreshold(Number(e.target.value))}>
           {[1, 2, 3, 7].map((day) => <option key={day} value={day}>Lewat {day} hari</option>)}
-        </select>}
-        {view === 'ranking' && !attendanceRanking && movement && <input type="date" aria-label="Tanggal acuan pergerakan kiriman"
-          value={baseline} onChange={(e) => setCustomBaseline(e.target.value)} />}
+        </select></FilterField>}
+        {view === 'ranking' && !attendanceRanking && movement && <FilterField label="Tanggal acuan pergerakan kiriman"><input type="date" aria-label="Tanggal acuan pergerakan kiriman"
+          value={baseline} onChange={(e) => setCustomBaseline(e.target.value)} /></FilterField>}
       </div>
       {view === 'ranking' && !attendanceRanking && <p className="muted small">Capaian dihitung dari laporan yang sudah dikirim dibanding seluruh sekolah binaan. LO tanpa data monitoring belum masuk peringkat.</p>}
       {view === 'ranking' ? (attendanceRanking && current && !publicView ? <AttendanceRanking venue={venue} query={query} /> : <ReportingRanking rows={ranking} movement={movement} movementLabel={movementLabel} own={own} />)

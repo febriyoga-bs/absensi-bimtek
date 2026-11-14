@@ -1,3 +1,4 @@
+import FilterField from '../../components/FilterField.jsx';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api.js';
@@ -224,46 +225,46 @@ export default function People() {
       {msg && <div className={`alert ${msg.err ? 'alert--err' : msg.warn ? 'alert--warn' : 'alert--ok'}`} style={{ marginBottom: 12 }}>{msg.text}</div>}
 
       <div className="toolbar filters">
-        <input placeholder="Cari nama / kode / sekolah / NPSN / kab/kota" value={search} onChange={(e) => setSearch(e.target.value)} />
-        {role === 'peserta' && <select aria-label="Status peserta" value={archived ? 'archived' : 'active'} onChange={(e) => {
+        <FilterField label="Pencarian"><input placeholder="Cari nama / kode / sekolah / NPSN / kab/kota" value={search} onChange={(e) => setSearch(e.target.value)} /></FilterField>
+        {role === 'peserta' && <FilterField label="Status peserta"><select aria-label="Status peserta" value={archived ? 'archived' : 'active'} onChange={(e) => {
           setArchived(e.target.value === 'archived'); setList([]); setLoading(true); resetFilters();
         }}>
           <option value="active">Peserta aktif</option>
           <option value="archived">Arsip peserta</option>
-        </select>}
-        <select value={fVenue} onChange={(e) => setFVenue(e.target.value)} aria-label="Filter venue">
+        </select></FilterField>}
+        <FilterField label="Filter venue"><select value={fVenue} onChange={(e) => setFVenue(e.target.value)} aria-label="Filter venue">
           <option value="">Semua venue</option>
           <option value="none">— Tanpa venue (bebas)</option>
           {venues.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-        </select>
-        <select value={fPos} onChange={(e) => setFPos(e.target.value)} aria-label="Filter jabatan">
+        </select></FilterField>
+        <FilterField label="Filter jabatan"><select value={fPos} onChange={(e) => setFPos(e.target.value)} aria-label="Filter jabatan">
           <option value="">Semua jabatan</option>
           {posOpts.map((x) => <option key={x} value={x}>{x}</option>)}
-        </select>
+        </select></FilterField>
         {regionOpts.length > 0 && (
-          <select value={fRegion} onChange={(e) => setFRegion(e.target.value)} aria-label="Filter region">
+          <FilterField label="Filter region"><select value={fRegion} onChange={(e) => setFRegion(e.target.value)} aria-label="Filter region">
             <option value="">Semua region</option>
             {regionOpts.map((x) => <option key={x} value={x}>{x}</option>)}
-          </select>
+          </select></FilterField>
         )}
         {roomOpts.length > 0 && (
-          <select value={fRoom} onChange={(e) => setFRoom(e.target.value)} aria-label="Filter ruangan">
+          <FilterField label="Filter ruangan"><select value={fRoom} onChange={(e) => setFRoom(e.target.value)} aria-label="Filter ruangan">
             <option value="">Semua ruangan</option>
             {roomOpts.map((x) => <option key={x} value={x}>{formatRoom(x)}</option>)}
-          </select>
+          </select></FilterField>
         )}
         {provOpts.length > 0 && (
-          <select value={fProv} onChange={(e) => setFProv(e.target.value)} aria-label="Filter provinsi">
+          <FilterField label="Filter provinsi"><select value={fProv} onChange={(e) => setFProv(e.target.value)} aria-label="Filter provinsi">
             <option value="">Semua provinsi</option>
             {provOpts.map((x) => <option key={x} value={x}>{x}</option>)}
-          </select>
+          </select></FilterField>
         )}
-        <select value={`${sort.key}:${sort.dir}`} onChange={(e) => { const [key, dir] = e.target.value.split(':'); setSort({ key, dir: Number(dir) }); }} aria-label="Urutkan">
+        <FilterField label="Urutkan"><select value={`${sort.key}:${sort.dir}`} onChange={(e) => { const [key, dir] = e.target.value.split(':'); setSort({ key, dir: Number(dir) }); }} aria-label="Urutkan">
           {Object.entries(SORTS).flatMap(([k, l]) => [
             <option key={k + '1'} value={`${k}:1`}>Urut: {l} (A–Z)</option>,
             <option key={k + '-1'} value={`${k}:-1`}>Urut: {l} (Z–A)</option>,
           ])}
-        </select>
+        </select></FilterField>
         {filtered && <button className="btn btn--sm" onClick={resetFilters}><Icon name="x" size={14} />Reset filter</button>}
         <span className="muted">{loading ? <><Spinner size={14} /> Memuat…</> : <>{filtered ? `${shown.length} dari ${list.length}` : list.length} orang</>}</span>
         {!archived && <button className="btn btn--sm" onClick={exportQrLinks} disabled={!shown.length} title="CSV berisi link QR pribadi & link WhatsApp untuk orang yang tampil">

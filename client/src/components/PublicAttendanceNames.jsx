@@ -1,3 +1,4 @@
+import FilterField from './FilterField.jsx';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 
@@ -21,7 +22,7 @@ export default function PublicAttendanceNames({ selection, onClose }) {
     <header><div><h3 id="public-attendance-names">{selection.label} · {selection.scope === 'all' ? 'Target absensi' : 'Sudah absen'}</h3>
       <p className="muted small">{selection.venue} · {selection.period}</p></div>
       <button type="button" className="btn btn--sm" onClick={onClose}>Tutup</button></header>
-    <input autoFocus type="search" aria-label="Cari nama atau instansi" placeholder="Cari nama atau instansi" value={query} onChange={(event) => setQuery(event.target.value)} />
+    <FilterField label="Cari nama atau instansi"><input autoFocus type="search" aria-label="Cari nama atau instansi" placeholder="Cari nama atau instansi" value={query} onChange={(event) => setQuery(event.target.value)} /></FilterField>
     {error && <p className="alert alert--err" role="alert">{error}</p>}
     {!rows && !error && <p role="status">Memuat daftar nama…</p>}
     {visible && <><p className="muted small" role="status">{visible.length} dari {rows.length} nama</p>

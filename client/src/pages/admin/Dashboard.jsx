@@ -1,3 +1,4 @@
+import FilterField from '../../components/FilterField.jsx';
 import { useEffect, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import { api, adminUrl } from '../../api.js';
@@ -130,16 +131,16 @@ export default function Dashboard() {
         </div>
         <div className="row dashboard-filters">
           <button type="button" className="btn" onClick={() => setRevision((value) => value + 1)}>Muat ulang</button>
-          {days.length > 0 && <select aria-label="Hari absensi" value={day} onChange={(e) => {
+          {days.length > 0 && <FilterField label="Hari absensi"><select aria-label="Hari absensi" value={day} onChange={(e) => {
             setDay(e.target.value); setSessions(null); setVenueAttendance(null); setSummaryError(false);
           }}>
             <option value="">Semua sesi resmi</option>
             {days.map((item) => <option key={item.date} value={item.date}>{checkInDayLabel(item)}</option>)}
-          </select>}
-          {!lo && venues?.length > 1 && <select aria-label="Filter venue" value={venueId} onChange={(e) => setVenueId(e.target.value)}>
+          </select></FilterField>}
+          {!lo && venues?.length > 1 && <FilterField label="Filter venue"><select aria-label="Filter venue" value={venueId} onChange={(e) => setVenueId(e.target.value)}>
             <option value="">Semua venue</option>
             {venues.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-          </select>}
+          </select></FilterField>}
         </div>
       </div>
       {!lo && venues && activeVenues === 0 && (

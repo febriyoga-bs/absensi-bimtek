@@ -70,7 +70,7 @@ code { background: #eef1f6; padding: 1px 6px; border-radius: 6px; font-size: .92
 
 /* ============ Home ============ */
 .home__main { position: relative; z-index: 2; max-width: 1040px; margin: -64px auto 0; padding: 0 16px 40px; display: grid; gap: 20px; }
-.home__main:has(.landing-segment) { max-width: 1440px; }
+.home__main:has(.landing-segment) { max-width: none; width: 100%; padding-inline: 0; margin-inline: 0; }
 .landing-dashboard { min-width: 0; scroll-margin-top: 20px; }
 .landing-segment { min-width: 0; }
 .landing-guide { display: grid; gap: 14px; }
@@ -97,7 +97,7 @@ html { scroll-padding-top: calc(var(--topbar-height, 56px) + 16px); }
 .landing-sections { display: flex; flex-wrap: wrap; gap: 8px; }
 .landing-sections a { padding: 10px 16px; border-radius: 99px; background: var(--accent-soft); font-weight: 700; text-decoration: none; }
 .landing-dashboard .page-head { flex-wrap: wrap; }
-.home .topbar { flex-wrap: wrap; }
+.home .topbar { flex-wrap: wrap; max-width: none; }
 .home__main { gap: 16px; }
 .landing-segment .panel { padding: 18px; }
 .landing-segment .page-head { margin-bottom: 12px; gap: 12px; }
@@ -365,6 +365,27 @@ select:disabled { background-color: var(--surface-2); color: var(--muted); curso
 .two-col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 12px 0; }
 .toolbar select, .toolbar input { width: auto; min-width: 200px; }
+.filter-field { display: grid; align-content: start; gap: 6px; min-width: 0; margin: 0; text-align: left; }
+.filter-field > span { color: var(--muted); font-size: 11px; font-weight: 700; line-height: 1.4; }
+.filter-field > :is(select, input) { width: 100%; min-width: 0; max-width: 100%; }
+.toolbar:has(> .filter-field), .dashboard-filters, .public-dashboard__filters { align-items: end; }
+.toolbar > .filter-field { flex: 0 1 240px; max-width: 100%; }
+.toolbar > .filter-field--search { flex: 1 1 260px; }
+.toolbar .filter-field > :is(select, input) { width: 100%; min-width: 0; max-width: 100%; }
+.toolbar > label:not(.check) { display: grid; gap: 6px; text-align: left; font-size: 11px; color: var(--muted); font-weight: 700; }
+.toolbar > label:not(.check) > :is(input, select) { color: var(--text); font-weight: 400; }
+.dashboard-filters > .filter-field, .public-dashboard__filters > .filter-field { flex: 0 1 240px; }
+.attendance-download-dialog { width: min(720px, calc(100vw - 28px)); padding: 20px; }
+.attendance-download-dialog > header { align-items: flex-start; gap: 12px; }
+.attendance-download-dialog h3 { margin-bottom: 4px; }
+.attendance-download-dialog header p { margin: 0; }
+.download-filter-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 18px 0; padding: 0; border: 0; min-width: 0; }
+.download-actions { display: flex; align-items: center; justify-content: end; gap: 10px; padding-top: 14px; border-top: 1px solid var(--line); }
+@media (max-width: 600px) {
+  .toolbar > .filter-field, .dashboard-filters > .filter-field, .public-dashboard__filters > .filter-field { flex: 1 1 100%; }
+  .download-filter-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .attendance-download-dialog { padding: 16px; }
+}
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 12px 0 16px; }
 .tabs button { background: none; border: 0; padding: 10px 14px; font: inherit; font-weight: 700; color: var(--muted); cursor: pointer; border-bottom: 3px solid transparent; }
 .tabs button.on { color: var(--text); border-color: var(--accent); }

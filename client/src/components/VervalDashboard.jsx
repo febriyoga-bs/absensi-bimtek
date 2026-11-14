@@ -81,7 +81,7 @@ export default function VervalDashboard() {
   const partitionKey = partitionKeys.join(',');
 
   useEffect(() => {
-    if (!detailed || !data) return;
+    if (!data) return;
     let active = true, next = 0, completed = 0, failed = 0;
     const rows = new Map();
     const publish = () => { if (active) setPartitionState({ key: partitionKey, rows: [...rows.values()], completed, failed }); };
@@ -100,12 +100,14 @@ export default function VervalDashboard() {
     publish();
     Promise.all(Array.from({ length: Math.min(3, partitionKeys.length) }, worker));
     return () => { active = false; };
-  }, [data, detailed, partitionKey, partitionKeys, revision]);
+  }, [data, partitionKey, partitionKeys, revision]);
 
   const schools = partitionState.key === partitionKey ? partitionState.rows : emptySchools;
   const filtered = useMemo(() => schools.filter((school) => matchesSchool(school, filters)), [schools, filters]);
   const coordinates = useMemo(() => filtered.filter(hasCoordinates), [filtered]);
-  const loadingSchools = detailed && (!data || partitionState.key !== partitionKey || partitionState.completed < partitionKeys.length);
+  const loadingSchools = !data || partitionState.key !== partitionKey || partitionState.completed < partitionKeys.length;
+  const failedPartitions = partitionState.key === partitionKey ? partitionState.failed : 0;
+  const totalsReady = !loadingSchools && !failedPartitions;
   const total = detailed ? filtered.length : parts.reduce((sum, part) => sum + part.count, 0);
   const provinces = data?.provinces || emptyProvinces;
   const provinceOptions = Object.entries(provinces).sort((a, b) => a[1].localeCompare(b[1], 'id'));
@@ -147,19 +149,19 @@ export default function VervalDashboard() {
       {advancedSelect('status', 'Status sekolah', [['Negeri', 'Negeri'], ['Swasta', 'Swasta']])}
     </div></details>
     <div className="verval-kpis">
-      <div><span>Sekolah {detailed ? 'sesuai filter' : 'terdata'}</span><b>{nf.format(total)}</b><small>{loadingSchools ? 'Data sekolah sedang dimuat' : detailed && partitionState.failed ? 'Sebagian data belum tersedia' : 'Satuan pendidikan'}</small></div>
-      <div><span>Nilai bantuan</span><b>{detailed && assistance !== null ? money.format(assistance) : '—'}</b><small>{detailed ? 'Total dari data sekolah yang dimuat' : 'Pilih wilayah untuk melihat rincian'}</small></div>
-      <div><span>Rata-rata progres</span><b>{detailed && average !== null ? `${nf.format(average)}%` : '—'}</b><small>{detailed ? `${nf.format(progressSchools.length)} sekolah memiliki data progres` : 'Pilih wilayah untuk melihat rincian'}</small></div>
+      <div><span>Sekolah {detailed ? 'sesuai filter' : 'terdata'}</span><b>{nf.format(total)}</b><small>{loadingSchools ? 'Data sekolah sedang dimuat' : failedPartitions ? 'Sebagian data belum tersedia' : 'Satuan pendidikan'}</small></div>
+      <div><span>Nilai bantuan</span><b aria-live="polite">{loadingSchools ? 'Memuat…' : failedPartitions ? 'Belum lengkap' : assistance !== null ? money.format(assistance) : 'Belum ada data'}</b><small>{totalsReady ? `Total bantuan dari ${nf.format(assistanceSchools.length)} sekolah sesuai cakupan` : 'Menunggu seluruh data sekolah agar total akurat'}</small></div>
+      <div><span>Rata-rata progres</span><b aria-live="polite">{loadingSchools ? 'Memuat…' : failedPartitions ? 'Belum lengkap' : average !== null ? `${nf.format(average)}%` : 'Belum ada data'}</b><small>{totalsReady ? `${nf.format(progressSchools.length)} sekolah memiliki data progres` : 'Dihitung setelah seluruh data sekolah dimuat'}</small></div>
       <div><span>Lokasi di peta</span><b>{detailed ? nf.format(coordinates.length) : nf.format(new Set(parts.filter((part) => part.count > 0).map((part) => part.province)).size)}</b><small>{detailed ? `${nf.format(filtered.length - coordinates.length)} sekolah tanpa koordinat valid` : 'Provinsi dengan sekolah terdata'}</small></div>
     </div>
     <div className="verval-view-bar"><div role="group" aria-label="Tampilan peta sekolah"><button type="button" aria-pressed={!detailed} onClick={() => { setView('summary'); setProvince(''); setFilters(clearFilters); setSelected(null); }}>Ringkasan wilayah</button><button type="button" aria-pressed={detailed} onClick={() => setView('schools')}>Semua sekolah</button></div>
-      <button type="button" className="btn btn--sm" disabled={!detailed || loadingSchools || Boolean(partitionState.failed) || !coordinates.length} onClick={download}>Unduh GeoJSON sekolah</button>
+      <button type="button" className="btn btn--sm" disabled={!detailed || !totalsReady || !coordinates.length} onClick={download}>Unduh GeoJSON sekolah</button>
     </div>
-    {loadingSchools && <p role="status" className="verval-load-status">Memuat koordinat sekolah · {partitionState.key === partitionKey ? partitionState.completed : 0}/{partitionKeys.length} bagian wilayah</p>}
-    {detailed && partitionState.failed > 0 && <p role="alert" className="alert alert--warn">{partitionState.failed} bagian wilayah gagal dimuat. Data yang tampil belum lengkap. <button type="button" className="btn btn--sm" onClick={refresh}>Coba lagi</button></p>}
+    {loadingSchools && data && <p role="status" className="verval-load-status">Memuat data bantuan dan koordinat sekolah · {partitionState.key === partitionKey ? partitionState.completed : 0}/{partitionKeys.length} bagian wilayah</p>}
+    {failedPartitions > 0 && <p role="alert" className="alert alert--warn">{failedPartitions} bagian wilayah gagal dimuat. Data yang tampil belum lengkap. <button type="button" className="btn btn--sm" onClick={refresh}>Coba lagi</button></p>}
     <div className={`verval-workspace${selected ? ' has-detail' : ''}`}><div className="verval-map-column">
       <Suspense fallback={<div className="verval-map-loading" role="status">Menyiapkan peta Indonesia…</div>}><VervalMap schools={filtered} parts={parts} provinces={provinces} province={province} detailed={detailed} selected={selected} onSelect={setSelected} onProvince={changeProvince} /></Suspense>
-      <div className="verval-legend">{Object.entries(levelColors).map(([name, color]) => <span key={name}><i style={{ background: color }} />{name}</span>)}<span>Angka pada lingkaran = jumlah sekolah</span></div>
+      <div className="verval-legend">{Object.entries(levelColors).map(([name, color]) => <span key={name}><i style={{ background: color }} />{name}</span>)}<span>Angka pada lingkaran = jumlah sekolah</span><span>Isian bangunan = progres pembangunan</span><span>Bendera = selesai 100%</span><span>Garis putus-putus = progres belum tersedia</span></div>
     </div>{selected && <SchoolDetails key={selected.npsn} school={selected} onClose={() => setSelected(null)} />}</div>
     <details className="verval-school-list" open={detailed}><summary>{detailed ? 'Daftar sekolah sesuai filter' : 'Jumlah sekolah per provinsi'} · {nf.format(total)}</summary>
       {detailed ? <>
@@ -168,6 +170,6 @@ export default function VervalDashboard() {
         {filtered.length > schoolsPerPage && <div className="verval-pagination"><button type="button" className="btn btn--sm" disabled={page === 1} onClick={() => setPage((value) => value - 1)}>Sebelumnya</button><span>Halaman {page}/{Math.ceil(filtered.length / schoolsPerPage)}</span><button type="button" className="btn btn--sm" disabled={page * schoolsPerPage >= filtered.length} onClick={() => setPage((value) => value + 1)}>Berikutnya</button></div>}
       </> : <div className="verval-province-grid">{provinceOptions.map(([code, name]) => <button key={code} type="button" onClick={() => changeProvince(code)}><span>{name}</span><b>{nf.format(parts.filter((part) => part.province === code).reduce((sum, part) => sum + part.count, 0))}</b></button>)}</div>}
     </details>
-    <p className="verval-attribution">Data sekolah: Verval Kemendikdasmen. Batas wilayah: geoBoundaries IDN ADM2 (BPS / WFP / OCHA ROAP), CC BY 3.0 IGO; Indonesia 38 Provinsi, CC BY 4.0. Geometri disederhanakan oleh DitSMP dan dikonversi ke GeoJSON untuk peta ini. Cakupan nasional sesuai data sumber.</p>
+    <p className="verval-attribution">Data sekolah: Verval Kemendikdasmen. Batas wilayah: geoBoundaries IDN ADM2 (BPS / WFP / OCHA ROAP), CC BY 3.0 IGO</p>
   </section>;
 }
