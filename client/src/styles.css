@@ -84,6 +84,7 @@ code { background: #eef1f6; padding: 1px 6px; border-radius: 6px; font-size: .92
 html { scroll-padding-top: calc(var(--topbar-height, 56px) + 16px); }
 .appearance-bar--landing { position: sticky; top: 0; z-index: 1100; }
 .landing-topbar-nav { display: flex; gap: 4px; overflow-x: auto; min-width: 0; scrollbar-width: thin; }
+.landing-menu-toggle { display: none; }
 .landing-topbar-nav a { flex: none; padding: 9px 12px; color: var(--muted); text-decoration: none; font-size: 12px; font-weight: 700; border-radius: 9px; white-space: nowrap; }
 .landing-topbar-nav a:hover, .landing-topbar-nav a[aria-current="location"] { color: var(--accent); background: var(--accent-soft); }
 .appearance-bar--landing .appearance-brand, .appearance-bar--landing .appearance-control { flex: none; }
@@ -93,6 +94,19 @@ html { scroll-padding-top: calc(var(--topbar-height, 56px) + 16px); }
   .landing-topbar-nav a { min-height: 40px; display: flex; align-items: center; }
 }
 .verval-filters { align-items: end; margin-bottom: 16px; }
+@media (max-width: 768px) {
+  .appearance-bar--landing { flex-wrap: nowrap; gap: 8px; }
+  .appearance-bar--landing .appearance-brand { margin-right: auto; }
+  .landing-menu-toggle { display: inline-flex; order: 3; align-items: center; justify-content: center; gap: 6px; min-width: 44px; min-height: 44px; padding: 8px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--text); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+  .landing-menu-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .appearance-bar--landing .landing-topbar-nav { display: none; position: absolute; top: 100%; right: 0; left: 0; padding: 8px 12px; background: var(--surface); border-bottom: 1px solid var(--line); box-shadow: 0 8px 16px #0002; max-height: calc(100dvh - 80px); overflow-y: auto; }
+  .appearance-bar--landing .landing-topbar-nav.is-open { display: flex; flex-direction: column; }
+  .landing-topbar-nav a { min-height: 44px; }
+}
+@media (max-width: 380px) {
+  .landing-menu-toggle span { display: none; }
+  .appearance-bar--landing .appearance-switch button { padding-inline: 8px; }
+}
 .verval-filters label { flex: 1 1 220px; }
 .landing-sections { display: flex; flex-wrap: wrap; gap: 8px; }
 .landing-sections a { padding: 10px 16px; border-radius: 99px; background: var(--accent-soft); font-weight: 700; text-decoration: none; }

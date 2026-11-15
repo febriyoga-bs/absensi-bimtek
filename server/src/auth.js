@@ -19,11 +19,13 @@ export const signAdmin = (payload = { role: 'admin' }) =>
 export async function requireAdmin(req, res, next) {
   const header = req.headers.authorization || '';
   // ?t= dipakai untuk <img src> dan tautan unduh CSV
-  const token = header.startsWith('Bearer ') ? header.slice(7) : req.query.t;
+  const queryAllowed = req.method === 'GET' && (/^\/photo\/\d+$/.test(req.path) || req.path === '/export');
+  const token = header.startsWith('Bearer ') ? header.slice(7) : queryAllowed ? req.query.t : undefined;
   let p;
   try {
-    p = jwt.verify(String(token || ''), SECRET());
-    if (!p.adm) throw new Error();
+    p = jwt.verify(String(token || ''), SECRET(), { algorithms: ['HS256'] });
+    if (p.adm !== true || !['admin', 'lo'].includes(p.role)) throw new Error();
+    if (p.role === 'lo' && (!Number.isSafeInteger(p.lo) || !Number.isSafeInteger(p.venue) || p.lo < 1 || p.venue < 1)) throw new Error();
   } catch {
     return res.status(401).json({ error: 'Sesi login berakhir, silakan login ulang' });
   }
@@ -67,7 +69,7 @@ export function hashPassword(pw) {
 
 export function verifyPassword(pw, stored) {
   const [alg, saltHex, hashHex] = String(stored || '').split('$');
-  if (alg !== 'scrypt' || !saltHex || !hashHex) return false;
+  if (alg !== 'scrypt' || !/^[a-f0-9]{32}$/.test(saltHex || '') || !/^[a-f0-9]{64}$/.test(hashHex || '') || String(pw).length > 1024) return false;
   const expected = Buffer.from(hashHex, 'hex');
   const actual = crypto.scryptSync(String(pw), Buffer.from(saltHex, 'hex'), expected.length);
   return crypto.timingSafeEqual(actual, expected);
@@ -84,7 +86,7 @@ export function signChallenge(personId, sessionId, nonce, loAccount) {
 
 export function verifyChallenge(token) {
   try {
-    const p = jwt.verify(String(token || ''), SECRET());
+    const p = jwt.verify(String(token || ''), SECRET(), { algorithms: ['HS256'] });
     return p.adm ? null : p; // token login admin tidak boleh dipakai sebagai token absen
   } catch {
     return null;

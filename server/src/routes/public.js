@@ -11,38 +11,24 @@ import { getPublicReporting } from '../reporting.js';
 import { getVenueAttendance, getVenueAttendanceDetails } from '../venueAttendance.js';
 import { getArrivalRecap } from '../arrivalRecap.js';
 import { getVerval } from '../verval.js';
+import { publicReadLimiter, vervalLimiter, schoolDetailLimiter } from '../security.js';
+import { createAsyncCache } from '../asyncCache.js';
 
 const r = Router();
 const ROLES = ['peserta', 'panitia'];
 const PUBLIC_SELF_CHECK_IN_ENABLED = false;
 const publicAttendanceGroups = ['bendahara','pengawas','fasil','lo'];
+const publicCache = createAsyncCache();
+r.use('/dashboard', publicReadLimiter);
+r.use('/info', publicReadLimiter);
+r.use('/verval', vervalLimiter);
+r.use('/verval/schools', schoolDetailLimiter);
 
-let vervalCache = null;
-let vervalRequest = null;
 r.get('/verval/overview', ah(async (req, res) => {
-  if (!vervalCache || Date.now() - vervalCache.time > 300000) {
-    if (!vervalRequest) vervalRequest = (async () => {
-      const response = await fetch('https://verval.azurewebsites.net/api/public/peta-revitalisasi/overview', {
-        signal: AbortSignal.timeout(20000),
-      });
-      if (!response.ok) throw new Error('Sumber Verval tidak tersedia');
-      const data = await response.json();
-      if (!data.meta || !data.prov || !Array.isArray(data.parts)
-        || !data.parts.every((part) => typeof part.j === 'string' && typeof part.p === 'string' && Number.isFinite(part.n))) {
-        throw new Error('Format sumber Verval tidak valid');
-      }
-      vervalCache = { time: Date.now(), data: {
-        updated_at: data.meta.generated_at,
-        provinces: data.prov,
-        districts: data.kab,
-        levels: data.meta.jenjang,
-        parts: data.parts.map(({ j, p, n }) => ({ level: j, province: p, count: n })),
-      } };
-    })().finally(() => { vervalRequest = null; });
-    try { await vervalRequest; }
-    catch { throw new HttpError(502, 'Data Verval belum dapat dimuat. Silakan coba lagi.'); }
-  }
-  res.json(vervalCache.data);
+  const data = await getVerval('/overview');
+  if (!data.meta || !data.prov || !Array.isArray(data.parts)) throw new HttpError(502, 'Format sumber Verval tidak valid.');
+  res.json({ updated_at: data.meta.generated_at, provinces: data.prov, districts: data.kab,
+    levels: data.meta.jenjang, parts: data.parts.map(({ j, p, n }) => ({ level: j, province: p, count: n })) });
 }));
 
 r.get('/verval/parts/:key', ah(async (req, res) => {
@@ -71,6 +57,9 @@ r.get('/dashboard/absensi/:venueId/participants', ah(async (req, res) => {
 r.get('/dashboard/:section', ah(async (req, res) => {
   const { section } = req.params;
   const { period } = req.query;
+  if (!['pelaporan','absensi','kehadiran'].includes(section)) throw new HttpError(404, 'Ringkasan tidak ditemukan.');
+  if (period !== undefined && (typeof period !== 'string' || period.length > 32)) throw new HttpError(400, 'Periode tidak valid.');
+  const result = await publicCache.get(JSON.stringify([section, period ?? null]), async () => {
   let rows;
   if (section === 'pelaporan') {
     rows = await getPublicReporting(period ?? 'current');
@@ -104,8 +93,10 @@ r.get('/dashboard/:section', ah(async (req, res) => {
   } else {
     throw new HttpError(404, 'Ringkasan tidak ditemukan.');
   }
+  return rows;
+  });
   res.set('Cache-Control', 'public, max-age=15, s-maxage=30');
-  res.json(rows);
+  res.json(result);
 }));
 
 if (!PUBLIC_SELF_CHECK_IN_ENABLED) {

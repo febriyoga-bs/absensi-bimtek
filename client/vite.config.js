@@ -20,7 +20,7 @@ const spaFallback = () => ({
 export default defineConfig({
   plugins: [react(), spaFallback()],
   server: {
-    host: true, // agar bisa dibuka dari HP di jaringan yang sama
+    host: '127.0.0.1', // gunakan --host secara eksplisit bila perlu akses LAN
     proxy: { '/api': 'http://localhost:3000' },
   },
 });

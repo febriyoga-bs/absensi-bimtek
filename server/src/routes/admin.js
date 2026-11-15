@@ -16,6 +16,7 @@ import { getReporting, importReporting } from '../reporting.js';
 import { progressStatusSql, currentProgressSql } from '../progressImport.js';
 import { reportingDates, reportingDays, withReportingDay } from '../reportingDays.js';
 import { getArrivalRecap, getArrivalRecapDetails, importArrivalRecap } from '../arrivalRecap.js';
+import { finiteInteger } from '../security.js';
 
 const r = Router();
 
@@ -77,6 +78,7 @@ r.get('/arrival-recap', ah(async (req, res) => {
   res.json(await getArrivalRecap());
 }));
 r.get('/arrival-recap/:venueId/participants', ah(async (req, res) => {
+  if (req.user.role === 'lo' && Number(req.params.venueId) !== req.user.venue) throw new HttpError(403, 'Bukan venue Anda.');
   res.json(await getArrivalRecapDetails(req.params.venueId, req.query.group));
 }));
 r.post('/arrival-recap/import', requireSuper, ah(async (req, res) => {
@@ -1040,8 +1042,8 @@ r.get('/attendance', ah(async (req, res) => {
   const v = scopeVenue(req);
   const recordedBy = typeof req.query.recorded_by === 'string' ? req.query.recorded_by.trim().slice(0, 300) : '';
   const status = ['valid', 'review', 'ditolak', 'berhalangan'].includes(req.query.status) ? req.query.status : null;
-  const limit = Math.min(Math.max(Number(req.query.limit) || 48, 1), 200);
-  const offset = Math.max(Number(req.query.offset) || 0, 0);
+  const limit = finiteInteger(req.query.limit, 48, 1, 200);
+  const offset = finiteInteger(req.query.offset, 0, 0, 1000000);
   const positionFilter = attendancePositionFilter(req);
   const where = `a.session_id=$1 AND ($2::int IS NULL OR a.venue_id=$2)
     AND EXISTS (SELECT 1 FROM people p WHERE p.id=a.person_id AND ${positionFilter})`;
@@ -1156,7 +1158,7 @@ r.get('/photo/:id', ah(async (req, res) => {
   const url = await photoUrl(rows[0].photo_path, 600);
   if (url) return res.redirect(302, url);
   if (!fs.existsSync(rows[0].photo_path)) return res.status(404).end();
-  res.set('Cache-Control', 'private, max-age=3600');
+  res.set('Cache-Control', 'no-store');
   res.sendFile(rows[0].photo_path);
 }));
 
