@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { fmtFull } from '../lib/time.js';
 import { hasCoordinates, levelColors, matchesSchool, schoolGeoJSON } from '../lib/vervalMap.js';
 import './VervalDashboard.css';
+import VervalSummary from './VervalSummary.jsx';
 
 const VervalMap = lazy(() => import('./VervalMap.jsx'));
 const nf = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 });
@@ -109,6 +110,15 @@ export default function VervalDashboard() {
   const failedPartitions = partitionState.key === partitionKey ? partitionState.failed : 0;
   const totalsReady = !loadingSchools && !failedPartitions;
   const total = detailed ? filtered.length : parts.reduce((sum, part) => sum + part.count, 0);
+  const expectedSchools = parts.reduce((sum, part) => sum + part.count, 0);
+  const levelTotals = useMemo(() => {
+    const totals = new Map();
+    for (const part of data?.parts || []) {
+      if (!province || part.province === province) totals.set(part.level, (totals.get(part.level) || 0) + part.count);
+    }
+    return totals;
+  }, [data, province]);
+  const loadedSchools = Math.min(schools.length, expectedSchools);
   const provinces = data?.provinces || emptyProvinces;
   const provinceOptions = Object.entries(provinces).sort((a, b) => a[1].localeCompare(b[1], 'id'));
   const options = (field) => [...new Set(schools.map((school) => school[field]).filter((value) => value != null && value !== ''))].sort();
@@ -121,6 +131,11 @@ export default function VervalDashboard() {
   const updateFilter = (key) => (event) => setFilters((current) => ({ ...current, [key]: event.target.value }));
   function reset() { setProvince(''); setLevel('SD'); setFilters(clearFilters); setSelected(null); setView('summary'); }
   function refresh() { partitionCache.current.clear(); setRevision((value) => value + 1); }
+  function chooseSummary(group, value) {
+    setSelected(null);
+    if (group === 'level') { setLevel((current) => current === value ? '' : value); return; }
+    setFilters((current) => ({ ...current, [group]: current[group] === value ? '' : value }));
+  }
   function download() {
     const url = URL.createObjectURL(new Blob([JSON.stringify(schoolGeoJSON(filtered))], { type: 'application/geo+json' }));
     const link = document.createElement('a'); link.href = url; link.download = `sekolah-verval-${level || 'semua'}-${province || 'indonesia'}.geojson`; link.click();
@@ -157,12 +172,16 @@ export default function VervalDashboard() {
     <div className="verval-view-bar"><div role="group" aria-label="Tampilan peta sekolah"><button type="button" aria-pressed={!detailed} onClick={() => { setView('summary'); setProvince(''); setFilters(clearFilters); setSelected(null); }}>Ringkasan wilayah</button><button type="button" aria-pressed={detailed} onClick={() => setView('schools')}>Semua sekolah</button></div>
       <button type="button" className="btn btn--sm" disabled={!detailed || !totalsReady || !coordinates.length} onClick={download}>Unduh GeoJSON sekolah</button>
     </div>
-    {loadingSchools && data && <p role="status" className="verval-load-status">Memuat data bantuan dan koordinat sekolah · {partitionState.key === partitionKey ? partitionState.completed : 0}/{partitionKeys.length} bagian wilayah</p>}
+    {loadingSchools && data && <div className="verval-load-progress" role="status">
+      <div><strong>Memuat data sekolah…</strong><span>{nf.format(loadedSchools)} dari {nf.format(expectedSchools)} sekolah · {partitionState.key === partitionKey ? partitionState.completed : 0}/{partitionKeys.length} wilayah</span></div>
+      <progress aria-label="Pemuatan data sekolah" value={loadedSchools} max={Math.max(expectedSchools, 1)} />
+    </div>}
     {failedPartitions > 0 && <p role="alert" className="alert alert--warn">{failedPartitions} bagian wilayah gagal dimuat. Data yang tampil belum lengkap. <button type="button" className="btn btn--sm" onClick={refresh}>Coba lagi</button></p>}
-    <div className={`verval-workspace${selected ? ' has-detail' : ''}`}><div className="verval-map-column">
+    <div className={`verval-workspace ${selected ? 'has-detail' : 'has-summary'}`}><div className="verval-map-column">
       <Suspense fallback={<div className="verval-map-loading" role="status">Menyiapkan peta Indonesia…</div>}><VervalMap schools={filtered} parts={parts} provinces={provinces} province={province} detailed={detailed} selected={selected} onSelect={setSelected} onProvince={changeProvince} /></Suspense>
-      <div className="verval-legend">{Object.entries(levelColors).map(([name, color]) => <span key={name}><i style={{ background: color }} />{name}</span>)}<span>Angka pada lingkaran = jumlah sekolah</span><span>Isian bangunan = progres pembangunan</span><span>Bendera = selesai 100%</span><span>Garis putus-putus = progres belum tersedia</span></div>
-    </div>{selected && <SchoolDetails key={selected.npsn} school={selected} onClose={() => setSelected(null)} />}</div>
+      <div className="verval-legend">{Object.entries(levelColors).map(([name, color]) => <span key={name}><i style={{ background: color }} />{name}</span>)}<span>Isian bangunan = progres pembangunan</span><span>Bendera = selesai 100%</span><span>Garis putus-putus = progres belum tersedia</span></div>
+    </div>{selected ? <SchoolDetails key={selected.npsn} school={selected} onClose={() => setSelected(null)} />
+      : <VervalSummary schools={filtered} total={total} levelTotals={levelTotals} loading={loadingSchools} incomplete={Boolean(failedPartitions)} level={level} filters={filters} onChoose={chooseSummary} />}</div>
     <details className="verval-school-list" open={detailed}><summary>{detailed ? 'Daftar sekolah sesuai filter' : 'Jumlah sekolah per provinsi'} · {nf.format(total)}</summary>
       {detailed ? <>
         {!filtered.length && !loadingSchools && <p className="muted">Tidak ada sekolah yang sesuai filter.</p>}

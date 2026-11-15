@@ -25,6 +25,26 @@
 .verval-load-status { font-size: 12px; color: var(--muted); }
 .verval-workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; }
 .verval-workspace.has-detail { grid-template-columns: minmax(0, 1.4fr) minmax(320px, 1fr); }
+.verval-workspace.has-summary { grid-template-columns: minmax(0, 1.4fr) minmax(320px, 1fr); }
+.verval-load-progress { border: 1px solid #a9cfff; border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; background: var(--accent-soft); color: var(--text); }
+.verval-load-progress > div { display: flex; flex-wrap: wrap; gap: 5px 12px; font-size: 11px; margin-bottom: 8px; }
+.verval-load-progress progress { display: block; width: 100%; height: 7px; accent-color: var(--accent); }
+.verval-summary { max-height: 540px; overflow-y: auto; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); padding: 16px; scrollbar-gutter: stable; }
+.verval-summary > header { padding-bottom: 10px; }
+.verval-summary h3 { margin: 0; font-size: 16px; }
+.verval-summary header p { margin: 5px 0 0; font-size: 11px; }
+.verval-summary-group { margin: 0 0 18px; }
+.verval-summary-group h4 { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; margin: 10px 0; }
+.verval-summary-note { margin: -3px 0 8px; color: var(--muted); font-size: 10px; line-height: 1.6; }
+.verval-summary-row { display: grid; grid-template-columns: minmax(105px, .8fr) minmax(40px, 1.3fr) 55px; align-items: center; gap: 10px; width: 100%; padding: 8px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--text); text-align: left; font: inherit; font-size: 11px; cursor: pointer; }
+.verval-summary-row:hover, .verval-summary-row[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--line); }
+.verval-summary-row:disabled { cursor: default; }
+.verval-summary-row b { text-align: right; }
+.verval-summary-label { display: flex; align-items: center; gap: 7px; }
+.verval-summary-label i { width: 9px; height: 9px; flex: none; border-radius: 3px; }
+.verval-summary-track { display: block; height: 7px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+.verval-summary-track > span { display: block; height: 100%; border-radius: inherit; background: #328cf1; }
+.verval-school-canvas { position: absolute; }
 .verval-map-column { min-width: 0; }
 .verval-map-wrap { position: relative; border: 1px solid var(--line); border-radius: 18px; overflow: hidden; isolation: isolate; }
 .verval-map-wrap:fullscreen { border-radius: 0; background: var(--vm-ocean); }
@@ -87,7 +107,7 @@
 .verval-coincident-list button { background: #fff; border: 1px solid #dbe4ee; border-radius: 8px; color: #142033; font-size: 12px; padding: 8px; cursor: pointer; }
 html[data-theme="dark"] .verval-dashboard { --vm-ocean: #162c3a; }
 html[data-theme="dark"] .verval-map-hint { background: #142136de; color: #c6dbeb; }
-@media (max-width: 1000px) { .verval-workspace.has-detail { grid-template-columns: minmax(0, 1fr); } .verval-detail { max-height: none; } .verval-kpis, .verval-list-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 1000px) { .verval-workspace.has-detail, .verval-workspace.has-summary { grid-template-columns: minmax(0, 1fr); } .verval-detail { max-height: none; } .verval-summary { max-height: 360px; } .verval-kpis, .verval-list-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 600px) {
   .verval-toolbar > label { flex-basis: 100%; }
   .verval-filter-grid, .verval-list-grid { grid-template-columns: minmax(0, 1fr); }
