@@ -1,3 +1,4 @@
+import { personName } from '../../lib/personName.js';
 import { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { api } from '../../api.js';
@@ -33,7 +34,7 @@ export default function ChangePassword() {
     <>
       <div className="page-head">
         <div><h2>Ganti Kata Sandi</h2>
-          <p className="muted">Akun <b>{user?.name}</b>{user?.venue ? ` — ${user.venue.name}` : ''}</p></div>
+          <p className="muted">Akun <b>{personName(user?.name)}</b>{user?.venue ? ` — ${user.venue.name}` : ''}</p></div>
       </div>
       <form className="card form" style={{ maxWidth: 480 }} onSubmit={submit}>
         <label>Kata sandi lama

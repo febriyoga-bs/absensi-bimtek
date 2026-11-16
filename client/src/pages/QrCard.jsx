@@ -1,3 +1,4 @@
+import { personName } from '../lib/personName.js';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import QRCode from 'qrcode';
@@ -36,7 +37,7 @@ export default function QrCard() {
     g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
     g.drawImage(qr, 0, 0, W, W);
     g.fillStyle = '#0b1f3a'; g.textAlign = 'center';
-    g.font = 'bold 34px sans-serif'; g.fillText(p.name.slice(0, 40), W / 2, W + pad);
+    g.font = 'bold 34px sans-serif'; g.fillText(personName(p.name).slice(0, 40), W / 2, W + pad);
     g.font = '26px sans-serif'; g.fillStyle = '#5d6b82';
     g.fillText([p.position, p.code].filter(Boolean).join(' · ').slice(0, 50), W / 2, W + pad + 44);
     if (p.ruangan || p.venue) g.fillText([p.venue, formatRoom(p.ruangan)].filter(Boolean).join(' – ').slice(0, 55), W / 2, W + pad + 84);
@@ -69,7 +70,7 @@ export default function QrCard() {
               <div className="qr-card__img">{img ? <img src={img} alt="QR identitas BIMTEK" /> : <Skel w="100%" h="100%" r={10} />}</div>
               {p ? (
                 <div className="qr-card__info">
-                  <b>{p.name}</b>
+                  <b>{personName(p.name)}</b>
                   <span>{[p.position, p.code].filter(Boolean).join(' · ')}</span>
                   {p.institution && <span className="muted small">{p.institution}</span>}
                   {(p.venue || p.ruangan) && (

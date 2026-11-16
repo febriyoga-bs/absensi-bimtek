@@ -1,3 +1,4 @@
+import { personName } from '../../lib/personName.js';
 import FilterField from '../../components/FilterField.jsx';
 import { useEffect, useRef, useState } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
@@ -164,20 +165,20 @@ export default function Records() {
               <div>
                 {!r.has_photo
                   ? <div className="rec__qr"><Icon name={r.status === 'berhalangan' ? 'clock' : r.method === 'qr' ? 'qr' : 'users'} size={40} />
-                    <b>{r.status === 'berhalangan' ? ST_LABEL.berhalangan : r.method === 'qr' ? 'Scan QR' : 'Diabsenkan LO'}</b><small>{r.scanned_by || 'LO / panitia'}</small></div>
-                  : <img src={r.photo_url || adminUrl(`/photo/${r.id}`)} alt={r.name} loading="lazy" title="Klik untuk memperbesar"
+                    <b>{r.status === 'berhalangan' ? ST_LABEL.berhalangan : r.method === 'qr' ? 'Scan QR' : 'Diabsenkan LO'}</b><small>{personName(r.scanned_by) || 'LO / panitia'}</small></div>
+                  : <img src={r.photo_url || adminUrl(`/photo/${r.id}`)} alt={personName(r.name)} loading="lazy" title="Klik untuk memperbesar"
                     onClick={() => setZoom(r.photo_url || adminUrl(`/photo/${r.id}`))} />}
               </div>
               <div className="rec__body">
-                {r.method === 'manual' && r.has_photo && <span className="rec__by"><Icon name="users" size={13} /> Diabsenkan {r.scanned_by || 'LO'}</span>}
-                <div className="rec__name">{r.name} <span className={`tag tag--${r.role}`}>{r.role}</span></div>
+                {r.method === 'manual' && r.has_photo && <span className="rec__by"><Icon name="users" size={13} /> Diabsenkan {personName(r.scanned_by) || 'LO'}</span>}
+                <div className="rec__name">{personName(r.name)} <span className={`tag tag--${r.role}`}>{r.role}</span></div>
                 <div className="muted small">{r.code} · {r.institution || '-'}</div>
                 {r.venue_name && <div><span className="tag tag--venue">{r.venue_name}</span></div>}
-                {r.lat == null ? <div className="small">{fmtDT(r.created_at)} WIB · {r.status === 'berhalangan' ? 'dicatat oleh' : r.method === 'qr' ? 'dipindai oleh' : 'diabsenkan oleh'} {r.scanned_by || 'LO'}</div> : <>
+                {r.lat == null ? <div className="small">{fmtDT(r.created_at)} WIB · {r.status === 'berhalangan' ? 'dicatat oleh' : r.method === 'qr' ? 'dipindai oleh' : 'diabsenkan oleh'} {personName(r.scanned_by) || 'LO'}</div> : <>
                 <div className="small">{fmtDT(r.created_at)} WIB · {dist(r.distance_m)} dari venue · akurasi ±{Math.round(r.accuracy_m)} m</div>
                 <div className="rec__geo">{Number(r.lat).toFixed(6)}, {Number(r.lng).toFixed(6)}</div>
                 <button type="button" className="link-btn" onClick={() => setMapPoint({
-                  lat: r.lat, lng: r.lng, title: `${r.name} — ${r.venue_name || 'lokasi absen'}`,
+                  lat: r.lat, lng: r.lng, title: `${personName(r.name)} — ${r.venue_name || 'lokasi absen'}`,
                   rows: [['Waktu', fmtDT(r.created_at) + ' WIB'], ['Venue', r.venue_name], ['Jarak ke venue', dist(r.distance_m)],
                     ['Akurasi GPS', `±${Math.round(r.accuracy_m)} m`], ['Status', ST_LABEL[r.status]]],
                 })}><Icon name="pin" size={14} />Lihat di peta</button></>}
@@ -220,7 +221,7 @@ export default function Records() {
             {attempts.map((a) => (
               <tr key={a.id} role="row">
                 <td role="cell" data-label="Waktu" className="small">{fmtDT(a.created_at)}</td>
-                <td role="cell" data-label="Peserta" className="stack-full">{a.name} <span className="muted small">{a.code}</span></td>
+                <td role="cell" data-label="Peserta" className="stack-full">{personName(a.name)} <span className="muted small">{a.code}</span></td>
                 <td role="cell" data-label="Alasan" className="small stack-full">{a.reasons.join(' ')}</td>
                 <td role="cell" data-label="Jarak">{dist(a.distance_m)}</td>
                 <td role="cell">{a.lat != null && (
@@ -242,7 +243,7 @@ export default function Records() {
       <dialog ref={deleteDialog} className="assignment-dialog" aria-labelledby="delete-attendance-title"
         aria-describedby="delete-attendance-description" onCancel={(event) => { if (deleting) event.preventDefault(); }}>
         <header><h3 id="delete-attendance-title">Hapus absensi</h3></header>
-        <p id="delete-attendance-description">Catatan absensi <strong>{deleteTarget?.name}</strong> pada sesi ini akan dihapus permanen.</p>
+        <p id="delete-attendance-description">Catatan absensi <strong>{personName(deleteTarget?.name)}</strong> pada sesi ini akan dihapus permanen.</p>
         <form className="form" onSubmit={deleteAttendance}>
           <label>
             Ketik persis “{DELETE_CONFIRMATION}”

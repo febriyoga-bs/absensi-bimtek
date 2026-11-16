@@ -166,7 +166,7 @@ export default function Scan() {
   }
 
   function absenkan(p) {
-    setShot({ code: p.code, name: p.representative ? personName(p.representative.name) : p.name,
+    setShot({ code: p.code, name: p.representative ? personName(p.representative.name) : personName(p.name),
       originalName: p.representative ? p.name : null, position: p.position, school: p.institution?.split('; ')[0],
       sessionId: p.session?.id, sessionName: sessionTitle(p.session), isTest: p.session?.is_test });
   }
@@ -314,10 +314,10 @@ export default function Scan() {
                 setLoading(true); setFilterLo(e.target.value); setPage(1);
               }}>
                 <option value="">Semua LO bertugas</option>
-                {lo && <option value="mine">{user?.name || 'LO saya'} (saya)</option>}
+                {lo && <option value="mine">{personName(user?.name) || 'LO saya'} (saya)</option>}
                 {filterLo && filterLo !== 'mine' && !list?.owners?.some((owner) => String(owner.id) === filterLo) &&
                   <option value={filterLo}>LO dipilih (di luar venue)</option>}
-                {list?.owners?.filter((owner) => owner.id !== list.current_lo_id).map((owner) => <option key={owner.id} value={owner.id}>{owner.name}</option>)}
+                {list?.owners?.filter((owner) => owner.id !== list.current_lo_id).map((owner) => <option key={owner.id} value={owner.id}>{personName(owner.name)}</option>)}
               </select></label>
               {tab === 'sekolah' && <label><span>Jabatan peserta</span><select aria-label="Filter jabatan peserta" value={filterPosition}
                 onChange={(e) => { setLoading(true); setFilterPosition(e.target.value); setPage(1); }}>
@@ -392,7 +392,7 @@ export default function Scan() {
                     const [arrival, arrivalStyle] = arrivalBadge(p.arrival_status);
                     return (
                       <tr key={p.id} role="row">
-                        <td role="cell"><b>{p.representative ? personName(p.representative.name) : p.name}</b>
+                        <td role="cell"><b>{p.representative ? personName(p.representative.name) : personName(p.name)}</b>
                           {p.representative && <><span className="tag tag--venue">Mewakili</span>
                             <div className="muted small">Mewakili {personName(p.name)}</div></>}
                           {!p.representative && <WhatsAppLink name={p.name} phone={p.phone} />}
@@ -484,7 +484,7 @@ export default function Scan() {
                 <b className="scan__title">{K.title}</b>
                 {result.person && (
                   <>
-                    <div className="scan__name">{result.person.name}</div>
+                    <div className="scan__name">{personName(result.person.name)}</div>
                     <div className="muted small">{[result.person.position, result.person.code].filter(Boolean).join(' · ')}</div>
                     {result.person.institution && <div className="muted small">{result.person.institution}</div>}
                     {result.person.ruangan && <div className="small">Ruangan: <b>{formatRoom(result.person.ruangan)}</b></div>}
@@ -506,7 +506,7 @@ export default function Scan() {
               {history.map((h) => (
                 <li key={h.id} className={`scan__hist--${KIND[h.kind].cls}`}>
                   <Icon name={KIND[h.kind].icon} size={15} />
-                  <span><b>{h.person?.name || h.msg}</b>{h.person && h.kind !== 'ok' && <small> — {h.msg || KIND[h.kind].title}</small>}
+                  <span><b>{h.person?.name ? personName(h.person.name) : h.msg}</b>{h.person && h.kind !== 'ok' && <small> — {h.msg || KIND[h.kind].title}</small>}
                     {h.session && <small className="muted"> · {sessionTitle(h.session)}</small>}
                   </span>
                   <small className="muted">{new Date(h.id).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</small>
@@ -520,7 +520,7 @@ export default function Scan() {
         onClose={() => setUnavailableTarget(null)} onCancel={(event) => { if (pending) event.preventDefault(); }}>
         {unavailableTarget && <>
           <header><h3 id="unavailable-title">Mundur/Berhalangan Hadir</h3></header>
-          <p>Tandai <strong>{unavailableTarget.name}</strong> sebagai mundur atau berhalangan hadir?</p>
+          <p>Tandai <strong>{personName(unavailableTarget.name)}</strong> sebagai mundur atau berhalangan hadir?</p>
           <p className="muted small">{unavailableTarget.institution}</p>
           <p><b>{sessionTitle(unavailableTarget.session)}</b>
             {unavailableTarget.session.is_test && <span className="tag tag--venue">Uji coba</span>}
@@ -553,11 +553,11 @@ function LoShot({ target, user, busy, onSend, onClose }) {
   function capture() {
     const lines = [
       target.sessionName ? `${target.isTest ? 'Uji coba · ' : ''}${target.sessionName}` : '',
-      `${target.name}${target.position ? ` (${target.position})` : ''}`,
+      `${personName(target.name)}${target.position ? ` (${target.position})` : ''}`,
       target.originalName ? `Mewakili ${personName(target.originalName)}` : '',
       target.school || target.code,
       `${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })} WIB${user?.venue ? ' • ' + user.venue.name : ''}`,
-      `Diabsenkan oleh ${user?.name || 'LO'}`,
+      `Diabsenkan oleh ${personName(user?.name) || 'LO'}`,
     ];
     const img = camRef.current?.capture(lines);
     if (!img) return setErr('Kamera belum siap.');
@@ -580,7 +580,7 @@ function LoShot({ target, user, busy, onSend, onClose }) {
       <div className="lo-shot__card">
         <div className="lo-shot__head">
           <Icon name="camera" size={22} />
-          <span><b>Foto {target.name}</b>{target.originalName && <small>Mewakili {personName(target.originalName)}</small>}
+          <span><b>Foto {personName(target.name)}</b>{target.originalName && <small>Mewakili {personName(target.originalName)}</small>}
             <small>{[target.position, target.school].filter(Boolean).join(' · ') || 'Arahkan kamera ke wajah peserta'}</small></span>
           <button type="button" className="btn btn--sm" onClick={onClose} disabled={busy} aria-label="Tutup"><Icon name="x" size={16} /></button>
         </div>

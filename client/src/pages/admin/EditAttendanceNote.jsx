@@ -1,3 +1,4 @@
+import { personName } from '../../lib/personName.js';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api.js';
 
@@ -26,7 +27,7 @@ export default function EditAttendanceNote({ target, onClose, onSaved }) {
   return <dialog ref={dialog} className="assignment-dialog" aria-labelledby="edit-note-title"
     onClose={onClose} onCancel={(event) => { if (busy) event.preventDefault(); }}>
     <header><h3 id="edit-note-title">Ubah catatan</h3></header>
-    <p><strong>{target.name}</strong></p>
+    <p><strong>{personName(target.name)}</strong></p>
     <form className="form" onSubmit={save}>
       <label>Catatan kendala sekolah dalam pelaporan progres 50%
         <textarea autoFocus rows={5} maxLength={1000} required disabled={busy}

@@ -4,6 +4,13 @@ node_modules/
 # Build output
 dist/
 
+# Hasil pembuatan akun LO berisi kredensial, hanya disimpan lokal
+/output/pdf/Akun-LO-*.pdf
+/output/xlsx/Akun-LO-*.xlsx
+/output/xlsx/Akun-LO-*.xlsx.*
+/tmp/sheets/build_lo_accounts.mjs
+/tmp/sheets/akun-lo-preview.png
+
 # Environment / secrets (file contoh tetap di-commit)
 .env
 .env.*
@@ -41,3 +48,15 @@ data/*-pemetaan.readiness.json
 __pycache__/
 *.py[cod]
 tmp/pdfs/panduan-update-*.png
+
+# Dokumentasi PRD, arsitektur, dan maintenance hasil generasi lokal
+/docs/PRD.md
+/docs/ARSITEKTUR-WEB.md
+/docs/PANDUAN-PEMULA-DAN-MAINTENANCE.md
+/docs/README.md
+/output/pdf/PRD-BIMTEK.pdf
+/output/pdf/Arsitektur-Web-BIMTEK.pdf
+/output/pdf/Panduan-Pemula-dan-Maintenance-BIMTEK.pdf
+/output/pdf/Dokumentasi-Lengkap-BIMTEK.pdf
+/tmp/pdfs/build_project_docs.py
+/tmp/pdfs/dokumentasi/

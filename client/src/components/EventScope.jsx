@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { setSelectedEvent } from '../event.js';
+import { adminToken, adminUser } from '../api.js';
 
 const EventsContext = createContext(null);
 export const useEvents = () => useContext(EventsContext);
@@ -15,6 +16,11 @@ export default function EventScope({ children }) {
       return response.json();
     }).then(async (rows) => {
       if (!live) return;
+      const user = adminUser.get();
+      if (adminToken.get() && user?.role === 'lo' && Array.isArray(user.events)
+        && window.location.pathname.startsWith('/admin/') && window.location.pathname !== '/admin/login') {
+        rows = rows.filter((row) => user.events.some((event) => event.id === row.id));
+      }
       const explicit = new URLSearchParams(window.location.search).get('event');
       let saved;
       try { saved = localStorage.getItem('bimtek_event'); } catch { /* unavailable */ }

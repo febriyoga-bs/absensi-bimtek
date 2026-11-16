@@ -85,6 +85,8 @@ html { scroll-padding-top: calc(var(--topbar-height, 56px) + 16px); }
 .appearance-bar--landing { position: sticky; top: 0; z-index: 1100; }
 .landing-topbar-nav { display: flex; gap: 4px; overflow-x: auto; min-width: 0; scrollbar-width: thin; }
 .landing-menu-toggle { display: none; }
+.lo-sort-button { border: 0; background: transparent; color: inherit; font: inherit; font-weight: inherit; text-transform: inherit; padding: 6px 0; width: 100%; text-align: left; cursor: pointer; }
+.lo-sort-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
 .landing-topbar-nav a { flex: none; padding: 9px 12px; color: var(--muted); text-decoration: none; font-size: 12px; font-weight: 700; border-radius: 9px; white-space: nowrap; }
 .landing-topbar-nav a:hover, .landing-topbar-nav a[aria-current="location"] { color: var(--accent); background: var(--accent-soft); }
 .appearance-bar--landing .appearance-brand, .appearance-bar--landing .appearance-control { flex: none; }

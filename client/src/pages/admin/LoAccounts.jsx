@@ -1,3 +1,5 @@
+import { sortTableRows } from '../../lib/tableSort.js';
+import { personName } from '../../lib/personName.js';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api.js';
@@ -21,7 +23,8 @@ export default function LoAccounts() {
   const [loginFilter, setLoginFilter] = useState('all');
   const [venueFilter, setVenueFilter] = useState('');
   const [loginDate, setLoginDate] = useState('');
-  const [loginSort, setLoginSort] = useState('default');
+  const [sort, setSort] = useState({ column: null, direction: 'asc' });
+  const changeSort = (column) => setSort((previous) => ({ column, direction: previous.column === column && previous.direction === 'asc' ? 'desc' : 'asc' }));
   const [venues, setVenues] = useState([]);
   const [form, setForm] = useState(blank);
   const [msg, setMsg] = useState(null);
@@ -51,7 +54,7 @@ export default function LoAccounts() {
   }
 
   async function del(l) {
-    if (!window.confirm(`Hapus akun LO "${l.name}" (${l.username})?`)) return;
+    if (!window.confirm(`Hapus akun LO "${personName(l.name)}" (${l.username})?`)) return;
     await api(`/admin/lo/${l.id}`, { method: 'DELETE', admin: true });
     load();
   }
@@ -70,13 +73,10 @@ export default function LoAccounts() {
     if (loginFilter === 'date') return !loginDate || (!!last && wibDate(last) === loginDate);
     return true;
   });
-  if (loginSort !== 'default') filtered.sort((a, b) => {
-    if (!a.last_login_at && !b.last_login_at) return a.name.localeCompare(b.name, 'id');
-    if (!a.last_login_at) return 1;
-    if (!b.last_login_at) return -1;
-    const delta = new Date(a.last_login_at) - new Date(b.last_login_at);
-    return (loginSort === 'newest' ? -delta : delta) || a.name.localeCompare(b.name, 'id');
-  });
+  const sorted = sortTableRows(filtered.map((account) => ({ account, sortValues: [
+    personName(account.name), account.username, account.venue_name,
+    account.last_login_at ? Date.parse(account.last_login_at) : null, account.active ? 1 : 0,
+  ] })), sort.column, sort.direction).map(({ account }) => account);
   const copyText = (c) => `Login Dashboard LO — ${c.venue}\n${loginUrl}\nUsername: ${c.username}\nPassword: ${c.password}`;
 
   return (
@@ -97,7 +97,7 @@ export default function LoAccounts() {
       {shown && (
         <div className="card cred">
           <div className="row" style={{ justifyContent: 'space-between' }}>
-            <b><Icon name="check" size={18} /> Kredensial untuk {shown.name}</b>
+            <b><Icon name="check" size={18} /> Kredensial untuk {personName(shown.name)}</b>
             <button className="btn btn--sm" onClick={() => setShown(null)}><Icon name="x" size={14} />Tutup</button>
           </div>
           <p className="muted small" style={{ margin: 0 }}>Password tidak bisa dilihat lagi setelah ditutup. Salin dan kirim ke LO sekarang.</p>
@@ -150,23 +150,19 @@ export default function LoAccounts() {
         {loginFilter === 'date' && <label>Tanggal (WIB)
           <input type="date" value={loginDate} onChange={(event) => setLoginDate(event.target.value)} />
         </label>}
-        <label>Urutan login
-          <select value={loginSort} onChange={(event) => setLoginSort(event.target.value)}>
-            <option value="default">Urutan bawaan</option>
-            <option value="newest">Login terbaru dahulu</option>
-            <option value="oldest">Login terlama dahulu</option>
-          </select>
-        </label>
         <button type="button" className="btn btn--sm" onClick={load}><Icon name="refresh" size={15} />Muat ulang</button>
-        <button type="button" className="btn btn--sm" onClick={() => { setVenueFilter(''); setLoginFilter('all'); setLoginDate(''); setLoginSort('default'); }}>Reset filter</button>
+        <button type="button" className="btn btn--sm" onClick={() => { setVenueFilter(''); setLoginFilter('all'); setLoginDate(''); setSort({ column: null, direction: 'asc' }); }}>Reset filter</button>
       </div>
       {loaded && <p className="muted small" role="status">Menampilkan {filtered.length} dari {list.length} akun LO. Filter menggunakan tanggal login terakhir dalam WIB.</p>}
       <table className="table stack-table" role="table" aria-label="Daftar akun LO">
-        <thead><tr><th>Nama</th><th>Username</th><th>Venue</th><th>Login terakhir</th><th>Status</th><th></th></tr></thead>
+        <thead><tr>{['Nama', 'Username', 'Venue', 'Login terakhir', 'Status'].map((label, column) =>
+          <th key={label} scope="col" aria-sort={sort.column === column ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
+            <button type="button" className="lo-sort-button" onClick={() => changeSort(column)}>{label}<span aria-hidden="true">{sort.column === column ? (sort.direction === 'asc' ? ' ↑' : ' ↓') : ' ↕'}</span></button>
+          </th>)}<th scope="col">Tindakan</th></tr></thead>
         <tbody>
-          {filtered.map((l) => (
+          {sorted.map((l) => (
             <tr key={l.id} role="row">
-              <td role="cell"><b>{l.name}</b></td>
+              <td role="cell"><b>{personName(l.name)}</b></td>
               <td role="cell" data-label="Username"><code>{l.username}</code></td>
               <td role="cell" data-label="Venue"><span className="tag tag--venue">{l.venue_name}</span></td>
               <td role="cell" data-label="Login terakhir" className="small">{l.last_login_at ? fmtDT(l.last_login_at) : <span className="muted">Belum pernah</span>}</td>

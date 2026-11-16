@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import publicRoutes from './routes/public.js';
-import adminRoutes from './routes/admin.js';
+import adminRoutes, { loginHandler, loginLimiter } from './routes/admin.js';
 import { requestLimiter, securityHeaders } from './security.js';
 import { eventRoutes, selectEvent } from './events.js';
 
@@ -19,6 +19,7 @@ app.use(securityHeaders);
 app.use('/api', requestLimiter);
 app.use(express.json({ limit: '3mb' }));
 app.use('/api/events', eventRoutes);
+app.post('/api/admin/login', loginLimiter, loginHandler);
 app.use('/api', selectEvent);
 
 app.use('/api/admin', adminRoutes);

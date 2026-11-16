@@ -1,3 +1,4 @@
+import { personName } from '../lib/personName.js';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
@@ -100,7 +101,7 @@ export default function Riwayat() {
                           <span className="tag tag--type">{r.session_type}</span>
                         </span>
                         <span className="history__meta">
-                          {r.name} · <span className="cap">{r.role}</span>
+                          {personName(r.name)} · <span className="cap">{r.role}</span>
                         </span>
                         <span className="history__meta">
                           <Icon name="pin" size={14} /> {r.venue || '-'} · {r.distance_m} m

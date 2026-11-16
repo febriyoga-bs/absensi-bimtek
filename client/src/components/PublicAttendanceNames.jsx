@@ -1,3 +1,4 @@
+import { personName } from '../lib/personName.js';
 import FilterField from './FilterField.jsx';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
@@ -17,7 +18,7 @@ export default function PublicAttendanceNames({ selection, onClose }) {
     return () => { active = false; };
   }, [selection]);
   const term = query.trim().toLocaleLowerCase('id');
-  const visible = rows?.filter((row) => `${row.name} ${row.institution}`.toLocaleLowerCase('id').includes(term));
+  const visible = rows?.filter((row) => `${personName(row.name)} ${row.institution}`.toLocaleLowerCase('id').includes(term));
   return <dialog ref={dialog} className="assignment-dialog" aria-labelledby="public-attendance-names" onClose={onClose}>
     <header><div><h3 id="public-attendance-names">{selection.label} · {selection.scope === 'all' ? 'Target absensi' : 'Sudah absen'}</h3>
       <p className="muted small">{selection.venue} · {selection.period}</p></div>
@@ -26,7 +27,7 @@ export default function PublicAttendanceNames({ selection, onClose }) {
     {error && <p className="alert alert--err" role="alert">{error}</p>}
     {!rows && !error && <p role="status">Memuat daftar nama…</p>}
     {visible && <><p className="muted small" role="status">{visible.length} dari {rows.length} nama</p>
-      <ol>{visible.map((row, index) => <li key={index}><b>{row.name}</b>
+      <ol>{visible.map((row, index) => <li key={index}><b>{personName(row.name)}</b>
         {row.institution && <div className="muted small">{row.institution}</div>}
         <span className={`tag ${row.checked_in ? 'tag--open' : 'tag--off'}`}>{row.checked_in ? 'Sudah absen' : 'Belum absen'}</span>
       </li>)}</ol>{!visible.length && <p className="muted">Tidak ada nama yang cocok.</p>}</>}

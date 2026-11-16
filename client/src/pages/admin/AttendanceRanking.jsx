@@ -1,3 +1,4 @@
+import { personName } from '../../lib/personName.js';
 import { useEffect, useState } from 'react';
 import { api } from '../../api.js';
 import { sessionTitle } from './shared.js';
@@ -56,9 +57,9 @@ export default function AttendanceRanking({ venue, query }) {
     {sessionId && !result && !error && <p role="status">Memuat peringkat absensi…</p>}
     {result && <div className="reporting-ranking" tabIndex={0}>
       {rows.length ? <ol>{rows.map((row) => <li key={row.id}>
-        <div className="reporting-ranking-name"><b>{row.rank}. {row.name}</b>
+        <div className="reporting-ranking-name"><b>{row.rank}. {personName(row.name)}</b>
           <strong>{row.completed}/{row.target} sudah dicatat{row.ratio == null ? '' : ` (${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(row.ratio)}%)`}</strong></div>
-        <progress aria-label={`${row.completed} dari ${row.target} sudah dicatat oleh ${row.name}`} value={row.ratio ?? 0} max={100} />
+        <progress aria-label={`${row.completed} dari ${row.target} sudah dicatat oleh ${personName(row.name)}`} value={row.ratio ?? 0} max={100} />
         <p>{row.present}/{row.assigned} peserta/fasilitator hadir di venue · {row.participants} peserta dan {row.facilitators} fasilitator sudah diabsenkan · {row.unavailable} mundur/berhalangan hadir · {row.venue}</p>
       </li>)}</ol> : <p className="muted">Tidak ada LO yang cocok dengan filter.</p>}
     </div>}

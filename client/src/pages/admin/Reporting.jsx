@@ -1,3 +1,4 @@
+import { personName } from '../../lib/personName.js';
 import FilterField from '../../components/FilterField.jsx';
 import { useEffect, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
@@ -99,7 +100,7 @@ function ReportingRanking({ rows, movement, movementLabel, own }) {
     {rows.length ? <ol>
       {rows.map((row) => <li key={row.key}>
         <div className="reporting-ranking-name">
-          <b>{row.rank}. {row.name}{own && ownerKey(own) === row.key && <span className="reporting-own">Anda</span>}</b>
+          <b>{row.rank}. {personName(row.name)}{own && ownerKey(own) === row.key && <span className="reporting-own">Anda</span>}</b>
           <strong>{movement ? `+${nf.format(row.change)}` : `${nf.format(row.ratio)}%`}</strong>
         </div>
         <progress aria-label={`${movement ? 'Pergerakan' : 'Capaian'} ${row.name}`}
@@ -297,9 +298,9 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
         label: 'Bendahara dan Pengawas', subtitle: s.venue, path: `/admin/reporting/school/${s.npsn}`, checkInDays,
       })}>{s.name}</button> : <b>{s.name}</b>}
         <div className="muted small">NPSN {s.npsn} · {s.city || s.province || '—'}</div></>,
-      <>{s.venue}<div className="muted small">{formatRoom(s.room)}{s.lo && ` · ${s.lo}`}</div></>,
-      facilitators.has(s.facilitator_id) ? <>{facilitators.get(s.facilitator_id).name}
-        <WhatsAppLink name={facilitators.get(s.facilitator_id).name} phone={facilitators.get(s.facilitator_id).phone} /></> : null,
+      <>{s.venue}<div className="muted small">{formatRoom(s.room)}{s.lo && ` · ${personName(s.lo)}`}</div></>,
+      facilitators.has(s.facilitator_id) ? <>{personName(facilitators.get(s.facilitator_id).name)}
+        <WhatsAppLink name={personName(facilitators.get(s.facilitator_id).name)} phone={facilitators.get(s.facilitator_id).phone} /></> : null,
       <>{reportTag(s.status)}{s.wait_days != null && <div className="muted small">{nf.format(s.wait_days)} hari</div>}</>,
       s.progress == null ? '—' : `${nf.format(s.progress)}%`, reportTag(venueStatus(s)),
       ...(current ? checkInDays.map((day) => reportTag(checkInStatus(s, day))) : [reportTag('tidak_terdata')]),
@@ -322,9 +323,9 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
         const unsent = group.filter((s) => s.status === 'belum_kirim').length;
         return { key: f.id, late, pending, name: f.name, onOpen: () => setSelectedFacilitator({ ...f }),
           sortValues: [f.name, [f.venue, f.lo, formatRoom(f.room)].filter(Boolean).join(' '), group.length, unsent, pending, late], cells: [
-          <><b>{f.name}</b><WhatsAppLink name={f.name} phone={f.phone} /><div className="muted small">{[f.institution, f.coordinator].filter(Boolean).join(' · ')}</div></>,
-          <>{f.venue}<div className="muted small">{[formatRoom(f.room), f.lo].filter(Boolean).join(' · ')}</div></>,
-          <button className="btn btn--sm" onClick={() => setSelectedFacilitator({ ...f })} aria-label={`Lihat sekolah ${f.name}`}>{group.length}</button>,
+          <><b>{personName(f.name)}</b><WhatsAppLink name={personName(f.name)} phone={f.phone} /><div className="muted small">{[f.institution, f.coordinator].filter(Boolean).join(' · ')}</div></>,
+          <>{f.venue}<div className="muted small">{[formatRoom(f.room), personName(f.lo)].filter(Boolean).join(' · ')}</div></>,
+          <button className="btn btn--sm" onClick={() => setSelectedFacilitator({ ...f })} aria-label={`Lihat sekolah ${personName(f.name)}`}>{group.length}</button>,
           unsent, pending, late,
         ] };
       }).sort((a, b) => b.late - a.late || b.pending - a.pending || a.name.localeCompare(b.name, 'id'));
@@ -391,7 +392,7 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
           setSelectedFacilitator(null);
         }}>
           {!data.lo.some(venueMatch) && <option value="">Belum ada LO di venue ini</option>}
-          {data.lo.filter(venueMatch).map((owner) => <option key={ownerKey(owner)} value={ownerKey(owner)}>{owner.name}</option>)}
+          {data.lo.filter(venueMatch).map((owner) => <option key={ownerKey(owner)} value={ownerKey(owner)}>{personName(owner.name)}</option>)}
         </select></FilterField>}
       </div>}
       {(dataset === 'k3' || (current && selectedEvent()?.id === 3)) && data.baseline &&
@@ -442,7 +443,7 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
         {view !== 'ranking' && <FilterField label="Filter LO pelaporan"><select aria-label="Filter LO pelaporan" value={lo} onChange={(e) => { setLo(e.target.value); setSelectedFacilitator(null); }}>
           <option value="">Semua LO</option>
           {account && !own && <option value={UNASSIGNED}>Binaan saya</option>}
-          {data.lo.filter(venueMatch).map((owner) => <option key={ownerKey(owner)} value={ownerKey(owner)}>{owner.name}{!venue && ` · ${owner.venue}`}</option>)}
+          {data.lo.filter(venueMatch).map((owner) => <option key={ownerKey(owner)} value={ownerKey(owner)}>{personName(owner.name)}{!venue && ` · ${owner.venue}`}</option>)}
         </select></FilterField>}
       </div>}
       {lo === UNASSIGNED && <p className="alert alert--warn">Akun ini belum punya pemetaan LO yang cocok pada {datasetNames[dataset]}. Pilih Semua LO untuk melihat daftar lengkap.</p>}
@@ -496,8 +497,8 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
       {view === 'ranking' ? (attendanceRanking && current && !publicView ? <AttendanceRanking venue={venue} query={query} /> : <ReportingRanking rows={ranking} movement={movement} movementLabel={movementLabel} own={own} />)
         : <ReportingTable pageSize={publicView ? 5 : PAGE_SIZE} key={JSON.stringify([view, venue, lo, status, attendance, checkInFilters, term, threshold])}
           headers={headers} rows={rows} fullWidthColumn={current && view === 'schools' ? 'Kehadiran di venue' : undefined} />}
-      {detail && <section ref={facilitatorDetail} tabIndex={-1} className="card reporting-detail" aria-label={`Sekolah binaan ${selectedFacilitator.name}`}>
-        <div className="page-head"><h3>Sekolah binaan {selectedFacilitator.name}</h3>
+      {detail && <section ref={facilitatorDetail} tabIndex={-1} className="card reporting-detail" aria-label={`Sekolah binaan ${personName(selectedFacilitator.name)}`}>
+        <div className="page-head"><h3>Sekolah binaan {personName(selectedFacilitator.name)}</h3>
           <button className="btn btn--sm" onClick={() => setSelectedFacilitator(null)}>Tutup rincian</button></div>
         <ReportingTable key={selectedFacilitator.id} headers={schoolHeaders} rows={schoolRows(detail)}
           fullWidthColumn={current ? 'Kehadiran di venue' : undefined} />

@@ -1,3 +1,4 @@
+import { personName } from '../../lib/personName.js';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
@@ -76,13 +77,13 @@ export default function AttendanceDetailDialog({ details, onClose }) {
           {shownEntries?.length > 0 && <ol>
             {shownEntries.map((entry, index) => (
               <li key={entry.npsn || index}>
-                <b>{entry.name}</b>
+                <b>{personName(entry.name)}</b>
                 <AssignmentSchools entry={entry} />
                 {entry.people?.map((person) => {
                   const [arrival, arrivalStyle] = arrivalBadge(person.arrival_status);
-                  return <div key={`${person.position || ''}:${person.name}`} className="assignment-person">
-                    {person.position && <span className="small"><b>{person.position}</b> · {person.name}</span>}
-                    <WhatsAppLink name={person.name} phone={person.phone} />
+                  return <div key={`${person.position || ''}:${personName(person.name)}`} className="assignment-person">
+                    {person.position && <span className="small"><b>{person.position}</b> · {personName(person.name)}</span>}
+                    <WhatsAppLink name={personName(person.name)} phone={person.phone} />
                     {Object.hasOwn(person, 'arrival_status') && <span className={`tag ${arrivalStyle}`}>Venue · {arrival}</span>}
                     {details.checkInDays?.length ? <div className="assignment-person-days">
                       {details.checkInDays.map((day) => {

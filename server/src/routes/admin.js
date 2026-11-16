@@ -18,6 +18,7 @@ import { reportingDates, reportingDays, withReportingDay } from '../reportingDay
 import { getArrivalRecap, getArrivalRecapDetails, importArrivalRecap } from '../arrivalRecap.js';
 import { finiteInteger } from '../security.js';
 import { eventId } from '../eventContext.js';
+import { loginLo } from '../loLogin.js';
 
 const r = Router();
 
@@ -38,12 +39,12 @@ function scopeDay(req) {
 }
 
 /* ---------- Login (admin utama & LO venue) ---------- */
-const loginLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 80, skipSuccessfulRequests: true,
+export const loginLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 80, skipSuccessfulRequests: true,
   message: { error: 'Terlalu banyak percobaan login dari jaringan ini. Tunggu hingga 15 menit sebelum mencoba lagi.' } });
 const passwordChangeLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 20, skipSuccessfulRequests: true,
   message: { error: 'Terlalu banyak percobaan ganti kata sandi dari jaringan ini. Tunggu hingga 15 menit sebelum mencoba lagi.' } });
 
-r.post('/login', loginLimiter, ah(async (req, res) => {
+export const loginHandler = ah(async (req, res) => {
   const username = String(req.body?.username || '').trim();
   const password = String(req.body?.password || '');
 
@@ -52,17 +53,9 @@ r.post('/login', loginLimiter, ah(async (req, res) => {
     return res.json({ token: signAdmin({ role: 'admin' }), user: { role: 'admin', name: 'Admin utama' } });
   }
 
-  const { rows: [lo] } = await q(
-    `SELECT l.*, v.name AS venue_name FROM lo_accounts l JOIN venues v ON v.id=l.venue_id
-     WHERE lower(l.username)=lower($1)`, [username]);
-  if (!lo || !verifyPassword(password, lo.password_hash)) throw new HttpError(401, 'Username atau password salah');
-  if (!lo.active) throw new HttpError(403, 'Akun LO ini dinonaktifkan. Hubungi admin utama.');
-  await q('UPDATE lo_accounts SET last_login_at=now() WHERE id=$1', [lo.id]);
-  res.json({
-    token: signAdmin({ role: 'lo', username: lo.username }),
-    user: { role: 'lo', name: lo.name, venue: { id: lo.venue_id, name: lo.venue_name } },
-  });
-}));
+  const { claims, user, event } = await loginLo(username, password, req.query.event);
+  res.json({ token: signAdmin(claims), user, event });
+});
 
 r.use(requireAdmin);
 
@@ -125,7 +118,8 @@ r.get('/me', ah(async (req, res) => {
     `SELECT l.name, l.active, v.id AS venue_id, v.name AS venue_name
      FROM lo_accounts l JOIN venues v ON v.id=l.venue_id WHERE l.id=$1`, [req.user.lo]);
   if (!lo || !lo.active) throw new HttpError(401, 'Akun LO tidak aktif. Silakan login ulang.');
-  res.json({ role: 'lo', name: lo.name, venue: { id: lo.venue_id, name: lo.venue_name } });
+  const events = req.user.events && (await q('SELECT id,name,status FROM public.bimtek_events WHERE id=ANY($1::int[]) ORDER BY id', [req.user.events])).rows;
+  res.json({ role: 'lo', name: lo.name, venue: { id: lo.venue_id, name: lo.venue_name }, ...(events && { events }) });
 }));
 
 /* ---------- Ganti password akun sendiri (LO) ---------- */

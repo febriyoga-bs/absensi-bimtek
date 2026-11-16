@@ -21,11 +21,19 @@ export default function Login() {
     setErr(null);
     try {
       const body = mode === 'lo' ? { username, password: pw } : { password: pw };
-      const { token, user } = await api('/admin/login', { method: 'POST', body });
+      const { token, user, event } = await api('/admin/login', { method: 'POST', body });
       adminToken.set(token);
       adminUser.set(user);
       const next = state?.next ?? new URLSearchParams(search).get('next');
-      nav(typeof next === 'string' && /^\/admin(?:\/|\?|$)/.test(next) ? next : '/admin/pelaporan', { replace: true });
+      const destination = typeof next === 'string' && /^\/admin(?:\/|\?|$)/.test(next) ? next : '/admin/pelaporan';
+      if (event) {
+        try { localStorage.setItem('bimtek_event', String(event.id)); } catch { /* URL preserves selection */ }
+        const url = new URL(destination, window.location.origin);
+        url.searchParams.set('event', String(event.id));
+        window.location.replace(url.pathname + url.search + url.hash);
+        return;
+      }
+      nav(destination, { replace: true });
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   }
 

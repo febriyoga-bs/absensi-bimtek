@@ -192,3 +192,9 @@ Jalankan di belakang Caddy/Nginx dengan HTTPS. Kalau `R2_BUCKET` dikosongkan, fo
 7. Bagikan URL login kepada LO. Peserta menemui LO dengan nama/kode; scan QR dan absensi mandiri peserta tidak aktif.
 8. Impor laporan terbaru dan kedatangan, baca ringkasan popup, lalu muat ulang rekap jika diperlukan.
 9. Periksa status Perlu dicek, kelengkapan catatan/foto, dan unduh rekap sesuai kebutuhan.
+
+## Dokumentasi pengembang dan penerus maintenance
+
+Mulai dari [indeks dokumentasi](docs/README.md), lalu baca [PRD](docs/PRD.md), [Arsitektur Web](docs/ARSITEKTUR-WEB.md), dan [Panduan Pemula dan Maintenance](docs/PANDUAN-PEMULA-DAN-MAINTENANCE.md). Dokumen menjelaskan kebutuhan produk, implementasi saat ini, setup PowerShell, alur pengembangan, deployment, backup/restore, dan troubleshooting.
+
+Catatan untuk petunjuk di atas: hari absensi sekarang diselesaikan secara dinamis dari sesi resmi melalui `events.js` dan `reportingDays.js`; tanggal lama khusus Tahap 3 berada di `eventContext.js`. Konfigurasi deployment saat ini memakai Vercel Services dalam `vercel.json`, dengan entrypoint server `server/src/app.js`.

@@ -1,3 +1,4 @@
+import { personName } from '../../lib/personName.js';
 import FilterField from '../../components/FilterField.jsx';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -87,7 +88,7 @@ export default function People() {
   }
 
   async function del(p) {
-    if (!window.confirm(`Hapus ${p.name}?`)) return;
+    if (!window.confirm(`Hapus ${personName(p.name)}?`)) return;
     await api(`/admin/people/${p.id}`, { method: 'DELETE', admin: true });
     load();
   }
@@ -138,7 +139,7 @@ export default function People() {
     };
     const head = ['Kode', 'Nama', 'Jabatan', 'Instansi / Sekolah', 'Venue', 'Ruangan', 'Telepon', 'Link QR', 'Link WhatsApp'];
     const lines = shown.filter((p) => p.qr_token).map((p) => {
-      const msg = `Yth. ${p.name},\nBerikut kartu identitas pribadi Anda untuk BIMTEK Revitalisasi SD:\n${qrLink(p)}\n\n`
+      const msg = `Yth. ${personName(p.name)},\nBerikut kartu identitas pribadi Anda untuk BIMTEK Revitalisasi SD:\n${qrLink(p)}\n\n`
         + `Temui LO di venue dan tunjukkan nama atau kode peserta untuk pencatatan absensi.${p.ruangan ? ` Ruangan Anda: ${formatRoom(p.ruangan)}.` : ''}`
         + ' Mohon tidak dibagikan ke orang lain. Terima kasih.';
       const wa = waNum(p.phone);
@@ -280,7 +281,7 @@ export default function People() {
           {shown.slice(0, limit).map((p) => (
             <tr key={p.id} role="row">
               <td role="cell" className="nowrap"><code>{p.code}</code></td>
-              <td role="cell" data-label="Nama" className="stack-full"><b>{p.name}</b>{p.phone && <div className="muted small">{p.phone}</div>}
+              <td role="cell" data-label="Nama" className="stack-full"><b>{personName(p.name)}</b>{p.phone && <div className="muted small">{p.phone}</div>}
                 {p.notes && <div className="note-flag small" title={p.notes}><Icon name="alert" size={12} /> {p.notes}</div>}</td>
               <td role="cell" data-label="Jabatan">{p.position}</td>
               <td role="cell" data-label="Instansi / Sekolah" className="cell-clamp" title={p.institution || ''}>{p.institution}

@@ -128,9 +128,9 @@ test('venue, dashboard cache and empty attendance belong to the selected event',
 });
 
 test('LO token is resolved by username and challenge tokens stay event-bound', async () => {
-  const token = await scoped(3, () => signAdmin({ role: 'lo', username: 'lo-sama' }));
+  const token = await scoped(3, () => signAdmin({ role: 'lo', username: 'lo-sama', accounts: [{ event: 3, id: 1 }] }));
   assert.equal((await request('/admin/me?event=3', { token })).status, 200);
-  assert.equal((await request('/admin/me?event=4', { token })).status, 401);
+  assert.equal((await request('/admin/me?event=4', { token })).status, 403);
   const challenge = await scoped(3, () => signChallenge(1, 1, 'nonce'));
   assert.ok(await scoped(3, () => verifyChallenge(challenge)));
   assert.equal(await scoped(4, () => verifyChallenge(challenge)), null);
@@ -153,7 +153,7 @@ test('activation archives the previous event, blocks changes and retains readabl
 });
 
 test('only main admin can activate events and invalid event IDs are rejected', async () => {
-  const lo = await scoped(3, () => signAdmin({ role: 'lo', username: 'lo-sama' }));
+  const lo = await scoped(3, () => signAdmin({ role: 'lo', username: 'lo-sama', accounts: [{ event: 3, id: 1 }] }));
   assert.equal((await request('/events/4/status', { method: 'PUT', body: { status: 'active' }, token: lo })).status, 403);
   assert.equal((await request('/events/4/status', { method: 'PUT', body: { status: 'active' }, token: null })).status, 401);
   assert.equal((await request('/info?event=999')).status, 404);
@@ -187,4 +187,54 @@ test('Tahap 2 reporting archive remains available when Tahap 4 is selected', asy
   const third = await (await request('/dashboard/pelaporan?event=3&period=k3')).json();
   assert.equal(archive.schools.length, third.schools.length);
   assert.equal(archive.title, third.title);
+});
+
+test('LO login succeeds independently of the selected or active event', async () => {
+  await request('/events/4/status', { method: 'PUT', body: { status: 'active' } });
+  for (const path of ['/admin/login?event=4', '/admin/login', '/admin/login?event=999']) {
+    const response = await request(path, { method: 'POST', token: null,
+      body: { username: 'LO-SAMA', password: 'test-lo-password' } });
+    assert.equal(response.status, 200);
+    const login = await response.json();
+    assert.equal(login.event.id, 3);
+    assert.deepEqual(login.user.events.map((event) => event.id), [3]);
+    assert.equal((await request('/admin/me?event=3', { token: login.token })).status, 200);
+    assert.equal((await request('/admin/me?event=4', { token: login.token })).status, 403);
+  }
+});
+
+test('one LO session switches assigned events while keeping each venue scoped', async () => {
+  for (const id of [3, 4]) await scoped(id, async () => {
+    const { rows: [venue] } = await q('INSERT INTO venues (name,lat,lng) VALUES ($1,-6,106) RETURNING id', [`Login venue ${id}`]);
+    await q('INSERT INTO lo_accounts (name,username,password_hash,venue_id) VALUES ($1,$2,$3,$4)',
+      ['Shared LO', 'lo-shared-login', hashPassword('shared-test-password'), venue.id]);
+  });
+  const response = await request('/admin/login?event=4', { method: 'POST', token: null,
+    body: { username: 'lo-shared-login', password: 'shared-test-password' } });
+  assert.equal(response.status, 200);
+  const login = await response.json();
+  assert.equal(login.event.id, 4);
+  assert.deepEqual(login.user.events.map((event) => event.id), [3, 4]);
+  for (const id of [3, 4]) {
+    const me = await request(`/admin/me?event=${id}`, { token: login.token });
+    assert.equal(me.status, 200);
+    assert.equal((await me.json()).venue.name, `Login venue ${id}`);
+  }
+  await scoped(4, () => q("UPDATE lo_accounts SET active=false WHERE username='lo-shared-login'"));
+  assert.equal((await request('/admin/me?event=4', { token: login.token })).status, 401);
+  assert.equal((await request('/admin/me?event=3', { token: login.token })).status, 200);
+});
+
+test('a same-username account with different credentials does not gain access', async () => {
+  await scoped(4, () => q('INSERT INTO lo_accounts (name,username,password_hash,venue_id) VALUES ($1,$2,$3,(SELECT id FROM venues LIMIT 1))',
+    ['Different account', 'lo-sama', hashPassword('different-test-password')]));
+  const response = await request('/admin/login?event=4', { method: 'POST', token: null,
+    body: { username: 'lo-sama', password: 'test-lo-password' } });
+  assert.equal(response.status, 200);
+  const login = await response.json();
+  assert.equal(login.event.id, 3);
+  assert.equal((await request('/admin/me?event=4', { token: login.token })).status, 403);
+  const bad = await request('/admin/login?event=3', { method: 'POST', token: null,
+    body: { username: 'lo-sama', password: 'wrong-password' } });
+  assert.equal(bad.status, 401);
 });

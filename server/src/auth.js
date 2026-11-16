@@ -27,21 +27,30 @@ export async function requireAdmin(req, res, next) {
     p = jwt.verify(String(token || ''), SECRET(), { algorithms: ['HS256'] });
     if (p.adm !== true || !['admin', 'lo'].includes(p.role)) throw new Error();
     if (p.role === 'lo' && (!p.username || typeof p.username !== 'string')) throw new Error();
+    if (p.role === 'lo' && (!Array.isArray(p.accounts) || !p.accounts.length
+      || !p.accounts.every((grant) => Number.isSafeInteger(grant.event) && grant.event > 0 && Number.isSafeInteger(grant.id) && grant.id > 0))) throw new Error();
   } catch {
     return res.status(401).json({ error: 'Sesi login berakhir, silakan login ulang' });
   }
   if (p.role === 'lo') {
     try {
+      if (Array.isArray(p.accounts) && !p.accounts.some((account) => account.event === eventId())) {
+        return res.status(403).json({ error: 'Akun Anda tidak memiliki penugasan untuk kegiatan ini.' });
+      }
       const { rows: [account] } = await q('SELECT id, active, venue_id FROM lo_accounts WHERE lower(username)=lower($1)', [p.username]);
       if (!account?.active) {
         return res.status(401).json({ error: 'Akun atau penempatan venue berubah. Silakan login ulang.' });
+      }
+      if (Array.isArray(p.accounts) && !p.accounts.some((grant) => grant.event === eventId() && grant.id === account.id)) {
+        return res.status(403).json({ error: 'Penugasan akun berubah. Silakan login ulang.' });
       }
       p.lo = account.id; p.venue = account.venue_id;
     } catch (e) {
       return next(e);
     }
   }
-  req.user = { role: p.role === 'lo' ? 'lo' : 'admin', lo: p.lo ?? null, venue: p.venue ?? null };
+  req.user = { role: p.role === 'lo' ? 'lo' : 'admin', lo: p.lo ?? null, venue: p.venue ?? null,
+    ...(Array.isArray(p.accounts) && { events: p.accounts.map((account) => account.event) }) };
   next();
 }
 

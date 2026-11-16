@@ -1,3 +1,4 @@
+import { personName } from '../../lib/personName.js';
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { api, adminToken, adminUser } from '../../api.js';
@@ -56,7 +57,7 @@ export default function AdminLayout() {
           {user && (
             <div className="admin__user">
               <span className={`tag ${lo ? 'tag--venue' : 'tag--type'}`}>{lo ? 'LO' : 'Admin utama'}</span>
-              <b>{user.name}</b>
+              <b>{personName(user.name)}</b>
               {lo && <small><Icon name="pin" size={13} /> {user.venue?.name}</small>}
             </div>
           )}

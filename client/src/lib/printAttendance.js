@@ -1,3 +1,4 @@
+import { personName } from './personName.js';
 import { api, adminUrl } from '../api.js';
 
 const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -44,12 +45,12 @@ export async function printAttendance({ filters, title, onProgress }) {
       <p id="ready">Memuat foto…</p></div><header><h1>Rekap Absensi BIMTEK Revitalisasi SD</h1>
       <p>${escape(title)}</p><p>${records.length} catatan absensi · Dicetak ${escape(time(Date.now()))} WIB</p></header>
       <div class="cards">${records.map((row) => `<article>${row.has_photo
-        ? `<img src="${escape(row.photo_url || adminUrl(`/photo/${row.id}`))}" alt="Foto ${escape(row.name)}">`
-        : '<p class="body">Tidak ada foto</p>'}<div class="body"><h2>${escape(row.name)}</h2>
+        ? `<img src="${escape(row.photo_url || adminUrl(`/photo/${row.id}`))}" alt="Foto ${escape(personName(row.name))}">`
+        : '<p class="body">Tidak ada foto</p>'}<div class="body"><h2>${escape(personName(row.name))}</h2>
         <p>${escape([row.code, row.position].filter(Boolean).join(' · '))}</p>
         <p>${escape(row.institution || '-')}</p><p>Venue: ${escape(row.venue_name || '-')}</p>
         <p>${escape(time(row.created_at))} WIB · ${escape(statuses[row.status] || row.status)}</p>
-        ${row.scanned_by ? `<p>Dicatat oleh ${escape(row.scanned_by)}</p>` : ''}
+        ${row.scanned_by ? `<p>Dicatat oleh ${escape(personName(row.scanned_by))}</p>` : ''}
         ${row.participant_note ? `<p><b>Catatan kendala</b></p><div class="note">${escape(row.participant_note)}</div>` : ''}
         </div></article>`).join('')}</div></body></html>`);
     report.document.close();
