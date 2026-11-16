@@ -15,7 +15,7 @@ const SECRET = () => {
  *  - LO venue    : { adm: true, role: 'lo', lo: id, venue: venueId }  → hanya data venue-nya
  */
 export const signAdmin = (payload = { role: 'admin' }) =>
-  jwt.sign({ adm: true, event: eventId(), ...payload }, SECRET(), { expiresIn: '12h' });
+  jwt.sign({ adm: true, ...(payload.role === 'lo' ? payload : { event: eventId(), ...payload }) }, SECRET(), { expiresIn: '12h' });
 
 export async function requireAdmin(req, res, next) {
   const header = req.headers.authorization || '';
@@ -26,17 +26,17 @@ export async function requireAdmin(req, res, next) {
   try {
     p = jwt.verify(String(token || ''), SECRET(), { algorithms: ['HS256'] });
     if (p.adm !== true || !['admin', 'lo'].includes(p.role)) throw new Error();
-    if (p.role === 'lo' && (!Number.isSafeInteger(p.lo) || !Number.isSafeInteger(p.venue) || p.lo < 1 || p.venue < 1)) throw new Error();
+    if (p.role === 'lo' && (!p.username || typeof p.username !== 'string')) throw new Error();
   } catch {
     return res.status(401).json({ error: 'Sesi login berakhir, silakan login ulang' });
   }
   if (p.role === 'lo') {
-    if ((p.event ?? 3) !== eventId()) return res.status(401).json({ error: 'Silakan login menggunakan akun LO untuk kegiatan yang dipilih.' });
     try {
-      const { rows: [account] } = await q('SELECT active, venue_id FROM lo_accounts WHERE id=$1', [p.lo]);
-      if (!account?.active || account.venue_id !== p.venue) {
+      const { rows: [account] } = await q('SELECT id, active, venue_id FROM lo_accounts WHERE lower(username)=lower($1)', [p.username]);
+      if (!account?.active) {
         return res.status(401).json({ error: 'Akun atau penempatan venue berubah. Silakan login ulang.' });
       }
+      p.lo = account.id; p.venue = account.venue_id;
     } catch (e) {
       return next(e);
     }

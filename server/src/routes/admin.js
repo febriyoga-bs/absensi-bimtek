@@ -59,7 +59,7 @@ r.post('/login', loginLimiter, ah(async (req, res) => {
   if (!lo.active) throw new HttpError(403, 'Akun LO ini dinonaktifkan. Hubungi admin utama.');
   await q('UPDATE lo_accounts SET last_login_at=now() WHERE id=$1', [lo.id]);
   res.json({
-    token: signAdmin({ role: 'lo', lo: lo.id, venue: lo.venue_id }),
+    token: signAdmin({ role: 'lo', username: lo.username }),
     user: { role: 'lo', name: lo.name, venue: { id: lo.venue_id, name: lo.venue_name } },
   });
 }));

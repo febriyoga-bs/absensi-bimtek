@@ -127,8 +127,8 @@ test('venue, dashboard cache and empty attendance belong to the selected event',
   assert.deepEqual(b.rows, []);
 });
 
-test('LO and challenge tokens cannot be reused in another event', async () => {
-  const token = await scoped(3, () => signAdmin({ role: 'lo', lo: 1, venue: 1 }));
+test('LO token is resolved by username and challenge tokens stay event-bound', async () => {
+  const token = await scoped(3, () => signAdmin({ role: 'lo', username: 'lo-sama' }));
   assert.equal((await request('/admin/me?event=3', { token })).status, 200);
   assert.equal((await request('/admin/me?event=4', { token })).status, 401);
   const challenge = await scoped(3, () => signChallenge(1, 1, 'nonce'));
@@ -153,7 +153,7 @@ test('activation archives the previous event, blocks changes and retains readabl
 });
 
 test('only main admin can activate events and invalid event IDs are rejected', async () => {
-  const lo = await scoped(3, () => signAdmin({ role: 'lo', lo: 1, venue: 1 }));
+  const lo = await scoped(3, () => signAdmin({ role: 'lo', username: 'lo-sama' }));
   assert.equal((await request('/events/4/status', { method: 'PUT', body: { status: 'active' }, token: lo })).status, 403);
   assert.equal((await request('/events/4/status', { method: 'PUT', body: { status: 'active' }, token: null })).status, 401);
   assert.equal((await request('/info?event=999')).status, 404);

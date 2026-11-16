@@ -1,5 +1,4 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { adminToken, adminUser } from '../api.js';
 import { setSelectedEvent } from '../event.js';
 
 const EventsContext = createContext(null);
@@ -38,9 +37,6 @@ export default function EventScope({ children }) {
     try { localStorage.setItem('bimtek_event', id); } catch { /* URL preserves selection */ }
     const url = new URL(window.location.href);
     url.searchParams.set('event', id);
-    if (adminUser.get()?.role === 'lo') {
-      adminToken.clear(); url.pathname = '/admin/login'; url.hash = '';
-    }
     window.location.assign(url.href);
   }
   if (error) return <main className="panel" style={{ margin: 24 }}><p role="alert">{error}</p><button className="btn" onClick={() => setRevision((n) => n + 1)}>Coba lagi</button></main>;
