@@ -20,7 +20,9 @@ export function parseProgressCsv(csv, knownNpsns = null) {
     const npsn = get('npsn');
     if (knownNpsns && !knownNpsns.has(npsn)) return null;
     const raw = get('capaian (%)');
-    const progress = raw === '' ? null : Number(raw.replace('%','').replace(',','.'));
+    // Sumber Progres dapat memiliki pembulatan sedikit di atas 100%.
+    // Nilai yang ditampilkan dan disimpan tetap dibatasi pada 100%.
+    const progress = raw === '' ? null : Math.min(Number(raw.replace('%','').replace(',','.')), 100);
     const flag = (name) => {
       const value=get(name).toLowerCase();
       if (!['sudah','belum'].includes(value)) throw new HttpError(400,`Indikator ${name} baris ${index+2} harus Sudah atau Belum.`);

@@ -126,7 +126,10 @@ async function parseReporting(csv) {
     const date = rawDate.replace(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?: \d{2}:\d{2}(?::\d{2})?)?$/,
       (_, day, month, year) => `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`);
     const parsedDate = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(date) : null;
-    const value = progress ? Number(progress.replace(/%$/, '').replace(',', '.')) : null;
+    const rawValue = progress ? Number(progress.replace(/%$/, '').replace(',', '.')) : null;
+    // Sumber Monitoring dapat mengirim capaian pembulatan sedikit di atas 100%.
+    // Dasbor menyimpan progres sebagai persentase maksimal 100.
+    const value = official && rawValue != null ? Math.min(rawValue, 100) : rawValue;
     if (!/^\d{8}$/.test(npsn) || seen.has(npsn) || !statusCodes.has(status)
       || (date && (!parsedDate || Number.isNaN(+parsedDate) || parsedDate.toISOString().slice(0, 10) !== date || date.startsWith('0000')))
       || (value != null && (!Number.isFinite(value) || value < 0 || value > 100))) {
