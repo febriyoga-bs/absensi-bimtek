@@ -61,3 +61,23 @@ export async function photoUrl(ref, expiresIn = 3600) {
     Bucket: process.env.R2_BUCKET, Key: ref.slice(PREFIX.length),
   }), { expiresIn });
 }
+
+// Same-origin image bytes for PDF export; avoids requiring public R2 CORS.
+export async function readPhoto(ref) {
+  const maxBytes = 6 * 1024 * 1024;
+  if (!ref.startsWith(PREFIX)) {
+    if ((await fs.stat(ref)).size > maxBytes) throw new Error('Foto terlalu besar');
+    return fs.readFile(ref);
+  }
+  const response = await client().send(new GetObjectCommand({ Bucket: process.env.R2_BUCKET, Key: ref.slice(PREFIX.length) }),
+    { abortSignal: AbortSignal.timeout(20000) });
+  const chunks = []; let length = 0;
+  try {
+    for await (const chunk of response.Body) {
+      length += chunk.length;
+      if (length > maxBytes) throw new Error('Foto terlalu besar');
+      chunks.push(Buffer.from(chunk));
+    }
+  } finally { response.Body?.destroy?.(); }
+  return Buffer.concat(chunks);
+}

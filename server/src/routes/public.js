@@ -146,8 +146,8 @@ const alreadyRecorded = (status) => status === 'berhalangan'
 const isLoProfile = (person) => person.role === 'panitia' && /^(lo(?:\s|$)|liaison officer$)/i.test(person.position?.trim() || '');
 
 r.get('/info', ah(async (req, res) => {
-  const s = await getSettings();
-  const [{ rows: venues }, { rows: sessions }] = await Promise.all([
+  const [s, { rows: venues }, { rows: sessions }] = await Promise.all([
+    getSettings(),
     q('SELECT id, name, address, radius_m FROM venues WHERE active ORDER BY name'),
     // sesi yang sedang dibuka + sesi berikutnya hari ini/besok (untuk ditampilkan di beranda)
     q(`SELECT * FROM sessions WHERE NOT is_test AND ends_at > now() AND starts_at < now() + interval '36 hours'

@@ -4,13 +4,16 @@ import FilterField from '../../components/FilterField.jsx';
 import Icon from '../../components/Icon.jsx';
 import { printAttendance } from '../../lib/printAttendance.js';
 import { sessionTitle } from './shared.js';
+import { downloadAttendanceExcel } from '../../lib/attendanceExcel.js';
+import { downloadFile } from '../../lib/downloadFile.js';
+import { personName } from '../../lib/personName.js';
 
 const statusLabels = { valid: 'Valid', review: 'Perlu dicek', ditolak: 'Ditolak', berhalangan: 'Mundur/Berhalangan Hadir' };
 
 export default function AttendanceDownloadDialog({ sessions, venues, lo, initial, onClose }) {
   const dialog = useRef(null);
   const [filters, setFilters] = useState(initial);
-  const [format, setFormat] = useState('csv');
+  const [format, setFormat] = useState('xlsx');
   const [scope, setScope] = useState('recorded');
   const [recorders, setRecorders] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -49,11 +52,12 @@ export default function AttendanceDownloadDialog({ sessions, venues, lo, initial
         const response = await fetch(adminUrl(`/export?${query}`));
         if (!response.ok) {
           const data = await response.json().catch(() => ({}));
-          throw new Error(data.error || 'Unduhan CSV gagal. Silakan coba lagi.');
+          throw new Error(data.error || 'Unduhan gagal. Silakan coba lagi.');
         }
-        const url = URL.createObjectURL(await response.blob());
-        const link = document.createElement('a'); link.href = url; link.download = `rekap-absensi-${filters.session_id}.csv`; link.click();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        if (format === 'xlsx') {
+          setProgress('merapikan kolom');
+          await downloadAttendanceExcel(await response.text(), `rekap-absensi-${filters.session_id}.xlsx`);
+        } else downloadFile(await response.blob(), `rekap-absensi-${filters.session_id}.csv`);
       }
       onClose();
     } catch (cause) { setError(cause.message); }
@@ -67,24 +71,25 @@ export default function AttendanceDownloadDialog({ sessions, venues, lo, initial
     </header>
     <form onSubmit={download}>
       <fieldset disabled={busy} className="download-filter-grid">
-        <FilterField label="Tipe unduhan"><select value={format} onChange={(event) => setFormat(event.target.value)}><option value="csv">CSV</option><option value="pdf">PDF</option></select></FilterField>
+        <FilterField label="Tipe unduhan"><select value={format} onChange={(event) => setFormat(event.target.value)}><option value="xlsx">Excel (.xlsx)</option><option value="pdf">PDF</option><option value="csv">CSV</option></select></FilterField>
         <FilterField label="Sesi absensi"><select required value={filters.session_id} onChange={change('session_id')}>
           {sessions.map((session) => <option key={session.id} value={session.id}>{sessionTitle(session)} ({session.role})</option>)}
         </select></FilterField>
         {!lo && <FilterField label="Venue"><select value={filters.venue_id} onChange={change('venue_id')}><option value="">Semua venue</option>{venues.map((venue) => <option key={venue.id} value={venue.id}>{venue.name}</option>)}</select></FilterField>}
         <FilterField label="LO pencatat"><select value={filters.recorded_by} onChange={change('recorded_by')}><option value="">Semua LO pencatat</option>
-          {filters.recorded_by && !recorders.includes(filters.recorded_by) && <option>{filters.recorded_by}</option>}
-          {recorders.map((name) => <option key={name}>{name}</option>)}
+          {filters.recorded_by && !recorders.includes(filters.recorded_by) && <option value={filters.recorded_by}>{personName(filters.recorded_by)}</option>}
+          {recorders.map((name) => <option key={name} value={name}>{personName(name)}</option>)}
         </select></FilterField>
         <FilterField label="Jabatan"><select value={filters.position} onChange={change('position')}><option value="">Semua jabatan</option><option value="lo">LO</option><option value="bendahara">Bendahara</option><option value="pengawas">Pengawas</option><option value="fasil">Fasilitator</option></select></FilterField>
         <FilterField label="Status absensi"><select value={filters.status} onChange={change('status')}><option value="">Semua status</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></FilterField>
-        {format === 'csv' && <FilterField label="Cakupan peserta"><select value={scope} onChange={(event) => setScope(event.target.value)}><option value="recorded">Catatan absensi</option><option value="all">Semua peserta, termasuk belum absen</option></select></FilterField>}
+        {format !== 'pdf' && <FilterField label="Cakupan peserta"><select value={scope} onChange={(event) => setScope(event.target.value)}><option value="recorded">Catatan absensi</option><option value="all">Semua peserta, termasuk belum absen</option></select></FilterField>}
       </fieldset>
-      {format === 'pdf' && <p className="muted small">PDF menyertakan foto absensi. Pilih Simpan sebagai PDF pada jendela cetak yang dibuka.</p>}
+      {format === 'pdf' && <p className="muted small">PDF menyertakan foto absensi dalam empat kolom dan langsung diunduh.</p>}
+      {format === 'xlsx' && <p className="muted small">Excel dengan header biru, lebar kolom menyesuaikan isi, dan catatan panjang dibungkus otomatis.</p>}
       {error && <p className="alert alert--err" role="alert">{error}</p>}
       {busy && <p className="muted small" role="status">Menyiapkan {format.toUpperCase()} {progress}…</p>}
       <footer className="download-actions"><button type="button" className="btn" disabled={busy} onClick={onClose}>Batal</button>
-        <button type="submit" className="btn btn--primary" disabled={busy || !filters.session_id}><Icon name="download" size={16} />{busy ? 'Menyiapkan…' : `Unduh ${format.toUpperCase()}`}</button>
+        <button type="submit" className="btn btn--primary" disabled={busy || !filters.session_id}><Icon name="download" size={16} />{busy ? 'Menyiapkan…' : `Unduh ${format === 'xlsx' ? 'Excel' : format.toUpperCase()}`}</button>
       </footer>
     </form>
   </dialog>;

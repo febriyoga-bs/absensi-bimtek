@@ -1,76 +1,107 @@
 import { personName } from './personName.js';
-import { api, adminUrl } from '../api.js';
+import { api, adminToken } from '../api.js';
+import { eventPath } from '../event.js';
+import { downloadFile } from './downloadFile.js';
 
-const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
-  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-}[char]));
-const time = (value) => new Date(value).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+const time = value => new Date(value).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
 const statuses = { valid: 'Valid', review: 'Perlu dicek', ditolak: 'Ditolak', berhalangan: 'Mundur/Berhalangan Hadir' };
+const printable = value => String(value ?? '').replace(/[–—]/g, '-').replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
+
+async function photoForPdf(row) {
+  const response = await fetch(`/api/admin${eventPath(`/photo/${row.id}?bytes=true`)}`, {
+    headers: { Authorization: `Bearer ${adminToken.get()}` }, signal: AbortSignal.timeout(30000),
+  });
+  if (!response.ok) throw new Error(`Foto ${personName(row.name)} gagal dimuat. Silakan ulangi unduhan.`);
+  const blob = await response.blob();
+  if (blob.size > 6 * 1024 * 1024) throw new Error('Ukuran foto terlalu besar.');
+  const bitmap = await createImageBitmap(blob);
+  try {
+    const scale = Math.min(1, 960 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale)); canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const context = canvas.getContext('2d');
+    context.fillStyle = '#FFFFFF'; context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    return { data: canvas.toDataURL('image/jpeg', 0.78), ratio: canvas.width / canvas.height };
+  } finally { bitmap.close(); }
+}
 
 export async function printAttendance({ filters, title, onProgress }) {
-  // Open during the click so the browser does not block the report window.
-  const report = window.open('', '_blank');
-  if (!report) throw new Error('Jendela unduhan diblokir. Izinkan popup untuk web ini, lalu coba lagi.');
-  report.opener = null;
-  report.document.title = 'Menyiapkan PDF absensi';
-  report.document.body.textContent = 'Mengumpulkan seluruh hasil absensi sesuai filter…';
-  try {
-    const records = [];
-    const seen = new Set();
-    let total = 0;
-    do {
-      if (report.closed) throw new Error('Jendela unduhan ditutup.');
-      const params = new URLSearchParams({ ...filters, limit: '200', offset: String(records.length) });
-      const page = await api(`/admin/attendance?${params}`, { admin: true });
-      total = page.total;
-      if (page.rows.some((row) => seen.has(row.id))) throw new Error('Data absensi berubah saat menyiapkan unduhan. Silakan coba lagi.');
-      page.rows.forEach((row) => { seen.add(row.id); records.push(row); });
-      onProgress?.(`${records.length}/${total}`);
-      if (!page.rows.length && records.length < total) throw new Error('Data absensi berubah saat menyiapkan unduhan. Silakan coba lagi.');
-    } while (records.length < total);
-    if (!records.length) throw new Error('Tidak ada absensi yang cocok dengan filter untuk diunduh.');
-    report.document.open();
-    report.document.write(`<!doctype html><html lang="id"><head><meta charset="utf-8"><title>Rekap Absensi BIMTEK</title>
-      <style>
-      *{box-sizing:border-box}body{font:12px Arial,sans-serif;color:#172c47;margin:24px}h1{font-size:21px;margin:0 0 8px}
-      header{margin-bottom:20px}header p{margin:5px 0}.tools{padding:14px;background:#eef3fa;margin-bottom:18px}
-      button{padding:10px 18px;cursor:pointer}.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:start}
-      article{border:1px solid #ccd6e3;border-radius:8px;overflow:hidden;break-inside:avoid;min-width:0}
-      article img{display:block;width:100%;height:210px;object-fit:contain;background:#101826}.body{padding:12px}
-      h2{font-size:14px;margin:0 0 8px}p{margin:5px 0;overflow-wrap:anywhere}.note{white-space:pre-wrap;overflow-wrap:anywhere;background:#f1f4f8;padding:9px}
-      @media screen and (max-width:900px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
-      @media screen and (max-width:520px){body{margin:12px}.cards{grid-template-columns:minmax(0,1fr)}}
-      @page{size:A4 landscape;margin:10mm}@media print{body{margin:0;font-size:8pt}.tools{display:none}.cards{grid-template-columns:repeat(4,minmax(0,1fr));gap:3mm}article img{height:42mm}article{border-radius:2mm}.body{padding:3mm}h1{font-size:15pt}h2{font-size:9pt}}
-      </style></head><body><div class="tools"><button id="print" disabled>Cetak / Simpan sebagai PDF</button>
-      <p id="ready">Memuat foto…</p></div><header><h1>Rekap Absensi BIMTEK Revitalisasi SD</h1>
-      <p>${escape(title)}</p><p>${records.length} catatan absensi · Dicetak ${escape(time(Date.now()))} WIB</p></header>
-      <div class="cards">${records.map((row) => `<article>${row.has_photo
-        ? `<img src="${escape(row.photo_url || adminUrl(`/photo/${row.id}`))}" alt="Foto ${escape(personName(row.name))}">`
-        : '<p class="body">Tidak ada foto</p>'}<div class="body"><h2>${escape(personName(row.name))}</h2>
-        <p>${escape([row.code, row.position].filter(Boolean).join(' · '))}</p>
-        <p>${escape(row.institution || '-')}</p><p>Venue: ${escape(row.venue_name || '-')}</p>
-        <p>${escape(time(row.created_at))} WIB · ${escape(statuses[row.status] || row.status)}</p>
-        ${row.scanned_by ? `<p>Dicatat oleh ${escape(personName(row.scanned_by))}</p>` : ''}
-        ${row.participant_note ? `<p><b>Catatan kendala</b></p><div class="note">${escape(row.participant_note)}</div>` : ''}
-        </div></article>`).join('')}</div></body></html>`);
-    report.document.close();
-    const images = [...report.document.images];
-    await Promise.all(images.map((img) => new Promise((resolve) => {
-      if (img.complete) return resolve();
-      img.onload = resolve; img.onerror = resolve;
-      setTimeout(resolve, 30000);
-    })));
-    if (report.closed) return;
-    const missing = images.filter((img) => !img.complete || !img.naturalWidth).length;
-    const ready = report.document.getElementById('ready');
-    ready.textContent = missing
-      ? `${missing} foto gagal dimuat. Tutup jendela ini dan ulangi unduhan agar PDF lengkap.`
-      : 'Siap. Klik tombol, lalu pilih Simpan sebagai PDF pada tujuan cetak.';
-    const button = report.document.getElementById('print');
-    button.disabled = missing > 0;
-    button.addEventListener('click', () => report.print());
-  } catch (error) {
-    if (!report.closed) report.document.body.textContent = error.message;
-    throw error;
+  const records = [], seen = new Set(); let total = 0;
+  do {
+    const params = new URLSearchParams({ ...filters, limit: '200', offset: String(records.length) });
+    const page = await api(`/admin/attendance?${params}`, { admin: true }); total = page.total;
+    if (page.rows.some(row => seen.has(row.id)) || (!page.rows.length && records.length < total)) {
+      throw new Error('Data absensi berubah saat menyiapkan unduhan. Silakan coba lagi.');
+    }
+    page.rows.forEach(row => { seen.add(row.id); records.push(row); });
+    onProgress?.(`mengambil data ${records.length}/${total}`);
+  } while (records.length < total);
+  if (!records.length) throw new Error('Tidak ada absensi yang cocok dengan filter untuk diunduh.');
+  const { jsPDF } = await import('jspdf');
+  const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
+  pdf.setProperties({ title: 'Rekap Absensi BIMTEK Revitalisasi SD', author: 'Dashboard LO' });
+  const gap = 4, width = (277 - 3 * gap) / 4, lineHeight = 3.6, printed = time(Date.now());
+  let y, cards = [];
+  const textLines = (value, bold = false) => {
+    pdf.setFont('helvetica', bold ? 'bold' : 'normal'); pdf.setFontSize(bold ? 9 : 8);
+    return pdf.splitTextToSize(printable(value), width - 6).map(text => ({ text, bold }));
+  };
+  const header = () => {
+    pdf.setFillColor(23, 59, 118); pdf.rect(10, 8, 277, 13, 'F');
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(13); pdf.setTextColor(255);
+    pdf.text('Rekap Absensi BIMTEK Revitalisasi SD', 14, 16.5);
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(40, 59, 83);
+    const scope = pdf.splitTextToSize(printable(title), 277);
+    pdf.text(scope, 10, 26); y = 29 + scope.length * 3.4;
+    pdf.text(`${records.length} catatan absensi - Dibuat ${printed} WIB`, 10, y); y += 6;
+  };
+  header(); const maxHeight = 194 - y;
+  const flush = () => {
+    if (!cards.length) return;
+    const height = Math.max(...cards.map(card => card.height));
+    if (y + height > 194) { pdf.addPage(); header(); }
+    cards.forEach((card, index) => {
+      const x = 10 + index * (width + gap); let top = y + 4;
+      pdf.setDrawColor(209, 221, 235); pdf.setFillColor(248, 250, 254);
+      pdf.roundedRect(x, y, width, height, 2, 2, 'FD');
+      if (card.photo) {
+        const imageWidth = Math.min(width - 6, 40 * card.photo.ratio), imageHeight = imageWidth / card.photo.ratio;
+        pdf.addImage(card.photo.data, 'JPEG', x + (width - imageWidth) / 2, top, imageWidth, imageHeight);
+        top += 43;
+      }
+      card.lines.forEach(({ text, bold }) => {
+        pdf.setTextColor(bold ? 23 : 50, bold ? 59 : 67, bold ? 118 : 87);
+        pdf.setFont('helvetica', bold ? 'bold' : 'normal'); pdf.setFontSize(bold ? 9 : 8);
+        pdf.text(text, x + 3, top); top += lineHeight;
+      });
+    });
+    y += height + gap; cards = [];
+  };
+  for (const [index, row] of records.entries()) {
+    onProgress?.(`menyiapkan PDF ${index + 1}/${records.length}`);
+    const photo = row.has_photo ? await photoForPdf(row) : null;
+    const lines = [ ...textLines(personName(row.name), true), ...textLines([row.code, row.position].filter(Boolean).join(' - ')),
+      ...textLines(row.institution || '-'), ...textLines(`Venue: ${row.venue_name || '-'}`),
+      ...textLines(`${time(row.created_at)} WIB - ${statuses[row.status] || row.status}`),
+      ...(row.scanned_by ? textLines(`Dicatat oleh ${personName(row.scanned_by)}`) : []),
+      ...(row.participant_note ? [...textLines('Catatan kendala', true), ...textLines(row.participant_note)] : []),
+      ...(!photo ? textLines('Tidak ada foto') : []) ];
+    let first = true;
+    while (lines.length) {
+      const image = first ? photo : null;
+      const continuation = first ? [] : textLines(`${personName(row.name)} (lanjutan)`, true);
+      const count = Math.max(1, Math.floor((maxHeight - (image ? 43 : 0) - 8) / lineHeight) - continuation.length);
+      const part = [...continuation, ...lines.splice(0, count)];
+      cards.push({ photo: image, lines: part, height: (image ? 43 : 0) + 8 + part.length * lineHeight });
+      if (cards.length === 4) flush(); first = false;
+    }
+    if (index % 10 === 0) await new Promise(resolve => setTimeout(resolve, 0));
   }
+  flush(); const pages = pdf.getNumberOfPages();
+  for (let page = 1; page <= pages; page++) {
+    pdf.setPage(page); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(100);
+    pdf.text(`Halaman ${page} / ${pages}`, 287, 202, { align: 'right' });
+  }
+  downloadFile(pdf.output('blob'), `rekap-absensi-${filters.session_id}.pdf`);
 }

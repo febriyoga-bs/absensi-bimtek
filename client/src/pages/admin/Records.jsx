@@ -26,6 +26,8 @@ export default function Records() {
   const [total, setTotal] = useState(0);
   const [counts, setCounts] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const loadRevision = useRef(0);
   const [attempts, setAttempts] = useState([]);
   const [tab, setTab] = useState('absen');
   const [zoom, setZoom] = useState(null);
@@ -38,40 +40,61 @@ export default function Records() {
   const [deleteNotice, setDeleteNotice] = useState('');
   const [noteTarget, setNoteTarget] = useState(null);
   const [noteNotice, setNoteNotice] = useState('');
-  const sid = params.get('sesi') || '';
+  const requestedSid = params.get('sesi') || '';
+  const selectedSession = sessions.find((session) => String(session.id) === requestedSid)
+    || sessions.find((session) => session.is_open) || sessions[sessions.length - 1];
+  const sid = selectedSession ? String(selectedSession.id) : '';
   const recordedBy = params.get('recorded_by') || '';
   const status = params.get('status') || '';
   const position = params.get('position') || '';
   const venue = lo ? '' : params.get('venue') || '';
   const page = Math.max(Number(params.get('hal')) || 1, 1);
   // ganti filter → kembali ke halaman 1
-  const setParam = (k, v) => setParams({ sesi: sid, status, venue, position, recorded_by: recordedBy, hal: '1', [k]: v });
+  const setParam = (k, v) => setParams((current) => {
+    const next = new URLSearchParams(current);
+    next.set('sesi', sid); next.set('hal', '1'); next.set(k, v);
+    return next;
+  });
   const pages = Math.max(Math.ceil(total / PAGE), 1);
 
   useEffect(() => {
-    api('/admin/venues', { admin: true }).then(setVenues);
+    api('/admin/venues', { admin: true }).then(setVenues).catch((error) => setLoadError(error.message));
     api('/admin/sessions', { admin: true }).then((s) => {
       setSessions(s);
-      if (!sid && s.length) setParams({ sesi: (s.find((x) => x.is_open) || s[s.length - 1]).id });
       if (!s.length) setLoading(false);
-    });
+    }).catch((error) => { setLoadError(error.message); setLoading(false); });
   }, []);
 
+  useEffect(() => {
+    if (!sid || requestedSid === sid) return;
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      next.set('sesi', sid); next.delete('hal');
+      if (requestedSid) { next.delete('venue'); next.delete('recorded_by'); }
+      return next;
+    }, { replace: true });
+  }, [sid, requestedSid]);
+
   const load = () => {
-    if (!sid) return;
+    if (!sid || !sessions.some((session) => String(session.id) === sid)) return;
+    // Wait for URL normalization before using activity-specific filters.
+    if (requestedSid && requestedSid !== sid) return;
+    const revision = ++loadRevision.current;
     const qs = new URLSearchParams({
       session_id: sid, limit: PAGE, offset: (page - 1) * PAGE,
       ...(recordedBy && { recorded_by: recordedBy }),
       ...(position && { position }),
       ...(status && { status }), ...(venue && { venue_id: venue }),
     });
-    setLoading(true);
+    setLoading(true); setLoadError('');
     api(`/admin/attendance?${qs}`, { admin: true })
-      .then((d) => { setRows(d.rows); setRecorders(d.recorders || []); setTotal(d.total); setCounts(d.counts); window.scrollTo({ top: 0 }); })
-      .finally(() => setLoading(false));
-    api(`/admin/attempts?session_id=${sid}${venue ? `&venue_id=${venue}` : ''}${position ? `&position=${encodeURIComponent(position)}` : ''}`, { admin: true }).then(setAttempts);
+      .then((d) => { if (loadRevision.current !== revision) return; setRows(d.rows); setRecorders(d.recorders || []); setTotal(d.total); setCounts(d.counts); window.scrollTo({ top: 0 }); })
+      .catch((error) => { if (loadRevision.current === revision) setLoadError(error.message); })
+      .finally(() => { if (loadRevision.current === revision) setLoading(false); });
+    api(`/admin/attempts?session_id=${sid}${venue ? `&venue_id=${venue}` : ''}${position ? `&position=${encodeURIComponent(position)}` : ''}`, { admin: true })
+      .then((data) => { if (loadRevision.current === revision) setAttempts(data); }).catch(() => {});
   };
-  useEffect(load, [sid, status, venue, position, recordedBy, page]);
+  useEffect(() => { load(); return () => { loadRevision.current++; }; }, [sid, requestedSid, status, venue, position, recordedBy, page, sessions]);
 
   async function setStatus(id, st) {
     await api(`/admin/attendance/${id}`, { method: 'PATCH', admin: true, body: { status: st } });
@@ -128,8 +151,8 @@ export default function Records() {
         )}
         <FilterField label="Diabsenkan oleh LO"><select aria-label="Diabsenkan oleh LO" value={recordedBy} onChange={(e) => setParam('recorded_by', e.target.value)}>
           <option value="">Semua LO pencatat</option>
-          {recordedBy && !recorders.includes(recordedBy) && <option value={recordedBy}>{recordedBy} (tidak ada di sesi/venue ini)</option>}
-          {recorders.map((name) => <option key={name} value={name}>{name}</option>)}
+          {recordedBy && !recorders.includes(recordedBy) && <option value={recordedBy}>{personName(recordedBy)} (tidak ada di sesi/venue ini)</option>}
+          {recorders.map((name) => <option key={name} value={name}>{personName(name)}</option>)}
         </select></FilterField>
         <FilterField label="Filter jabatan"><select aria-label="Filter jabatan" value={position} onChange={(e) => setParam('position', e.target.value)}>
           <option value="">Semua jabatan</option>
@@ -150,8 +173,9 @@ export default function Records() {
           <Icon name="download" size={15} />Unduh
         </button>}
       </div>
+      {loadError && <p className="alert alert--err" role="alert">{loadError}</p>}
       <div className="tabs">
-        <button className={tab === 'absen' ? 'on' : ''} onClick={() => setTab('absen')}>Absensi masuk ({total})</button>
+        <button className={tab === 'absen' ? 'on' : ''} onClick={() => setTab('absen')}>Absensi masuk ({loading ? '…' : total})</button>
         <button className={tab === 'blok' ? 'on' : ''} onClick={() => setTab('blok')}>Percobaan diblokir ({attempts.length})</button>
       </div>
 
@@ -201,7 +225,7 @@ export default function Records() {
               </div>
             </div>
           ))}
-          {!rows.length && !loading && <p className="muted">Belum ada data.</p>}
+          {!rows.length && !loading && !loadError && <p className="muted">Belum ada data.</p>}
         </div>
       )}
       {tab === 'absen' && pages > 1 && (

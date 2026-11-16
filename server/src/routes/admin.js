@@ -7,7 +7,7 @@ import { ah, HttpError, clientIp } from '../util.js';
 import {
   requireAdmin, requireLo, requireSuper, signAdmin, checkAdminPassword, hashPassword, verifyPassword,
 } from '../auth.js';
-import { deletePhoto, photoUrl, savePhoto } from '../storage.js';
+import { deletePhoto, photoUrl, savePhoto, readPhoto } from '../storage.js';
 import { parsePeople, EXTRA_FIELDS } from '../peopleImport.js';
 import { applyParticipantPlan, getParticipantPlan } from '../participantSync.js';
 import { getVenueAttendance, getVenueAttendanceDetails } from '../venueAttendance.js';
@@ -68,10 +68,10 @@ r.get('/reporting/school/:npsn', ah(async (req, res) => {
 r.post('/reporting/import', requireSuper, ah(async (req, res) => {
   res.json(await importReporting(req.body?.csv));
 }));
-r.get('/arrival-recap', ah(async (req, res) => {
+r.get('/arrival-recap', requireSuper, ah(async (req, res) => {
   res.json(await getArrivalRecap());
 }));
-r.get('/arrival-recap/:venueId/participants', ah(async (req, res) => {
+r.get('/arrival-recap/:venueId/participants', requireSuper, ah(async (req, res) => {
   if (req.user.role === 'lo' && Number(req.params.venueId) !== req.user.venue) throw new HttpError(403, 'Bukan venue Anda.');
   res.json(await getArrivalRecapDetails(req.params.venueId, req.query.group));
 }));
@@ -1033,7 +1033,9 @@ function attendancePositionFilter(req) {
   return attendancePositions[position];
 }
 /** Daftar absen per sesi, dengan halaman (default 48 per halaman) agar ringan. */
-r.get('/attendance', ah(async (req, res) => {
+r.get('/attendance', requireSuper, ah(async (req, res) => {
+  const sessionId = Number(req.query.session_id);
+  if (!Number.isSafeInteger(sessionId) || sessionId < 1 || sessionId > 2147483647) throw new HttpError(400, 'Sesi absensi tidak valid.');
   const v = scopeVenue(req);
   const recordedBy = typeof req.query.recorded_by === 'string' ? req.query.recorded_by.trim().slice(0, 300) : '';
   const status = ['valid', 'review', 'ditolak', 'berhalangan'].includes(req.query.status) ? req.query.status : null;
@@ -1042,7 +1044,7 @@ r.get('/attendance', ah(async (req, res) => {
   const positionFilter = attendancePositionFilter(req);
   const where = `a.session_id=$1 AND ($2::int IS NULL OR a.venue_id=$2)
     AND EXISTS (SELECT 1 FROM people p WHERE p.id=a.person_id AND ${positionFilter})`;
-  const [{ rows }, { rows: [c] }] = await Promise.all([
+  const [{ rows }, { rows: [summary] }] = await Promise.all([
     q(
       `SELECT a.id, a.status, a.risk_score, a.flags, a.lat, a.lng, a.accuracy_m, a.distance_m,
               a.created_at, a.device_id, a.user_agent, a.ip, a.photo_path, a.venue_id, a.method, a.scanned_by, a.participant_note,
@@ -1055,27 +1057,30 @@ r.get('/attendance', ah(async (req, res) => {
        WHERE ${where} AND ($3::text IS NULL OR a.status=$3) AND ($7::text='' OR a.scanned_by=$7)
        ORDER BY a.risk_score DESC, a.created_at DESC
        LIMIT $4 OFFSET $5`,
-      [req.query.session_id, v, status, limit, offset, req.user.lo, recordedBy]
+      [sessionId, v, status, limit, offset, req.user.lo, recordedBy]
     ),
     q(
-      `SELECT count(*)::int AS total,
+      `SELECT EXISTS (SELECT 1 FROM sessions WHERE id=$1) AS session_exists,
+              count(*)::int AS total,
               count(*) FILTER (WHERE a.status='valid')::int AS valid,
               count(*) FILTER (WHERE a.status='review')::int AS review,
               count(*) FILTER (WHERE a.status='ditolak')::int AS ditolak,
-              count(*) FILTER (WHERE a.status='berhalangan')::int AS berhalangan
+              count(*) FILTER (WHERE a.status='berhalangan')::int AS berhalangan,
+              ARRAY(SELECT DISTINCT recorder.scanned_by FROM attendance recorder
+                WHERE recorder.session_id=$1 AND ($2::int IS NULL OR recorder.venue_id=$2)
+                  AND recorder.method IN ('manual','qr') AND recorder.scanned_by IS NOT NULL
+                ORDER BY recorder.scanned_by) AS recorders
        FROM attendance a WHERE ${where} AND ($3::text='' OR a.scanned_by=$3)`,
-      [req.query.session_id, v, recordedBy]
+      [sessionId, v, recordedBy]
     ),
   ]);
+  const { recorders, session_exists: sessionExists, ...c } = summary;
+  if (!sessionExists) throw new HttpError(404, 'Sesi absensi tidak ditemukan pada kegiatan ini. Pilih sesi yang sesuai.');
   // Signed URL R2 hanya untuk foto di halaman ini (bukan semua foto sesi)
   const out = await Promise.all(rows.map(async ({ photo_path, ...x }) => ({ ...x, photo_url: photo_path ? await photoUrl(photo_path) : null, has_photo: !!photo_path })));
-  const { rows: recorders } = await q(`SELECT DISTINCT a.scanned_by FROM attendance a
-    WHERE a.session_id=$1 AND ($2::int IS NULL OR a.venue_id=$2)
-      AND a.method IN ('manual','qr') AND a.scanned_by IS NOT NULL
-    ORDER BY a.scanned_by`, [req.query.session_id, v]);
   res.json({
     rows: out,
-    recorders: recorders.map((row) => row.scanned_by),
+    recorders,
     total: status ? c[status] : c.total,
     counts: c,
     limit,
@@ -1103,7 +1108,7 @@ r.patch('/attendance/:id/note', ah(async (req, res) => {
   res.json(updated);
 }));
 
-r.patch('/attendance/:id', ah(async (req, res) => {
+r.patch('/attendance/:id', requireSuper, ah(async (req, res) => {
   if (!['valid', 'review', 'ditolak'].includes(req.body?.status)) throw new HttpError(400, 'Status tidak valid');
   await assertOwnAttendance(req, req.params.id);
   const { rows } = await q(
@@ -1133,7 +1138,7 @@ r.delete('/attendance/:id', ah(async (req, res) => {
   res.sendStatus(204);
 }));
 
-r.get('/attempts', ah(async (req, res) => {
+r.get('/attempts', requireSuper, ah(async (req, res) => {
   const v = scopeVenue(req);
   const positionFilter = attendancePositionFilter(req);
   const { rows } = await q(
@@ -1150,6 +1155,10 @@ r.get('/photo/:id', ah(async (req, res) => {
   await assertOwnAttendance(req, req.params.id);
   const { rows } = await q('SELECT photo_path FROM attendance WHERE id=$1', [req.params.id]);
   if (!rows[0]?.photo_path) return res.status(404).end();
+  if (req.query.bytes === 'true') {
+    res.set('Cache-Control', 'no-store');
+    return res.type('image/jpeg').send(await readPhoto(rows[0].photo_path));
+  }
   const url = await photoUrl(rows[0].photo_path, 600);
   if (url) return res.redirect(302, url);
   if (!fs.existsSync(rows[0].photo_path)) return res.status(404).end();

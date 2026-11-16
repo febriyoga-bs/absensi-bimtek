@@ -29,10 +29,19 @@ let pending = 0;
 const listeners = new Set();
 const setPending = (d) => { pending += d; listeners.forEach((fn) => fn(pending)); };
 export const onPendingChange = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
+const inFlightReads = new Map();
 
 export async function api(path, opts = {}) {
+  const reading = (opts.method || 'GET').toUpperCase() === 'GET';
+  const key = reading ? JSON.stringify([eventPath(path), !!opts.admin, opts.admin ? adminToken.get() : null]) : null;
+  if (reading && inFlightReads.has(key)) return inFlightReads.get(key);
   setPending(1);
-  try { return await request(path, opts); } finally { setPending(-1); }
+  const pending = request(path, opts).finally(() => {
+    setPending(-1);
+    if (reading) inFlightReads.delete(key);
+  });
+  if (reading) inFlightReads.set(key, pending);
+  return pending;
 }
 
 async function request(path, { method = 'GET', body, admin = false } = {}) {

@@ -6,6 +6,10 @@ import { eventContext, eventId, searchPathSql } from '../src/eventContext.js';
 import { reportingDates } from '../src/reportingDays.js';
 import { signAdmin, signChallenge, verifyChallenge, hashPassword } from '../src/auth.js';
 import app from '../src/app.js';
+import { invalidateEventMetadata } from '../src/events.js';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 // Actual PostgreSQL in memory: never connect tests to DATABASE_URL.
 const db = new PGlite();
@@ -55,6 +59,7 @@ before(async () => {
   origin = `http://127.0.0.1:${server.address().port}`;
 });
 beforeEach(async () => {
+  invalidateEventMetadata();
   await rawPool.query("UPDATE public.bimtek_events SET status='archived'; UPDATE public.bimtek_events SET status='active' WHERE id=3; UPDATE public.bimtek_events SET status='draft' WHERE id=4");
 });
 after(async () => {
@@ -237,4 +242,101 @@ test('a same-username account with different credentials does not gain access', 
   const bad = await request('/admin/login?event=3', { method: 'POST', token: null,
     body: { username: 'lo-sama', password: 'wrong-password' } });
   assert.equal(bad.status, 401);
+});
+
+test('warm metadata requests reuse the event list and do not query unrelated session dates', async () => {
+  const original = rawPool.query; let reads = 0;
+  rawPool.query = (...args) => { reads++; return original(...args); };
+  try {
+    assert.equal((await request('/admin/me?event=4')).status, 200);
+    const first = reads;
+    assert.equal((await request('/admin/me?event=4')).status, 200);
+    assert.equal(reads, first);
+    assert.equal(first, 1);
+  } finally { rawPool.query = original; }
+});
+
+test('aggregated reporting preserves dates, arrival status and event isolation', async () => {
+  await scoped(3, async () => {
+    const data = { lo: [{name:'LO Tahap 3',venue:'Venue Tahap 3',account_id:1,venue_id:1}], facilitators: [],
+      schools: [{npsn:'12345678',name:'Sekolah Tahap 3',venue:'Venue Tahap 3',lo:'LO Tahap 3'}] };
+    await q('INSERT INTO assignment_roster(id,data) VALUES (1,$1) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data', [JSON.stringify(data)]);
+    await q(`INSERT INTO venue_arrival_recap(venue_id,marks) VALUES (1,'{"1":"sedang_antre"}') ON CONFLICT(venue_id) DO UPDATE SET marks=EXCLUDED.marks`);
+  });
+  const response = await request('/admin/reporting?dataset=current&event=3');
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(data.schools[0].status, 'diterima');
+  assert.deepEqual(data.schools[0].check_in_dates, ['2026-11-11']);
+  assert.equal(data.schools[0].attendance, 'sudah_absen');
+  assert.equal(data.schools[0].venue_attendance, 'sedang_antre');
+  const fourth = await (await request('/admin/reporting?dataset=current&event=4')).json();
+  assert.deepEqual(fourth.schools, []);
+});
+
+test('photo byte export requires authentication and preserves venue authorization', async () => {
+  const folder = await mkdtemp(join(tmpdir(), 'bimtek-photo-test-'));
+  const file = join(folder, 'photo.jpg'); const bytes = Buffer.from([255,216,255,217]);
+  await writeFile(file, bytes);
+  try {
+    await scoped(3, () => q('UPDATE attendance SET photo_path=$1 WHERE id=1', [file]));
+    assert.equal((await request('/admin/photo/1?event=3&bytes=true', {token:null})).status, 401);
+    const response = await request('/admin/photo/1?event=3&bytes=true');
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('cache-control'), /no-store/);
+    assert.deepEqual(Buffer.from(await response.arrayBuffer()), bytes);
+    await scoped(3, () => q('UPDATE attendance SET venue_id=(SELECT id FROM venues WHERE id<>1 LIMIT 1) WHERE id=1'));
+    const token = signAdmin({role:'lo',username:'lo-sama',accounts:[{event:3,id:1}]});
+    assert.equal((await request('/admin/photo/1?event=3&bytes=true', {token})).status, 403);
+  } finally {
+    await scoped(3, () => q("UPDATE attendance SET photo_path='existing-photo.jpg',venue_id=1 WHERE id=1"));
+    await rm(folder, {recursive:true,force:true});
+  }
+});
+
+test('recaps only list roster venues and keep inactive venues that belong to the archived activity', async () => {
+  await scoped(3, async () => {
+    await q("UPDATE assignment_roster SET data=jsonb_set(data,'{venues}','[\"Venue Tahap 3\"]') WHERE id=1");
+    await q("UPDATE venues SET active=false WHERE id=1");
+    await q(`UPDATE venue_arrival_recap SET detail_rows='[{"id":1,"name":"Peserta Tahap 3","position":"Bendahara","institution":"Sekolah Contoh","arrival_status":"sedang_antre"}]',source_summary=NULL WHERE venue_id=1`);
+    await q("INSERT INTO venues(name,lat,lng,active) VALUES ('Claro from another activity',-6,106,false),('Unmapped venue',-6,106,true)");
+  });
+  await scoped(4, async () => {
+    const data = {venues:['Login venue 4'],lo:[],schools:[],facilitators:[]};
+    await q('INSERT INTO assignment_roster(id,data) VALUES(1,$1) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data', [JSON.stringify(data)]);
+  });
+  for (const path of ['/admin/arrival-recap?event=3','/admin/venue-attendance?event=3']) {
+    const response = await request(path);
+    assert.equal(response.status, 200);
+    const rows = await response.json();
+    assert.deepEqual(rows.map((row) => row.name), ['Venue Tahap 3']);
+    if (path.includes('arrival-recap')) assert.equal(rows[0].queued, 1);
+  }
+  const fourth = await (await request('/admin/arrival-recap?event=4')).json();
+  assert.deepEqual(fourth.map((row) => row.name), ['Login venue 4']);
+  assert.equal(fourth[0].source_ready, false);
+});
+
+test('attendance distinguishes an invalid activity/session combination from an empty valid session', async () => {
+  const invalid = await request('/admin/attendance?event=4&session_id=999');
+  assert.equal(invalid.status, 404);
+  assert.match((await invalid.json()).error, /kegiatan ini/);
+  assert.equal((await request('/admin/attendance?event=4&session_id=wrong')).status, 400);
+  const valid = await request('/admin/attendance?event=4&session_id=1');
+  assert.equal(valid.status, 200);
+  const data = await valid.json();
+  assert.equal(data.total, 0);
+  assert.deepEqual(data.rows, []);
+});
+
+test('verification and arrival recap APIs are restricted to the main admin', async () => {
+  const token = signAdmin({role:'lo',username:'lo-sama',accounts:[{event:3,id:1}]});
+  for (const path of ['/admin/arrival-recap?event=3','/admin/arrival-recap/1/participants?event=3&group=invited',
+    '/admin/attendance?event=3&session_id=1','/admin/attempts?event=3&session_id=1']) {
+    const denied = await request(path, {token});
+    assert.equal(denied.status, 403);
+    assert.equal((await request(path)).status, 200);
+  }
+  assert.equal((await request('/admin/attendance/1?event=3', {method:'PATCH',token,body:{status:'ditolak'}})).status, 403);
+  assert.equal((await request('/admin/venue-attendance?event=3', {token})).status, 200);
 });

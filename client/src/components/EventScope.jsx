@@ -42,6 +42,9 @@ export default function EventScope({ children }) {
     if (String(event.id) === id) return;
     try { localStorage.setItem('bimtek_event', id); } catch { /* URL preserves selection */ }
     const url = new URL(window.location.href);
+    // Session, venue, recorder and pagination belong to the previous activity.
+    url.search = '';
+    if (/^\/admin\/absensi\/foto\//.test(url.pathname)) url.pathname = '/admin/absensi';
     url.searchParams.set('event', id);
     window.location.assign(url.href);
   }

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { q } from './db.js';
 import { parseRows } from './peopleImport.js';
 import { HttpError } from './util.js';
-import { reportingCheckInDates, reportingDates, reportingDays } from './reportingDays.js';
+import { reportingDates, reportingDays } from './reportingDays.js';
 import { importProgressCsv, progressStatusSql, currentProgressSql } from './progressImport.js';
 import { currentEvent } from './eventContext.js';
 
@@ -40,24 +40,35 @@ export async function getReporting(dataset, user) {
   if (dataset !== 'current') throw new HttpError(400, 'Kegiatan pelaporan tidak valid.');
   const [{ rows: [roster] }, { rows: records }, { rows: contacts }] = await Promise.all([
     q("SELECT data->'lo' AS lo, data->'facilitators' AS facilitators, data->'schools' AS schools FROM assignment_roster WHERE id=1"),
-    q(`SELECT s.npsn, p.provinsi, p.peringkat, ${progressStatusSql('m','pr')} AS status,
+    q(`WITH presence AS MATERIALIZED (
+         SELECT a.person_id,a.venue_id,
+           array_agg(DISTINCT to_char(s.starts_at AT TIME ZONE 'Asia/Jakarta','YYYY-MM-DD'))
+             FILTER (WHERE (s.starts_at AT TIME ZONE 'Asia/Jakarta')::date=ANY($1::date[])) AS dates
+         FROM attendance a JOIN sessions s ON s.id=a.session_id AND NOT s.is_test
+         WHERE a.status IN ('valid','review') GROUP BY a.person_id,a.venue_id
+       ), arrival_marks AS MATERIALIZED (
+         SELECT r.venue_id,entry.key AS person_id,entry.value AS status
+         FROM venue_arrival_recap r CROSS JOIN LATERAL jsonb_each_text(r.marks) entry
+       )
+       SELECT s.npsn, p.provinsi, p.peringkat, ${progressStatusSql('m','pr')} AS status,
        CASE WHEN ${currentProgressSql('m','pr')} AND NOT pr.sent THEN NULL ELSE to_char(m.submitted_on,'YYYY-MM-DD') END AS submitted_on,
        CASE WHEN ${currentProgressSql('m','pr')} THEN pr.progress ELSE m.progress END::float AS progress,
        GREATEST(m.updated_at,pr.updated_at) AS updated_at,
-       arrival.marks->>p.id::text AS arrival_status, arrival.imported_at AS arrival_imported_at,
-       ${reportingCheckInDates('p.id', 'v.id', '$1')} AS check_in_dates,
+       marks.status AS arrival_status, arrival.imported_at AS arrival_imported_at,
+       COALESCE(presence.dates,ARRAY[]::text[]) AS check_in_dates,
        CASE WHEN ${progressStatusSql('m','pr')}='menunggu_reviu' AND m.submitted_on IS NOT NULL
             THEN GREATEST(0, (now() AT TIME ZONE 'Asia/Jakarta')::date - m.submitted_on) END AS wait_days,
-       EXISTS (SELECT 1 FROM attendance a JOIN sessions s2 ON s2.id=a.session_id AND NOT s2.is_test
-         WHERE a.person_id=p.id AND a.venue_id=v.id AND a.status IN ('valid','review')) AS attended
+       presence.person_id IS NOT NULL AS attended
        FROM assignment_roster r CROSS JOIN LATERAL jsonb_to_recordset(r.data->'schools') AS s(npsn text,venue text)
        LEFT JOIN venues v ON v.name=s.venue
        LEFT JOIN people p ON lower(p.code)='b-'||s.npsn AND p.role='peserta' AND lower(trim(p.position))='bendahara'
          AND p.archived_at IS NULL AND p.venue_id=v.id
        LEFT JOIN venue_arrival_recap arrival ON arrival.venue_id=v.id
+       LEFT JOIN arrival_marks marks ON marks.venue_id=v.id AND marks.person_id=p.id::text
+       LEFT JOIN presence ON presence.person_id=p.id AND presence.venue_id=v.id
        LEFT JOIN school_reporting m ON m.npsn=s.npsn
        LEFT JOIN school_progress_report pr ON pr.npsn=s.npsn WHERE r.id=1`, [reportingDates]),
-    q(`SELECT v.name AS venue,p.name,p.phone FROM people p JOIN venues v ON v.id=p.venue_id
+    user.role === 'public' ? Promise.resolve({ rows: [] }) : q(`SELECT v.name AS venue,p.name,p.phone FROM people p JOIN venues v ON v.id=p.venue_id
        WHERE p.role='peserta' AND p.archived_at IS NULL AND lower(trim(p.position)) LIKE 'fasil%'
          AND ($1::int IS NULL OR p.venue_id=$1)`, [user.role === 'lo' ? user.venue : null]),
   ]);

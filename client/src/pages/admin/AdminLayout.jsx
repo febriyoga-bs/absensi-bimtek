@@ -66,9 +66,9 @@ export default function AdminLayout() {
               <FontIcon name={n.icon} />{(!lo && n.adminLabel) || n.label}
             </NavLink>
           ))}
-          <NavLink to="/#public-verval" onClick={() => setMenuOpen(false)}>
+          {!lo && <NavLink to="/#public-verval" onClick={() => setMenuOpen(false)}>
             <FontIcon name="map-location-dot" /> Peta Revitalisasi
-          </NavLink>
+          </NavLink>}
           <button className="link" onClick={() => { adminToken.clear(); nav('/admin/login'); }}>
             <Icon name="logout" size={18} /> Keluar
           </button>

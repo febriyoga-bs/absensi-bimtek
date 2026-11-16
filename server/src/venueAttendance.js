@@ -1,5 +1,6 @@
 import { q } from './db.js';
 import { HttpError } from './util.js';
+import { eventVenueScope } from './eventVenues.js';
 
 const emptyCount = () => ({ total: 0, registered: 0, attended: 0 });
 const nameKey = (name) => String(name || '').normalize('NFKD').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
@@ -106,7 +107,7 @@ export async function getVenueAttendanceDetails(venueId, group, day = null) {
   }
   if (group !== 'lo' && group !== 'fasil') throw new HttpError(400, 'Kategori kehadiran tidak valid.');
   const [{ rows: venues }, { rows: [roster] }, { rows: profiles }] = await Promise.all([
-    q('SELECT id, name FROM venues'), loadRoster(), loadProfiles(venueId, day),
+    q(`SELECT v.id, v.name FROM venues v WHERE ${eventVenueScope('v')}`), loadRoster(), loadProfiles(venueId, day),
   ]);
   return groupProfiles(roster, profiles, group, rosterVenueIds(venues, roster), venueId)
     .map(({ name, registered, status, arrival_status }) => ({ name, people: [{ name, registered, status, arrival_status }] }));
@@ -128,7 +129,8 @@ export async function getVenueAttendance(venueId, day = null) {
     )
     SELECT v.id, v.name, COALESCE(jsonb_object_agg(c.category, jsonb_build_object(
       'total', c.total, 'registered', c.total, 'attended', c.attended)) FILTER (WHERE c.category IS NOT NULL), '{}') AS counts
-    FROM venues v LEFT JOIN counts c ON c.venue_id=v.id GROUP BY v.id, v.name ORDER BY v.name`, [venueId, Object.values(participantPositions), day]),
+    FROM venues v LEFT JOIN counts c ON c.venue_id=v.id WHERE ${eventVenueScope('v')}
+    GROUP BY v.id, v.name ORDER BY v.name`, [venueId, Object.values(participantPositions), day]),
     loadRoster(),
     loadProfiles(venueId, day),
   ]);

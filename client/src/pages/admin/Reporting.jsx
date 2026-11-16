@@ -79,7 +79,7 @@ function ReportingTable({ headers, rows, fullWidthColumn, pageSize = PAGE_SIZE }
           </th>)}</tr></thead>
           <tbody role="rowgroup">{orderedRows.slice((active - 1) * pageSize, active * pageSize).map(({ key, cells, onOpen, name }) => (
             <tr key={key} role="row" className={onOpen ? 'reporting-clickable-row' : undefined}
-              tabIndex={onOpen ? 0 : undefined} aria-label={onOpen ? `Lihat sekolah binaan ${name}` : undefined}
+              tabIndex={onOpen ? 0 : undefined} aria-label={onOpen ? `Lihat sekolah binaan ${personName(name)}` : undefined}
               onClick={onOpen ? (event) => { if (!event.target.closest('button,a,input,select,textarea')) onOpen(); } : undefined}
               onKeyDown={onOpen ? (event) => {
                 if (event.target === event.currentTarget && ['Enter',' '].includes(event.key)) { event.preventDefault(); onOpen(); }
@@ -103,7 +103,7 @@ function ReportingRanking({ rows, movement, movementLabel, own }) {
           <b>{row.rank}. {personName(row.name)}{own && ownerKey(own) === row.key && <span className="reporting-own">Anda</span>}</b>
           <strong>{movement ? `+${nf.format(row.change)}` : `${nf.format(row.ratio)}%`}</strong>
         </div>
-        <progress aria-label={`${movement ? 'Pergerakan' : 'Capaian'} ${row.name}`}
+        <progress aria-label={`${movement ? 'Pergerakan' : 'Capaian'} ${personName(row.name)}`}
           value={movement ? row.change : row.ratio} max={movement ? maxMovement : 100} />
         <p>{movement ? `${nf.format(row.change)} sekolah ${movementLabel.replace(/^Kirim/, 'kirim')} · ` : ''}
           Total {nf.format(row.sent)}/{nf.format(row.total)} sudah kirim · {row.venue}
@@ -323,7 +323,7 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
         const unsent = group.filter((s) => s.status === 'belum_kirim').length;
         return { key: f.id, late, pending, name: f.name, onOpen: () => setSelectedFacilitator({ ...f }),
           sortValues: [f.name, [f.venue, f.lo, formatRoom(f.room)].filter(Boolean).join(' '), group.length, unsent, pending, late], cells: [
-          <><b>{personName(f.name)}</b><WhatsAppLink name={personName(f.name)} phone={f.phone} /><div className="muted small">{[f.institution, f.coordinator].filter(Boolean).join(' · ')}</div></>,
+          <><b>{personName(f.name)}</b><WhatsAppLink name={personName(f.name)} phone={f.phone} /><div className="muted small">{[f.institution, personName(f.coordinator)].filter(Boolean).join(' · ')}</div></>,
           <>{f.venue}<div className="muted small">{[formatRoom(f.room), personName(f.lo)].filter(Boolean).join(' · ')}</div></>,
           <button className="btn btn--sm" onClick={() => setSelectedFacilitator({ ...f })} aria-label={`Lihat sekolah ${personName(f.name)}`}>{group.length}</button>,
           unsent, pending, late,
@@ -355,7 +355,8 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
   const detail = selectedFacilitator && byFacilitator.get(selectedFacilitator.id);
   const selectedOwner = data.lo.find((owner) => ownerKey(owner) === lo);
   const noData = counts.get('belum_ada_data') || 0;
-  const scopeTitle = selectedOwner?.name || (lo === UNASSIGNED ? account.name : venue || 'Semua venue');
+  const scopeTitle = selectedOwner?.name ? personName(selectedOwner.name)
+    : lo === UNASSIGNED ? personName(account.name) : venue || 'Semua venue';
   const sourceNote = data.stamp ? `Data per ${dataset === 'k3' ? data.stamp : fmtFull(data.stamp)}` : 'Data belum tersedia';
 
   return (

@@ -1,5 +1,6 @@
 import { q } from './db.js';
 import { HttpError } from './util.js';
+import { eventVenueScope } from './eventVenues.js';
 
 const key = (value) => String(value ?? '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 const schoolKey = (value) => key(String(value ?? '').toLowerCase().replace(/\bsd\s*n(?=\s|\d|[.-])/g, 'sd negeri '));
@@ -63,6 +64,7 @@ export async function getArrivalRecap() {
     ), '[]') AS breakdown
   FROM venues v LEFT JOIN venue_arrival_recap r ON r.venue_id=v.id
   LEFT JOIN breakdown b ON b.venue_id=v.id
+  WHERE ${eventVenueScope('v')}
   GROUP BY v.id, v.name, r.imported_at, r.detail_rows IS NOT NULL ORDER BY v.name`);
   return rows;
 }
@@ -74,8 +76,8 @@ export async function getArrivalRecapDetails(rawVenueId, group) {
     throw new HttpError(400, 'Filter daftar kehadiran tidak valid.');
   }
   const { rows } = await q(`SELECT p.*
-    FROM venue_arrival_recap r CROSS JOIN LATERAL ${detailRows}
-    WHERE r.venue_id=$1 AND ($2='invited'
+    FROM venue_arrival_recap r JOIN venues v ON v.id=r.venue_id CROSS JOIN LATERAL ${detailRows}
+    WHERE ${eventVenueScope('v')} AND r.venue_id=$1 AND ($2='invited'
       OR ($2='arrived' AND p.arrival_status IN ('selesai','sudah_tiba'))
       OR ($2='queued' AND p.arrival_status='sedang_antre'))
     ORDER BY p.name, p.id`, [venueId, group]);
