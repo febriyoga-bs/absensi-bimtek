@@ -17,6 +17,7 @@ import { progressStatusSql, currentProgressSql } from '../progressImport.js';
 import { reportingDates, reportingDays, withReportingDay } from '../reportingDays.js';
 import { getArrivalRecap, getArrivalRecapDetails, importArrivalRecap } from '../arrivalRecap.js';
 import { finiteInteger } from '../security.js';
+import { eventId } from '../eventContext.js';
 
 const r = Router();
 
@@ -1214,7 +1215,7 @@ r.get('/export', ah(async (req, res) => {
     fmt(x.created_at), x.venue || '',
     (x.flags || []).map((f) => f.detail).join('; '),
     safeNote(x.participant_note),
-    x.has_photo && origin ? `${origin}/admin/absensi/foto/${x.attendance_id}` : '',
+    x.has_photo && origin ? `${origin}/admin/absensi/foto/${x.attendance_id}?event=${eventId()}` : '',
   ].map(esc).join(','));
   const day = withReportingDay(s).check_in_day;
   const title = day ? `${day.label} ${day.date}` : `absensi-${s.name}`;

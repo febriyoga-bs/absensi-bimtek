@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import QRCode from 'qrcode';
 import { api } from '../api.js';
+import { eventPath } from '../event.js';
 import { formatRoom } from '../lib/room.js';
 import Icon from '../components/Icon.jsx';
 import BrandMark from '../components/BrandMark.jsx';
@@ -9,7 +10,7 @@ import { Skel } from '../components/Skeleton.jsx';
 
 /**
  * Kartu QR pribadi (link dikirim lewat WhatsApp). Peserta cukup menunjukkan
- * QR ini ke LO/panitia, yang memindainya dari menu "Scan QR".
+ * Nama atau kode ini ke LO untuk pencatatan melalui Absenkan Peserta.
  */
 export default function QrCard() {
   const { token } = useParams();
@@ -19,7 +20,7 @@ export default function QrCard() {
 
   useEffect(() => {
     api(`/qr/${token}`).then(setP).catch((e) => setError(e.message));
-    QRCode.toDataURL(`${window.location.origin}/qr/${token}`, {
+    QRCode.toDataURL(`${window.location.origin}${eventPath(`/qr/${token}`)}`, {
       width: 720, margin: 2, errorCorrectionLevel: 'M', color: { dark: '#0b1f3a', light: '#ffffff' },
     }).then(setImg);
   }, [token]);

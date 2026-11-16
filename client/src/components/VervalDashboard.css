@@ -86,9 +86,18 @@
 .verval-detail-stats dd { margin: 0; text-align: right; font-weight: 700; }
 .verval-photo-tabs { display: flex; gap: 8px; margin: 16px 0; }
 .verval-photo-tabs [aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
-.verval-photos { display: grid; gap: 12px; }
+.verval-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 160px)); gap: 12px; }
 .verval-photos figure { margin: 0; }
-.verval-photos img { display: block; width: 100%; border-radius: 10px; }
+.verval-photos img { display: block; width: 100%; height: 104px; object-fit: cover; border-radius: 8px; }
+.verval-photo-preview { display:block; width:100%; padding:0; border:1px solid var(--line, #dbe3ed); border-radius:9px; background:transparent; color:inherit; cursor:zoom-in; overflow:hidden; text-align:center; }
+.verval-photo-preview span { display:block; padding:5px; font-size:11px; }
+.verval-photo-preview:focus-visible { outline:3px solid var(--accent, #1674d1); outline-offset:3px; }
+dialog.verval-photo-viewer { position:fixed; inset:0; width:100vw; height:100dvh; max-width:none; max-height:none; margin:0; padding:60px 20px 20px; border:0; box-sizing:border-box; background:rgba(8,16,28,.97); color:#fff; }
+.verval-photo-viewer::backdrop { background:rgba(0,0,0,.8); }
+.verval-photo-viewer figure { margin:0 auto; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; pointer-events:none; }
+.verval-photo-viewer img { max-width:100%; max-height:calc(100% - 50px); object-fit:contain; }
+.verval-photo-viewer figcaption { max-width:90%; text-align:center; font-size:13px; }
+.verval-photo-viewer .verval-photo-close { position:absolute; top:14px; right:20px; background:#fff; color:#142238; }
 .verval-photos figcaption { font-size: 10px; color: var(--muted); margin-top: 5px; }
 .verval-school-list { margin-top: 14px; }
 .verval-school-list > summary { cursor: pointer; font-size: 13px; font-weight: 700; margin-bottom: 12px; }

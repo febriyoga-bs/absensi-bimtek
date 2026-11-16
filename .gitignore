@@ -33,3 +33,11 @@ coverage/
 *.local
 *.local.json
 *.local.mjs
+
+# Berkas kerja hasil validasi/impor lokal (data sumber tetap disimpan di luar repo)
+data/*-pemetaan.readiness.json
+
+# Cache Python dan preview sementara hasil render panduan
+__pycache__/
+*.py[cod]
+tmp/pdfs/panduan-update-*.png

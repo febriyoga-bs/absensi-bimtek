@@ -1,4 +1,5 @@
 export const dashboardMenu = [
+  { to: '/admin/kegiatan', icon: 'layer-group', label: 'Kegiatan BIMTEK', description: 'Pisahkan data setiap tahap dan kelola kegiatan aktif atau arsip.' },
   { to: '/admin/pelaporan', end: true, icon: 'chart-line', label: 'Pantau Pelaporan', lo: true, description: 'Pantau Laporan 50%, antrean reviu, dan absensi sekolah per hari.' },
   { to: '/admin/rekap-absensi', end: true, icon: 'clipboard-list', label: 'Rekap Absensi', lo: true, description: 'Lihat catatan absensi resmi per sesi dan per venue.' },
   { to: '/admin/kehadiran', end: true, icon: 'door-open', label: 'Rekap Kehadiran', lo: true, description: 'Lihat peserta yang sudah tiba atau sedang antre menurut rekap kedatangan.' },

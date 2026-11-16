@@ -1,18 +1,30 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { api } from '../api.js';
+import { selectedEvent } from '../event.js';
+import './EventTabs.css';
 import { bimtekSchedule } from '../lib/bimtekSchedule.js';
 import Icon from './Icon.jsx';
 
 export default function VenueSchedule({ info }) {
-  const [stage, setStage] = useState(3);
+  const [stage, setStage] = useState(selectedEvent()?.id || 3);
+  const [loaded, setLoaded] = useState({});
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    if (stage === 2) { setLoading(false); setError(''); return; }
+    let live = true;
+    setLoading(true); setError('');
+    api(`/info?event=${stage}`).then((data) => { if (live) setLoaded((old) => ({ ...old, [stage]: data.venues })); })
+      .catch((e) => { if (live) setError(e.message); }).finally(() => { if (live) setLoading(false); });
+    return () => { live = false; };
+  }, [stage]);
   const schedule = bimtekSchedule.find((item) => item.stage === stage);
-  // The current venue collection belongs to Tahap 3. Other stages remain empty
-  // until their own venue data is supplied; never reuse Tahap 3 for another tab.
-  const venues = info?.venues_by_stage?.[stage] || (stage === 3 ? info?.venues || [] : []);
+  const venues = loaded[stage] || (info?.event?.id === stage ? info.venues : []);
   return <section className="panel venue-schedule" aria-labelledby="judul-venue">
     <h2 id="judul-venue" className="panel__title">Venue BIMTEK</h2>
-    <div className="venue-stage-tabs" role="tablist" aria-label="Tahap venue BIMTEK">
+    <div className="reporting-datasets event-tabs venue-stage-tabs" role="tablist" aria-label="Tahap venue BIMTEK">
       {bimtekSchedule.map((item, index) => <button key={item.stage} type="button" role="tab"
-        id={`venue-stage-${item.stage}`} aria-selected={stage === item.stage} aria-controls="venue-stage-panel"
+        id={`venue-stage-${item.stage}`} className={stage === item.stage ? 'on' : ''} aria-selected={stage === item.stage} aria-controls="venue-stage-panel"
         tabIndex={stage === item.stage ? 0 : -1} onClick={() => setStage(item.stage)}
         onKeyDown={(event) => {
           let next;
@@ -27,12 +39,14 @@ export default function VenueSchedule({ info }) {
     </div>
     <div role="tabpanel" id="venue-stage-panel" aria-labelledby={`venue-stage-${stage}`}>
       <p className="muted small">BIMTEK Tahap {stage} · {schedule.dates}</p>
+      {loading && <p role="status" className="muted small">Memuat venue…</p>}
+      {error && <p role="alert" className="alert alert--err">{error}</p>}
       {venues.length ? <div className="venues">
         {venues.map((venue) => <div key={venue.id || venue.name} className="venue-card">
           <span className="venue-card__icon"><Icon name="building" /></span>
           <span><b>{venue.name}</b>{venue.address && <small>{venue.address}</small>}</span>
         </div>)}
-      </div> : <p className="venue-empty" role="status">{stage === 4
+      </div> : !loading && !error && <p className="venue-empty" role="status">{stage === 4
         ? 'Venue Tahap 4 belum diperbarui. Daftar venue akan ditampilkan setelah data tersedia.'
         : `Data venue Tahap ${stage} belum tersedia.`}</p>}
     </div>

@@ -5,6 +5,8 @@ import Icon from '../../components/Icon.jsx';
 import FontIcon from '../../components/FontIcon.jsx';
 import BrandMark from '../../components/BrandMark.jsx';
 import { dashboardMenu } from '../../lib/dashboardMenu.js';
+import EventTabs from '../../components/EventTabs.jsx';
+import { selectedEvent } from '../../event.js';
 
 export default function AdminLayout() {
   const nav = useNavigate();
@@ -71,7 +73,11 @@ export default function AdminLayout() {
           </button>
         </nav>
       </aside>
-      <section className="admin__main"><Outlet context={{ user, lo }} /></section>
+      <section className="admin__main">
+        {loc.pathname !== '/admin/pelaporan' && <EventTabs />}
+        {selectedEvent()?.status === 'archived' && <p className="alert">{selectedEvent().name} sudah diarsipkan. Data hanya dapat dilihat dan diunduh.</p>}
+        <Outlet context={{ user, lo }} />
+      </section>
     </div>
   );
 }

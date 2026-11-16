@@ -51,6 +51,8 @@ html[data-theme="dark"] .reporting-summary button[aria-pressed="true"] { backgro
 html[data-theme="dark"] .reporting-highlights > div { background: #203c60; }
 html[data-theme="dark"] .reporting-highlights > div:nth-child(2) { background: #44341d; }
 html[data-theme="dark"] .reporting-highlights > div:nth-child(3) { background: #37305a; }
+html[data-theme="dark"] .reporting-duo > .reporting-review-metric { background:#593016; color:#fed7aa; }
+html[data-theme="dark"] .reporting-highlights > .reporting-accepted-metric { background:#123c2b; color:#86efac; }
 html[data-theme="dark"] .reporting-tag {
   background: var(--report-status-bg, var(--surface-2));
   color: var(--report-status-text, var(--text));

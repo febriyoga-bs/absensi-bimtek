@@ -62,7 +62,7 @@ export default function Home() {
           <Link to={dashboardPath} className="btn btn--lg home__cta">{dashboardLabel}<Icon name="right" size={19} /></Link>
           <div className="hero__meta">
             {schedule.map(({ stage, dates }) => <span key={stage} className="chip-inv"><Icon name="calendar" size={15} />BIMTEK Tahap {stage} · {dates}</span>)}
-            {showStage3 && !!info?.venues?.length && <span className="chip-inv"><Icon name="pin" size={15} />{info.venues.length} venue Tahap 3</span>}
+            {!!info?.venues?.length && <span className="chip-inv"><Icon name="pin" size={15} />{info.venues.length} venue · {info.event?.name}</span>}
             <span className="chip-inv"><Icon name="clock" size={15} />{fmtDate(now)} · {fmtClock(now)} WIB</span>
           </div>
         </div>
@@ -91,7 +91,7 @@ export default function Home() {
             {schedule.map(({ stage, dates }) => <span key={stage} className="tag tag--type">TAHAP {stage} · {dates}</span>)}
           </div>}
           {showStage3 && !!info?.check_in_days?.length && <div className="home-schedule">
-            <b>Sesi absensi BIMTEK TAHAP 3</b>
+            <b>Sesi absensi {info?.event?.name || 'BIMTEK'}</b>
             {info.check_in_days.map((day) => <span key={day.date} className="tag tag--type">{checkInDayLabel(day)}</span>)}
           </div>}
         </section>

@@ -71,7 +71,7 @@ export default function ParticipantSync() {
       <div className="page-head">
         <div>
           <h2>Pratinjau Sinkronisasi Absensi</h2>
-          <p className="muted">Cocokkan daftar Bendahara dan Pengawas dengan pemetaan Bimtek Pelaporan 3 revisi 8.</p>
+          <p className="muted">Cocokkan daftar Bendahara dan Pengawas dengan pemetaan kegiatan yang sedang dipilih.</p>
         </div>
         <Link className="btn" to="/admin/orang">Kembali ke Peserta &amp; Panitia</Link>
       </div>

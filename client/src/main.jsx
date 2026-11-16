@@ -4,6 +4,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import './styles.css';
 import Home from './pages/Home.jsx';
 import Appearance from './components/Appearance.jsx';
+import EventScope from './components/EventScope.jsx';
+import Events from './pages/admin/Events.jsx';
 import { TopLoader, Loading } from './components/Skeleton.jsx';
 // halaman QR memuat pustaka QR (± 160 kB) → dimuat terpisah agar halaman absen tetap ringan
 const QrCard = lazy(() => import('./pages/QrCard.jsx'));
@@ -28,6 +30,7 @@ const ChangePassword = lazy(() => import('./pages/admin/ChangePassword.jsx'));
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
+      <EventScope>
       <Appearance>
       <TopLoader />
       <Suspense fallback={<p style={{ padding: 24 }}><Loading /></p>}>
@@ -54,11 +57,13 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="pelaporan" element={<Reporting />} />
           <Route path="pendampingan/saya" element={<Navigate to="/admin/pelaporan" replace />} />
           <Route path="pengaturan" element={<Settings />} />
+          <Route path="kegiatan" element={<Events />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       </Suspense>
       </Appearance>
+      </EventScope>
     </BrowserRouter>
   </React.StrictMode>
 );

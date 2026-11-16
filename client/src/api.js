@@ -1,4 +1,5 @@
 const TOKEN_KEY = 'bimtek_admin_token';
+import { eventPath } from './event.js';
 
 const USER_KEY = 'bimtek_admin_user';
 
@@ -39,7 +40,7 @@ async function request(path, { method = 'GET', body, admin = false } = {}) {
   if (admin) headers.Authorization = `Bearer ${adminToken.get()}`;
   let res;
   try {
-    res = await fetch(`/api${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
+    res = await fetch(`/api${eventPath(path)}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
   } catch {
     throw new ApiError(0, { error: 'Tidak dapat terhubung ke server. Periksa koneksi internet.' });
   }
@@ -49,11 +50,11 @@ async function request(path, { method = 'GET', body, admin = false } = {}) {
       adminToken.clear();
       const next = window.location.pathname + window.location.search;
       window.location.href = next.startsWith('/admin/absensi/foto/')
-        ? `/admin/login?next=${encodeURIComponent(next)}` : '/admin/login';
+        ? eventPath(`/admin/login?next=${encodeURIComponent(next)}`) : eventPath('/admin/login');
     }
     throw new ApiError(res.status, data);
   }
   return data;
 }
 
-export const adminUrl = (path) => `/api/admin${path}${path.includes('?') ? '&' : '?'}t=${encodeURIComponent(adminToken.get() || '')}`;
+export const adminUrl = (path) => `/api/admin${eventPath(path)}${eventPath(path).includes('?') ? '&' : '?'}t=${encodeURIComponent(adminToken.get() || '')}`;

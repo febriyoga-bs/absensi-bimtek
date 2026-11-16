@@ -13,6 +13,7 @@ import { getArrivalRecap } from '../arrivalRecap.js';
 import { getVerval } from '../verval.js';
 import { publicReadLimiter, vervalLimiter, schoolDetailLimiter } from '../security.js';
 import { createAsyncCache } from '../asyncCache.js';
+import { currentEvent, eventId } from '../eventContext.js';
 
 const r = Router();
 const ROLES = ['peserta', 'panitia'];
@@ -59,11 +60,12 @@ r.get('/dashboard/:section', ah(async (req, res) => {
   const { period } = req.query;
   if (!['pelaporan','absensi','kehadiran'].includes(section)) throw new HttpError(404, 'Ringkasan tidak ditemukan.');
   if (period !== undefined && (typeof period !== 'string' || period.length > 32)) throw new HttpError(400, 'Periode tidak valid.');
-  const result = await publicCache.get(JSON.stringify([section, period ?? null]), async () => {
+  const result = await publicCache.get(JSON.stringify([eventId(), section, period ?? null]), async () => {
   let rows;
   if (section === 'pelaporan') {
     rows = await getPublicReporting(period ?? 'current');
   } else if (section === 'absensi') {
+    if (!reportingDates.length) return { updated_at: null, rows: [] };
     const day = period ?? reportingDates[0];
     if (!reportingDates.includes(day)) throw new HttpError(400, 'Hari absensi tidak valid.');
     const [venues, { rows: [latest] }] = await Promise.all([
@@ -95,7 +97,7 @@ r.get('/dashboard/:section', ah(async (req, res) => {
   }
   return rows;
   });
-  res.set('Cache-Control', 'public, max-age=15, s-maxage=30');
+  res.set('Cache-Control', 'no-store');
   res.json(result);
 }));
 
@@ -159,6 +161,7 @@ r.get('/info', ah(async (req, res) => {
     return { open: publicSession(open), next: publicSession(next) };
   };
   res.json({
+    event: { id: eventId(), name: currentEvent().name, status: currentEvent().status },
     event_name: s.event_name,
     organizer: s.organizer,
     event_dates: s.event_dates,

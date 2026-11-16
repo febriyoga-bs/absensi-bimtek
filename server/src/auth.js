@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { q } from './db.js';
+import { eventId } from './eventContext.js';
 
 const SECRET = () => {
   const s = process.env.JWT_SECRET;
@@ -14,7 +15,7 @@ const SECRET = () => {
  *  - LO venue    : { adm: true, role: 'lo', lo: id, venue: venueId }  → hanya data venue-nya
  */
 export const signAdmin = (payload = { role: 'admin' }) =>
-  jwt.sign({ adm: true, ...payload }, SECRET(), { expiresIn: '12h' });
+  jwt.sign({ adm: true, event: eventId(), ...payload }, SECRET(), { expiresIn: '12h' });
 
 export async function requireAdmin(req, res, next) {
   const header = req.headers.authorization || '';
@@ -30,6 +31,7 @@ export async function requireAdmin(req, res, next) {
     return res.status(401).json({ error: 'Sesi login berakhir, silakan login ulang' });
   }
   if (p.role === 'lo') {
+    if ((p.event ?? 3) !== eventId()) return res.status(401).json({ error: 'Silakan login menggunakan akun LO untuk kegiatan yang dipilih.' });
     try {
       const { rows: [account] } = await q('SELECT active, venue_id FROM lo_accounts WHERE id=$1', [p.lo]);
       if (!account?.active || account.venue_id !== p.venue) {
@@ -79,7 +81,7 @@ export function verifyPassword(pw, stored) {
 export function signChallenge(personId, sessionId, nonce, loAccount) {
   const ttl = Number(process.env.CHALLENGE_TTL || 300);
   return jwt.sign({
-    p: personId, s: sessionId, n: nonce,
+    p: personId, s: sessionId, n: nonce, event: eventId(),
     ...(loAccount && { lo: loAccount.lo, venue: loAccount.venue }),
   }, SECRET(), { expiresIn: ttl });
 }
@@ -87,7 +89,7 @@ export function signChallenge(personId, sessionId, nonce, loAccount) {
 export function verifyChallenge(token) {
   try {
     const p = jwt.verify(String(token || ''), SECRET(), { algorithms: ['HS256'] });
-    return p.adm ? null : p; // token login admin tidak boleh dipakai sebagai token absen
+    return p.adm || (p.event ?? 3) !== eventId() ? null : p;
   } catch {
     return null;
   }

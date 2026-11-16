@@ -2,6 +2,8 @@ import FilterField from '../components/FilterField.jsx';
 import { useEffect, useState } from 'react';
 import { Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
+import { selectedEvent } from '../event.js';
+import EventTabs from '../components/EventTabs.jsx';
 import FontIcon from '../components/FontIcon.jsx';
 import ArrivalBreakdown from '../components/ArrivalBreakdown.jsx';
 import ArrivalTotals from '../components/ArrivalTotals.jsx';
@@ -31,7 +33,8 @@ export function PublicDashboardSection({ section, info, initialPeriod }) {
   const { label, description, columns = [] } = sections[section];
   const [days, setDays] = useState([]);
 
-  const periods = section === 'absensi' ? days : sections[section].periods;
+  const periods = section === 'absensi' ? days : section === 'pelaporan'
+    ? [['current', selectedEvent()?.name || 'BIMTEK Tahap 3'], ['k3', 'BIMTEK Tahap 2']] : sections[section].periods;
   const [selected, setSelected] = useState(initialPeriod);
   const period = periods?.some(([value]) => value === selected) ? selected : periods?.[0]?.[0];
   const path = `/dashboard/${section}${period ? `?period=${encodeURIComponent(period)}` : ''}`;
@@ -58,6 +61,10 @@ export function PublicDashboardSection({ section, info, initialPeriod }) {
     ? section === 'pelaporan' && period === 'k3' ? sourceStamp : fmtFull(sourceStamp)
     : section === 'absensi' ? 'Belum ada absensi' : 'Belum ada data';
 
+  const stageTabs = <EventTabs current={section !== 'pelaporan' || period !== 'k3'} onSelect={() => setSelected('current')}>
+    {section === 'pelaporan' && <button type="button" className={period === 'k3' ? 'on' : ''}
+      aria-pressed={period === 'k3'} onClick={() => setSelected('k3')}>BIMTEK Tahap 2</button>}
+  </EventTabs>;
   return <section aria-labelledby={`public-${section}-title`}
     className={`landing-dashboard panel ${section === 'pelaporan' ? 'reporting-page' : 'attendance-dashboard'}`}>
       <div className="page-head">
@@ -67,25 +74,24 @@ export function PublicDashboardSection({ section, info, initialPeriod }) {
           {updateLabel} · {updateTime}
         </p>}
         <div className="row public-dashboard__filters">
-          {section === 'absensi' && !!periods?.length && <FilterField label="Periode"><select value={period} aria-label="Periode" onChange={(event) =>
-            setSelected(event.target.value)}>
-            {periods.map(([value, title]) => <option key={value} value={value}>{title}</option>)}
-          </select></FilterField>}
           <button className="btn btn--sm" type="button" onClick={() => { setResult(null); setReload((value) => value + 1); }}>
             <FontIcon name="rotate" /> Muat ulang
           </button>
         </div>
         </div>
       </div>
-      {section === 'pelaporan' && <div className="reporting-datasets" role="group" aria-label="Tahap Bimtek">
-        {periods.map(([value, title]) => <button type="button" key={value} className={period === value ? 'on' : undefined}
-          aria-pressed={period === value} onClick={() => setSelected(value)}>{title}</button>)}
+      {(section !== 'pelaporan' || !current?.report) && <div className="public-dashboard__toolbar">
+        {stageTabs}
+        {section === 'absensi' && !!periods?.length && <FilterField label="Periode"><select value={period} aria-label="Periode" onChange={(event) =>
+          setSelected(event.target.value)}>
+          {periods.map(([value, title]) => <option key={value} value={value}>{title}</option>)}
+        </select></FilterField>}
       </div>}
       {!current && <p className="muted" role="status">Memuat ringkasan…</p>}
       {current?.error && <p className="alert alert--err" role="alert">{current.error}</p>}
       {current?.rows && !rows.length && <p className="muted">Belum ada data pada bagian ini.</p>}
       {section === 'pelaporan' && current?.report && <ReportingView key={period} data={current.report}
-        dataset={period} publicView refresh={() => setReload((value) => value + 1)} />}
+        dataset={period} publicView stageTabs={stageTabs} refresh={() => setReload((value) => value + 1)} />}
       {section === 'absensi' && !!rows.length && <div className="stats">
         {rows.map(({ id, venue, counts, breakdown }) => {
           const pct = counts.target ? Math.round(counts.checked_in / counts.target * 100) : 0;

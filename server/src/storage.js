@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { eventId } from './eventContext.js';
 import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
@@ -30,6 +31,7 @@ function client() {
 
 /** @returns {Promise<string>} referensi yang disimpan di kolom photo_path */
 export async function savePhoto(key, buf) {
+  key = `events/${eventId()}/${key}`;
   if (R2()) {
     await client().send(new PutObjectCommand({
       Bucket: process.env.R2_BUCKET, Key: key, Body: buf, ContentType: 'image/jpeg',

@@ -21,7 +21,7 @@ def link(label,path): p(f'<link href="https://dashboardlo-bimtek.vercel.app{path
 def footer(c,d):
     c.setStrokeColor(colors.HexColor('#dbe3ed')); c.line(42,39,553,39)
     c.setFont('Helvetica',8); c.setFillColor(colors.HexColor('#566579'))
-    c.drawString(42,26,'BIMTEK Revitalisasi SD | Panduan LO | 11 November 2026')
+    c.drawString(42,26,'BIMTEK Revitalisasi SD | Panduan LO | 15 November 2026')
     c.drawRightString(553,26,f'{d.page}')
 
 p('PANDUAN LO','TitleLO')
@@ -35,17 +35,17 @@ img=root/'docs/panduan-lo/01-login.jpg'
 story.append(Image(str(img),width=245,height=271))
 p('Gambar 1. Halaman login Dashboard LO.','SmallLO')
 h('2. Periksa binaan dan ruangan')
-link('Buka Daftar Pendampingan','/admin/pendampingan/saya')
-p('Periksa fasilitator, sekolah binaan, dan ruangan penugasan. Jadikan daftar ini acuan kunjungan, lalu datangi dan temui orang yang akan diabsenkan secara langsung.')
+link('Buka Pantau Pelaporan','/admin/pelaporan')
+p('Setelah login, halaman awal adalah <b>Pantau Pelaporan</b>. Periksa sekolah binaan, fasilitator, ruangan, dan status Laporan 50%. Gunakan filter LO dan venue sesuai kebutuhan. Menu Pendampingan lama sudah diarahkan ke halaman ini.')
 p('Tautan menu internal memerlukan login akun LO.','SmallLO')
 story.append(PageBreak())
 p('Langkah absensi di ruangan','TitleLO')
 h('3. Pilih orang yang akan diabsenkan')
 link('Buka Absenkan Peserta','/admin/scan')
 for t in [
- 'Pilih <b>Sesi resmi yang sedang dibuka</b>. Pastikan bukan sesi uji coba.',
- 'Gunakan cakupan <b>Binaan saya</b>.',
- 'Untuk <b>bendahara dan pengawas</b>, pilih tab <b>Sekolah</b>. Cari berdasarkan nama, sekolah, NPSN, atau kode.',
+ 'Periksa <b>Sesi</b> yang tercantum pada peserta. Pastikan sesi resmi sedang dibuka; sesi uji coba tidak masuk rekap resmi.',
+ 'Filter <b>LO bertugas</b> otomatis memilih akun sendiri. Melihat LO lain atau Semua LO tidak mengubah kewenangan pencatatan.',
+ 'Untuk <b>bendahara dan pengawas</b>, pilih tab <b>Sekolah</b> dan filter <b>Jabatan peserta</b>. Cari nama, sekolah, NPSN, atau kode.',
  'Untuk <b>fasilitator</b>, pilih tab <b>Fasilitator</b>, lalu cari namanya.',
  'Cocokkan nama, jabatan, sekolah atau instansi, serta sesi. Tekan <b>Absenkan</b> pada orang yang sesuai.'
 ]: p('• '+t)
@@ -56,12 +56,12 @@ p('<b>Pola catatan:</b> nama sekolah - kendala - tindak lanjut yang dibutuhkan.'
 p('Gunakan contoh pada halaman berikut sesuai kondisi sebenarnya. Hindari catatan hanya "hadir", "aman", atau "selesai". Jika tidak ada kendala, tuliskan kondisi tersebut dengan jelas.')
 h('5. Simpan dan pastikan berhasil')
 p('Tekan <b>Absenkan</b> setelah foto dan catatan sesuai. Tunggu pesan <b>Absen tercatat</b> dan pastikan status berubah menjadi <b>Sudah absen</b>. Ulangi untuk seluruh binaan.')
-link('Periksa Rekap Absensi','/admin')
+link('Periksa Rekap Absensi','/admin/rekap-absensi')
 p('<b>Perhatian:</b> status <b>SUDAH TIBA</b> pada rekap kedatangan berbeda dengan <b>Sudah absen</b> untuk sesi yang sedang berlangsung.')
 h('Jika menemui kendala')
 p('<b>Belum ditemukan di ruangan:</b> konfirmasikan keberadaannya terlebih dahulu. Gunakan <b>Mundur/Berhalangan Hadir</b> hanya setelah kondisi tersebut dipastikan.')
 p('<b>Nama tidak ditemukan, Di luar binaan, atau belum ada sesi:</b> laporkan kepada admin untuk pemeriksaan penugasan dan sesi. Jika status sudah tercatat, periksa catatan yang ada.')
-p('Screenshot yang tersedia adalah halaman login. Halaman setelah login dan form foto tidak ditampilkan karena belum tersedia akses sesi LO untuk pengambilan gambar.','SmallLO')
+p('<b>Scan QR dan absensi mandiri peserta dinonaktifkan.</b> Peserta cukup menunjukkan nama atau kode kepada LO.','SmallLO')
 story.append(PageBreak())
 p('Contoh catatan kendala','TitleLO')
 p('Sesuaikan nama sekolah dan isi catatan dengan hasil kunjungan. Contoh berikut bukan pernyataan kondisi sekolah yang sudah diverifikasi.')
@@ -79,5 +79,26 @@ for title,body in examples:
     p('<b>'+title+'</b><br/>'+body,'ExampleLO')
 h('Pemeriksaan akhir LO')
 p('Pastikan seluruh fasilitator, bendahara, dan pengawas binaan sudah ditindaklanjuti; foto dan catatan sesuai; serta absensi sesi hari ini benar-benar tercatat. Sampaikan kendala yang membutuhkan tindak lanjut kepada admin atau fasilitator terkait.')
+story.append(PageBreak())
+p('Absensi LO &amp; bantuan','TitleLO')
+h('6. Absenkan diri sendiri')
+link('Buka Absen Saya','/admin/absen-saya')
+p('Lakukan absensi saat berada di venue penugasan. Siapkan koneksi internet, aktifkan layanan lokasi, lalu izinkan akses kamera dan GPS pada browser. Ikuti petunjuk pengambilan foto dan lokasi hingga hasil absensi tampil.')
+p('GPS digunakan untuk absensi mandiri LO. Absensi peserta oleh LO menggunakan foto kamera dan catatan; venue mengikuti akun LO.')
+h('7. Catat peserta berhalangan dengan tepat')
+p('Gunakan <b>Mundur/Berhalangan Hadir</b> hanya setelah dikonfirmasi, lalu isi alasan. Tidak diperlukan foto. Peserta berhalangan tidak dihitung hadir. Jika kemudian datang, peserta dapat diabsenkan kembali dengan foto pada sesi yang sama.')
+h('8. Jika pencatatan bermasalah')
+for t in [
+ '<b>Tombol tidak aktif:</b> periksa sesi yang tercantum. Jika belum ada sesi aktif, koordinasikan dengan admin.',
+ '<b>Di luar binaan / Di luar venue:</b> koordinasikan dengan LO yang bertugas atau admin. Mengganti filter tidak memberikan hak mencatat.',
+ '<b>Nama tidak ditemukan:</b> periksa tab, filter, dan ejaan. Jangan memakai identitas orang lain; minta admin memeriksa data.',
+ '<b>Kamera tidak terbuka:</b> periksa izin kamera pada browser dan gunakan alamat web HTTPS. Untuk Absen Saya, periksa juga izin lokasi.',
+ '<b>Koneksi terputus saat menyimpan:</b> muat ulang dan periksa status atau rekap sebelum mencoba lagi. Absensi ganda per orang pada sesi yang sama ditolak.',
+ '<b>Status review:</b> catatan masih perlu diperiksa. Jika ada kesalahan identitas, foto, atau status, koordinasikan dengan admin.'
+]: p(t)
+h('Pegangan singkat saat bertugas')
+p('<b>Cari peserta &gt; cocokkan identitas dan sesi &gt; ambil foto &gt; isi catatan &gt; simpan &gt; cek hasil.</b>')
+p('Status kedatangan berasal dari rekap terpisah dan tidak menggantikan absensi sesi. Dashboard diperbarui ketika dibuka atau melalui <b>Muat ulang</b>.')
+p('Pilihan tampilan Classic / Modern tidak mengubah data, hak akses, atau alur absensi.','SmallLO')
 SimpleDocTemplate(str(out),pagesize=(595.28,841.89),rightMargin=42,leftMargin=42,topMargin=38,bottomMargin=52,title='Panduan LO - Absensi dan Pelaporan Progres 50%',author='Panitia BIMTEK').build(story,onFirstPage=footer,onLaterPages=footer)
 print(out)

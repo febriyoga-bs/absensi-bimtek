@@ -16,7 +16,7 @@ export async function getReportingSchoolAttendance(npsn, user) {
   const { rows: [school] } = await q(`SELECT s.venue,s.lo FROM assignment_roster r
     CROSS JOIN LATERAL jsonb_to_recordset(r.data->'schools') AS s(npsn text,venue text,lo text)
     WHERE r.id=1 AND s.npsn=$1`, [npsn]);
-  if (!school) throw new HttpError(404, 'Sekolah tidak ditemukan di pemetaan Tahap 3.');
+  if (!school) throw new HttpError(404, 'Sekolah tidak ditemukan di pemetaan kegiatan ini.');
   return getAssignmentAttendance('schools', school.venue, school.lo, npsn, user);
 }
 

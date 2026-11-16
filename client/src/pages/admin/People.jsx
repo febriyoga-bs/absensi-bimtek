@@ -2,6 +2,7 @@ import FilterField from '../../components/FilterField.jsx';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api.js';
+import { selectedEvent } from '../../event.js';
 import Icon from '../../components/Icon.jsx';
 import { Skel, SkelRows, SkelLines, Spinner } from '../../components/Skeleton.jsx';
 import { formatRoom } from '../../lib/room.js';
@@ -120,7 +121,7 @@ export default function People() {
   useEffect(() => setLimit(PAGE), [list, fVenue, fPos, fRegion, fRoom, fProv, sort]);
 
   const filtered = fVenue || fPos || fRegion || fRoom || fProv;
-  const qrLink = (p) => `${window.location.origin}/qr/${p.qr_token}`;
+  const qrLink = (p) => `${window.location.origin}/qr/${p.qr_token}?event=${selectedEvent()?.id || 3}`;
 
   // CSV berisi link QR pribadi + link WhatsApp siap kirim (mengikuti filter yang aktif)
   function exportQrLinks() {

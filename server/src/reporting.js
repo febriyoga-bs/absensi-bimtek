@@ -4,6 +4,7 @@ import { parseRows } from './peopleImport.js';
 import { HttpError } from './util.js';
 import { reportingCheckInDates, reportingDates, reportingDays } from './reportingDays.js';
 import { importProgressCsv, progressStatusSql, currentProgressSql } from './progressImport.js';
+import { currentEvent } from './eventContext.js';
 
 // Arsip statis dari Pantau Pelaporan LO · Bimtek K3.html. Hanya data yang dipakai dasbor.
 const archive = JSON.parse(readFileSync(new URL('./reportingK3.json', import.meta.url), 'utf8'));
@@ -76,7 +77,7 @@ export async function getReporting(dataset, user) {
       phone: canSeeContact ? phones.get(contactKey(venue, name)) : undefined };
   });
   return {
-    title: 'Bimtek Pelaporan 3',
+    title: currentEvent()?.name || 'BIMTEK Tahap 3',
     baseline: reportingDates[0],
     check_in_days: reportingDays,
     stamp: records.reduce((latest, row) => row.updated_at && (!latest || row.updated_at > latest) ? row.updated_at : latest, null),
@@ -145,7 +146,7 @@ export async function importReporting(csv) {
   const header = typeof csv === 'string' ? parseRows(csv)[0]?.map((name) => name.trim().toLowerCase()) : [];
   if (!header?.includes('status reviu') && header?.includes('l8 capaian 50% terkirim')) return importProgressCsv(csv);
   const { entries, official, skipped } = await parseReporting(csv);
-  if (!entries.length) throw new HttpError(400, 'Tidak ada NPSN di CSV yang cocok dengan pemetaan Tahap 3.');
+  if (!entries.length) throw new HttpError(400, 'Tidak ada NPSN di CSV yang cocok dengan pemetaan kegiatan ini.');
   const { rows: [result] } = await q(`WITH incoming AS (
     SELECT * FROM jsonb_to_recordset($1::jsonb) AS i(npsn text,status text,submitted_on date,progress numeric,
       facilitator text,facilitator_phone text,supervisor text,supervisor_phone text)
@@ -191,7 +192,7 @@ export async function importReporting(csv) {
     (SELECT jsonb_object_agg(status, n) FROM (SELECT status,count(*)::int AS n FROM saved GROUP BY status) totals) AS status_counts,
     ARRAY(SELECT npsn FROM unknown ORDER BY npsn LIMIT 10) AS unknown`, [JSON.stringify(entries), official]);
   if (!official && result.unknown.length) throw new HttpError(400, `NPSN tidak ada di pemetaan Pelaporan 3 (${result.unknown.join(', ')}). Periksa CSV lalu coba lagi.`);
-  if (!result.updated) throw new HttpError(400, 'Tidak ada NPSN di CSV yang cocok dengan pemetaan Tahap 3.');
+  if (!result.updated) throw new HttpError(400, 'Tidak ada NPSN di CSV yang cocok dengan pemetaan kegiatan ini.');
   return { updated: result.updated, skipped: skipped + result.skipped, contacts_updated: result.contacts_updated,
     defaulted: result.defaulted, unchanged: official ? 0 : result.absent_from_file,
     source: official ? 'review' : 'compact', imported: entries.length + skipped,

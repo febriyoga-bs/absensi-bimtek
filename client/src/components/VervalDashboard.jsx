@@ -13,10 +13,28 @@ const emptySchools = [];
 const emptyProvinces = {};
 const schoolsPerPage = 4;
 
+function PhotoViewer({ photo, onClose }) {
+  const dialog = useRef(null);
+  useEffect(() => {
+    const element = dialog.current;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    if (!element.open) element.showModal();
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, []);
+  return <dialog ref={dialog} className="verval-photo-viewer" aria-label={photo.alt} onClose={onClose}
+    onClick={(event) => { if (event.target === event.currentTarget) dialog.current.close(); }}>
+    <button className="btn verval-photo-close" autoFocus type="button" onClick={() => dialog.current.close()} aria-label="Tutup foto layar penuh">Tutup ×</button>
+    <figure><img src={photo.src} alt={photo.alt} /><figcaption>{photo.alt}</figcaption></figure>
+  </dialog>;
+}
+
 function SchoolDetails({ school, onClose }) {
   const [result, setResult] = useState(null);
   const [revision, setRevision] = useState(0);
   const [photoStage, setPhotoStage] = useState('terakhir');
+  const [openPhoto, setOpenPhoto] = useState(null);
+  useEffect(() => { setOpenPhoto(null); }, [school.npsn, photoStage]);
   useEffect(() => {
     let active = true;
     setResult(null);
@@ -47,10 +65,15 @@ function SchoolDetails({ school, onClose }) {
       <div className="verval-photos">{photos.slice(0, 12).map((photo) => {
         let src;
         try { const url = new URL(photo.display || photo.thumb); if (url.protocol === 'https:' && url.hostname.endsWith('.blob.core.windows.net')) src = url.href; } catch { /* Invalid source URL. */ }
-        return src ? <figure key={photo.id}><img src={src} loading="lazy" alt={`${school.nama} · ${photo.angle_label || photo.item || 'Dokumentasi sekolah'}`} /><figcaption>{photo.item} · {photo.angle_label}</figcaption></figure> : null;
+        let thumb = src;
+        try { const url = new URL(photo.thumb); if (url.protocol === 'https:' && url.hostname.endsWith('.blob.core.windows.net')) thumb = url.href; } catch { /* Use display image as fallback. */ }
+        const alt = `${school.nama} · ${photo.angle_label || photo.item || 'Dokumentasi sekolah'}`;
+        return src ? <figure key={photo.id}><button type="button" className="verval-photo-preview" aria-label={`Lihat foto layar penuh: ${alt}`}
+          onClick={() => setOpenPhoto({ src, alt })}><img src={thumb} loading="lazy" alt={alt} /><span>Lihat foto</span></button><figcaption>{photo.item} · {photo.angle_label}</figcaption></figure> : null;
       })}</div>
       {photos.length > 12 && <p className="muted small">Menampilkan 12 dari {nf.format(photos.length)} foto sumber.</p>}
     </>}
+    {openPhoto && <PhotoViewer photo={openPhoto} onClose={() => setOpenPhoto(null)} />}
   </aside>;
 }
 

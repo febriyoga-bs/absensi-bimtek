@@ -2,6 +2,8 @@ import FilterField from '../../components/FilterField.jsx';
 import { useEffect, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { api } from '../../api.js';
+import { selectedEvent } from '../../event.js';
+import EventTabs from '../../components/EventTabs.jsx';
 import { formatRoom } from '../../lib/room.js';
 import { fmtFull } from '../../lib/time.js';
 import { reportingDates } from '../../lib/bimtekSchedule.js';
@@ -21,7 +23,9 @@ const labels = {
   berhalangan: 'Berhalangan', tidak_terdata: 'Tidak terdata',
 };
 const reportStatuses = ['belum_kirim', 'menunggu_reviu', 'ditolak', 'diterima', 'sudah_direviu', 'belum_ada_data'];
-const datasetNames = { current: 'BIMTEK TAHAP 3', k3: 'BIMTEK TAHAP 2' };
+const datasetNames = new Proxy({ current: 'BIMTEK TAHAP 3', k3: 'BIMTEK TAHAP 2' }, {
+  get(target, key) { return key === 'current' ? (selectedEvent()?.name || target.current).toUpperCase() : target[key]; },
+});
 const views = { schools: 'Sekolah', facilitators: 'Fasilitator', ranking: 'Peringkat LO', regions: 'Wilayah' };
 const PAGE_SIZE = 10;
 const UNASSIGNED = 'binaan-tidak-terpetakan';
@@ -111,7 +115,7 @@ function ReportingRanking({ rows, movement, movementLabel, own }) {
   </section>;
 }
 
-function ReportingComparison({ schools, baseline, stamp }) {
+function ReportingComparison({ schools, baseline, stamp, archive = true }) {
   const before = schools.filter((school) => school.submitted_on && school.submitted_on < baseline).length;
   const final = schools.filter(submitted).length;
   const delta = final - before;
@@ -125,7 +129,7 @@ function ReportingComparison({ schools, baseline, stamp }) {
       <div className="stat__head"><h4>Ringkasan akhir yang tersedia</h4></div>
       <div className="stat__big">{nf.format(final)}<small> sekolah sudah kirim</small></div>
       <small className="reporting-comparison-delta">{delta > 0 ? '+' : ''}{nf.format(delta)} sekolah sejak sebelum acara</small>
-      <div className="muted small">Arsip {stamp}.</div>
+      <div className="muted small">{stamp ? archive ? `Arsip ${stamp}.` : `Data terakhir ${fmtFull(stamp)}.` : 'Belum ada data monitoring.'}</div>
     </article>
   </div>;
 }
@@ -154,7 +158,7 @@ function ImportReporting({ onSaved }) {
       });
       const { updated, skipped, contacts_updated: contacts, defaulted } = result;
       setStage('done');
-      setFeedback({ result, message: `${nf.format(updated)} sekolah diperbarui.${defaulted ? ` ${nf.format(defaulted)} sekolah di luar CSV ditandai Belum kirim.` : ''}${skipped ? ` ${nf.format(skipped)} NPSN di luar pemetaan Tahap 3 dilewati.` : ''}${contacts ? ` ${nf.format(contacts)} kontak dilengkapi.` : ''}` });
+      setFeedback({ result, message: `${nf.format(updated)} sekolah diperbarui.${defaulted ? ` ${nf.format(defaulted)} sekolah di luar CSV ditandai Belum kirim.` : ''}${skipped ? ` ${nf.format(skipped)} NPSN di luar pemetaan kegiatan ini dilewati.` : ''}${contacts ? ` ${nf.format(contacts)} kontak dilengkapi.` : ''}` });
       onSaved();
     } catch (e) {
       setFeedback({ error: true, message: e.message });
@@ -211,10 +215,10 @@ function ImportReporting({ onSaved }) {
         </>}
     </dialog>
     <details className="card reporting-import">
-      <summary>Impor laporan terbaru · BIMTEK TAHAP 3</summary>
+      <summary>Impor laporan terbaru · {datasetNames.current}</summary>
       <form className="form" onSubmit={save}>
         <p className="muted small">CSV <b>Progres Laporan Sekolah</b> juga didukung: memperbarui capaian fisik serta indikator laporan 50% terisi, terkirim, dan direviu. Hanya NPSN sekolah binaan diproses; sekolah di luar file, hasil reviu, dan tanggal kirim tidak ditimpa. Data NIK dan nomor kontak tidak dikirim dari format ini.</p>
-        <p className="muted small">Unggah CSV Monitoring Laporan 50% lengkap untuk memperbarui status reviu, tanggal kirim, dan capaian fisik berdasarkan NPSN. Sekolah pemetaan Tahap 3 yang tidak tercantum ditandai Belum kirim. Nomor fasilitator dan pengawas ditambahkan jika identitasnya cocok dan profil belum memiliki nomor.</p>
+        <p className="muted small">Unggah CSV Monitoring Laporan 50% lengkap untuk memperbarui status reviu, tanggal kirim, dan capaian fisik berdasarkan NPSN. Sekolah pemetaan kegiatan ini yang tidak tercantum ditandai Belum kirim. Nomor fasilitator dan pengawas ditambahkan jika identitasnya cocok dan profil belum memiliki nomor.</p>
         <p className="muted small">Format ringkas dengan kolom <code>npsn</code>, <code>status</code>, <code>tanggal_kirim</code> dan <code>progres_fisik</code> juga bisa dipakai.</p>
         <input type="file" accept=".csv,text/csv" aria-label="File CSV monitoring" disabled={busy} onChange={(e) => setFile(e.target.files[0])} />
         <p className="muted small">Gunakan file sumber terbaru. Sumber status dipilih berdasarkan waktu impor; mengunggah file lama dapat mengganti tampilan data yang lebih baru. Popup menampilkan tahap proses dan ringkasan hasil setelah penyimpanan selesai.</p>
@@ -226,7 +230,7 @@ function ImportReporting({ onSaved }) {
   );
 }
 
-export function ReportingView({ data, dataset, account, canImport, refresh, publicView = false }) {
+export function ReportingView({ data, dataset, account, canImport, refresh, publicView = false, stageTabs }) {
   const archiveMatches = dataset === 'k3' && account ? data.lo.filter((row) => nameKey(row.name) === nameKey(account.name)) : [];
   const own = data.own || (archiveMatches.length === 1 ? archiveMatches[0] : null);
   const accountVenue = data.venues.includes(account?.venue?.name) ? account.venue.name : '';
@@ -351,11 +355,12 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
   const selectedOwner = data.lo.find((owner) => ownerKey(owner) === lo);
   const noData = counts.get('belum_ada_data') || 0;
   const scopeTitle = selectedOwner?.name || (lo === UNASSIGNED ? account.name : venue || 'Semua venue');
-  const sourceNote = data.stamp ? `Data per ${dataset === 'k3' ? data.stamp : `${fmtFull(data.stamp)} WIB`}` : 'Data belum tersedia';
+  const sourceNote = data.stamp ? `Data per ${dataset === 'k3' ? data.stamp : fmtFull(data.stamp)}` : 'Data belum tersedia';
 
   return (
     <>
       {publicView && <div className="toolbar filters reporting-scope reporting-scope--public">
+        {stageTabs}
         <FilterField label="Cakupan progres"><select aria-label="Cakupan progres" value={progressScope} onChange={(event) => {
           const next = event.target.value;
           setProgressScope(next); setSelectedFacilitator(null);
@@ -389,11 +394,12 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
           {data.lo.filter(venueMatch).map((owner) => <option key={ownerKey(owner)} value={ownerKey(owner)}>{owner.name}</option>)}
         </select></FilterField>}
       </div>}
-      {dataset === 'k3' && <ReportingComparison schools={schools} baseline={data.baseline} stamp={data.stamp} />}
+      {(dataset === 'k3' || (current && selectedEvent()?.id === 3)) && data.baseline &&
+        <ReportingComparison schools={schools} baseline={data.baseline} stamp={data.stamp} archive={dataset === 'k3'} />}
       <section className="reporting-hero" aria-label="Ringkasan pelaporan">
         <header className="reporting-hero-head">
           <div>
-            <div className="reporting-eyebrow">{datasetNames[dataset]} · {reportingDates[dataset]}{dataset === 'k3' && ' · Arsip'}</div>
+            <div className="reporting-eyebrow">{datasetNames[dataset]}{dataset === 'k3' || selectedEvent()?.id === 3 ? ` · ${reportingDates[dataset]}` : ''}{dataset === 'k3' && ' · Arsip'}</div>
             <h3>{scopeTitle}</h3>
             <p>{nf.format(schools.length)} sekolah{selectedOwner && ` · ${selectedOwner.venue}`}</p>
             {dataset === 'k3' && <p>{data.title}</p>}
@@ -404,7 +410,7 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
           <div><b>{nf.format(readyCount)}</b><span>Siap kirim, belum diajukan</span>
             <small>{nf.format(belowThresholdCount)} sekolah belum tercatat mencapai 50% fisik</small>
             {noData > 0 && <small>{nf.format(noData)} sekolah belum memiliki data monitoring</small>}</div>
-          <div><b>{nf.format(waiting.length)}</b><span>Menunggu reviu fasilitator</span>
+          <div className="reporting-review-metric"><b>{nf.format(waiting.length)}</b><span>Menunggu reviu fasilitator</span>
             <small>{nf.format(overdue(waiting))} melewati {threshold} hari</small></div>
         </div>
         <div className="reporting-highlights">
@@ -417,7 +423,7 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
           <div><b>{nf.format(present)} / {nf.format(schools.length)}</b><small>Sekolah hadir di venue ({nf.format(percent(present, schools.length))}%)</small>
             <small>Sudah tiba atau sedang antre</small>
           </div>
-          <div><b>{nf.format(counts.get('diterima') || 0)}</b><small>Laporan diterima</small></div>
+          <div className="reporting-accepted-metric"><b>{nf.format(counts.get('diterima') || 0)}</b><small>Laporan diterima</small></div>
         </div>
         {checkInDays.length > 0 && <div className="reporting-day-summary">
           {checkInDays.map((day) => <div key={day.date}>
@@ -518,14 +524,14 @@ export default function Reporting() {
   return (
     <div className="reporting-page">
       <div className="page-head"><div><h2>Pantau Pelaporan</h2><p className="muted">Pantau Laporan 50%, antrean reviu, dan kehadiran sekolah.</p></div></div>
-      <div className="reporting-datasets" role="group" aria-label="Kegiatan pelaporan">
-        {Object.entries(datasetNames).filter(([key]) => !lo || key === 'current').map(([key, label]) => <button key={key} className={dataset === key ? 'on' : ''} aria-pressed={dataset === key}
-          onClick={() => { if (key !== dataset) { setDataset(key); setData(null); setError(''); } }}>{label}</button>)}
-      </div>
+      <EventTabs current={dataset === 'current'} onSelect={() => { setDataset('current'); setData(null); setError(''); refresh(); }}>
+        {<button type="button" className={dataset === 'k3' ? 'on' : ''} aria-pressed={dataset === 'k3'}
+          onClick={() => { if (dataset !== 'k3') { setDataset('k3'); setData(null); setError(''); } }}>BIMTEK Tahap 2</button>}
+      </EventTabs>
       {error && <p className="alert alert--err" role="alert">{error} <button className="btn btn--sm" onClick={refresh}>Coba lagi</button></p>}
       {!data && !error && <div className="kpis"><SkelCards n={3} h={76} /></div>}
       {data && <ReportingView key={`${dataset}:${lo ? 'lo' : 'admin'}`} data={data} dataset={dataset} refresh={refresh} account={lo ? user : null}
-        canImport={dataset === 'current' && user?.role === 'admin' && !lo} />}
+        canImport={dataset === 'current' && user?.role === 'admin' && !lo && selectedEvent()?.status !== 'archived'} />}
     </div>
   );
 }

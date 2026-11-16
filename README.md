@@ -2,6 +2,22 @@
 
 Sistem pendampingan sekolah, pemantauan Laporan 50%, kedatangan peserta, dan absensi resmi. Stack: React/Vite, Node.js/Express, PostgreSQL; penyimpanan foto melalui Cloudflare R2 atau direktori lokal.
 
+## Pemisahan kegiatan BIMTEK
+
+Data yang sudah ada tetap menjadi **Tahap 3**. **Tahap 4** disiapkan kosong dengan status Persiapan. Tab tahap tersedia di dalam bagian dashboard; tidak ada pemilih kegiatan di topbar. Pantau Pelaporan selalu menyediakan Tahap 4, Tahap 3, dan arsip pelaporan Tahap 2.
+
+Peserta, kode peserta, venue, akun dan penugasan LO, sesi, absensi, foto baru, pemetaan sekolah, pelaporan, serta rekap kedatangan dipisahkan per kegiatan. Kode peserta dan username yang sama boleh digunakan pada kegiatan berbeda. Pergantian kegiatan oleh LO memerlukan login untuk kegiatan tujuan. Tautan kartu peserta, foto pada ekspor, dan unduhan membawa penanda kegiatan; tautan QR lama dicocokkan kembali dengan kegiatan asalnya.
+
+Admin membuka **Kegiatan BIMTEK** untuk mengaktifkan kegiatan. Aktivasi otomatis mengarsipkan kegiatan aktif sebelumnya. Arsip tetap bisa dilihat dan diunduh; API menolak perubahan data arsip. Admin dapat membuka arsip menjadi Persiapan untuk koreksi tanpa mengganti kegiatan aktif. Pemilihan tab tidak mengaktifkan atau mengarsipkan kegiatan.
+
+Sebelum impor Tahap 4, pilih tab Tahap 4, siapkan venue, lalu impor CSV di Peserta & Panitia. Akun LO, pemetaan pendampingan, dan sesi harus disiapkan sesuai data Tahap 4. Skrip `import-bimtek3` tetap khusus pemetaan Tahap 3 revisi 8; jangan memakainya untuk berkas Tahap 4.
+
+**Migrasi wajib dijalankan sebelum deploy server dan client baru:** `npm run migrate`. Migrasi mempertahankan tabel Tahap 3 di skema `public`, menambahkan daftar kegiatan, dan membuat skema `bimtek_4` tanpa menyalin peserta atau venue Tahap 3. Migrasi dapat dijalankan berulang. Query memakai search_path lokal transaksi agar tetap terisolasi pada Supabase transaction pooler. Jangan memindahkan atau menghapus skema lama secara manual.
+
+Hari absensi diambil dari sesi resmi pada kegiatan terpilih; tanggal lama Tahap 3 tetap dipertahankan. Tahap 4 tidak memakai tanggal absensi Tahap 3. Jalankan `npm test` untuk pengujian migrasi dan isolasi dengan PostgreSQL dalam memori, tanpa koneksi ke database produksi.
+
+Foto Verval ditampilkan sebagai thumbnail. Klik untuk melihat layar penuh; tutup dengan tombol Tutup atau Escape. Ringkasan pelaporan memakai oranye untuk menunggu reviu dan hijau untuk diterima. Tahap 3 juga menampilkan perbandingan jumlah kiriman sebelum batas tanggal awal dengan data monitoring terakhir; ini berdasarkan tanggal kirim yang tersimpan, bukan snapshot historis seluruh status reviu.
+
 ## Versi tampilan
 
 Pilihan **Classic / Modern** tersedia di bagian atas semua halaman. Classic menggunakan desain sebelumnya; Modern menggunakan navigasi terang, aksen hijau, kartu ringkasan dan tabel yang diperbarui. Modern menjadi pilihan awal jika belum ada preferensi. Pilihan disimpan per browser dan tidak mengubah data, hak akses, atau alur absensi. Jika penyimpanan browser dibatasi, pilihan berlaku selama halaman tetap terbuka.

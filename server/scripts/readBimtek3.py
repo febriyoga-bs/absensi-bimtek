@@ -20,7 +20,7 @@ def read_rows(book, sheet, fields, is_data):
     ]
 
 
-def extract(book):
+def extract(book, participant_assignment_wins=False):
     hotel_row = lambda row: row and row[0] and row[0] != "TOTAL"
     lo = read_rows(book, "Rekap LO", {
         "venue": "Hotel", "name": "Nama LO", "rooms": "Ruangan Yang Dicakup",
@@ -93,7 +93,11 @@ def extract(book):
             {key: row[key] for key in ("venue", "room", "group", "lo", "name", "institution")}
             for row in rows
         ]
-    participants = extract_participants([row for row in people if row["type"] in (bendahara, pengawas)], school_rows)
+    participants = extract_participants(
+        [row for row in people if row["type"] in (bendahara, pengawas)],
+        school_rows,
+        participant_assignment_wins=participant_assignment_wins,
+    )
     for position, field in (("Bendahara", "school_count"), ("Pengawas", "supervisor_count")):
         counts = Counter(lo_key(row, "lo") for row in participants if row["position"] == position)
         if set(counts) - lo_keys or any(counts[lo_key(row, "name")] != row[field] for row in lo):
@@ -110,7 +114,7 @@ def extract(book):
                 organizations=organizations, **detail)
 
 
-def extract_participants(rows, schools):
+def extract_participants(rows, schools, participant_assignment_wins=False):
     by_npsn = {str(s["npsn"]).strip(): s for s in schools}
     by_supervisor = defaultdict(list)
     for school in schools:
@@ -128,21 +132,27 @@ def extract_participants(rows, schools):
         key = str(row["npsn"]).strip() if is_treasurer else row["supervisor"]
         group = [by_npsn[key]] if is_treasurer else by_supervisor[key]
         group = sorted(group, key=lambda s: str(s["npsn"]))
-        if (key in seen or not group or not str(row["name"] or "").strip()
-                or any((s["venue"], s["room"]) != (row["venue"], row["room"]) for s in group)):
+        placement_mismatch = any((s["venue"], s["room"]) != (row["venue"], row["room"]) for s in group)
+        no_source_school = not group
+        allow_unmatched_supervisor = participant_assignment_wins and not is_treasurer
+        if (key in seen or not str(row["name"] or "").strip()
+                or (no_source_school and not allow_unmatched_supervisor)
+                or (placement_mismatch and not participant_assignment_wins)):
             raise ValueError(f"Identitas atau penempatan peserta berbeda antarsheet: {key}.")
         seen.add(key)
         npsns = [str(s["npsn"]).strip() for s in group]
         participants.append(dict(
-            code=("B-" if is_treasurer else "P-") + npsns[0],
+            code=("B-" if is_treasurer else "P-") + (npsns[0] if npsns else str(key)),
             name=row["name"].strip(), position="Bendahara" if is_treasurer else "Pengawas",
-            venue=row["venue"], lo=row["lo"], ruangan=row["room"], npsn="; ".join(npsns),
+            venue=row["venue"], lo=row["lo"], ruangan=row["room"], npsn="; ".join(npsns) or None,
             institution="; ".join(s["name"] for s in group),
             provinsi=joined(group, "province"), kab_kota=joined(group, "city"),
             ptn=joined(group, "institution"), koor_pelaporan=joined(group, "coordinator"),
             fasil_pelaporan=joined(group, "facilitator"),
         ))
-    if seen != set(by_npsn) | set(by_supervisor):
+    expected_keys = set(by_npsn) | set(by_supervisor)
+    if (not expected_keys <= seen
+            or (not participant_assignment_wins and seen != expected_keys)):
         raise ValueError("Daftar Bendahara atau Pengawas tidak lengkap.")
     return participants
 

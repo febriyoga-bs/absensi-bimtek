@@ -1,0 +1,36 @@
+.reporting-datasets.event-tabs {
+  --report-navy:#1b3a7a;
+  --report-ink:#17294c;
+  --report-track:#eef2f8;
+  --report-border:#e2e8f2;
+  display:inline-flex;
+  flex-wrap:nowrap;
+  align-items:center;
+  gap:5px;
+  width:max-content;
+  max-width:100%;
+  padding:5px;
+  margin:0 0 14px;
+  border:1px solid var(--report-border);
+  border-radius:999px;
+  background:var(--report-track);
+  overflow-x:auto;
+}
+.reporting-datasets.event-tabs button {
+  flex:0 0 auto;
+  min-height:42px;
+  padding:7px 16px;
+  border:0;
+  border-radius:999px;
+  background:transparent;
+  color:var(--report-ink);
+  font:inherit;
+  font-size:12px;
+  font-weight:800;
+  white-space:nowrap;
+  cursor:pointer;
+}
+.reporting-datasets.event-tabs button.on { background:var(--report-navy); color:#fff; }
+.reporting-datasets.event-tabs button:focus-visible { outline:2px solid #3b64dd; outline-offset:2px; }
+html[data-theme="dark"] .reporting-datasets.event-tabs { --report-track:var(--surface-2); --report-border:var(--line); --report-ink:var(--text); }
+html[data-theme="dark"] .reporting-datasets.event-tabs button.on { background:#295497; color:#fff; }

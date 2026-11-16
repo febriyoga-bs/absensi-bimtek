@@ -1,9 +1,12 @@
-export const reportingDays = [
-  { date: '2026-11-11', label: 'Absensi Hari-1', shortDate: '11 Nov' },
-  { date: '2026-11-12', label: 'Absensi Hari-2', shortDate: '12 Nov' },
-];
-
-export const reportingDates = reportingDays.map((day) => day.date);
+import { eventReportingDays } from './eventContext.js';
+// Keep existing array consumers while resolving dates from the request context.
+const dynamicArray = (values) => new Proxy([], { get(_target, key) {
+  const array = values();
+  const value = Reflect.get(array, key);
+  return typeof value === 'function' ? value.bind(array) : value;
+} });
+export const reportingDays = dynamicArray(eventReportingDays);
+export const reportingDates = dynamicArray(() => eventReportingDays().map((day) => day.date));
 const wibDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit' });
 
 export function withReportingDay(session) {
