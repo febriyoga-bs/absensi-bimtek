@@ -135,10 +135,40 @@ test('venue, dashboard cache and empty attendance belong to the selected event',
 test('LO token is resolved by username and challenge tokens stay event-bound', async () => {
   const token = await scoped(3, () => signAdmin({ role: 'lo', username: 'lo-sama', accounts: [{ event: 3, id: 1 }] }));
   assert.equal((await request('/admin/me?event=3', { token })).status, 200);
-  assert.equal((await request('/admin/me?event=4', { token })).status, 403);
+  assert.equal((await request('/admin/scan/participants?event=4', { token })).status, 403);
   const challenge = await scoped(3, () => signChallenge(1, 1, 'nonce'));
   assert.ok(await scoped(3, () => verifyChallenge(challenge)));
   assert.equal(await scoped(4, () => verifyChallenge(challenge)), null);
+});
+
+test('LO self attendance falls back to an open test session and prechecks its location', async () => {
+  let venue, account, testSession, officialSession;
+  try {
+    await scoped(3, async () => {
+      venue = (await q("INSERT INTO venues (name,lat,lng,active) VALUES ('LO trial venue',-6,106,true) RETURNING id")).rows[0].id;
+      account = (await q("INSERT INTO lo_accounts (name,username,password_hash,venue_id) VALUES ('LO Trial','lo-trial','unused',$1) RETURNING id", [venue])).rows[0].id;
+      testSession = (await q("INSERT INTO sessions (name,role,starts_at,ends_at,venue_ids,is_test) VALUES ('Trial LO','panitia',now()-interval '1 hour',now()+interval '1 hour',$1,true) RETURNING id", [[venue]])).rows[0].id;
+    });
+    const token = await scoped(3, () => signAdmin({ role: 'lo', username: 'lo-trial', accounts: [{ event: 3, id: account }] }));
+    const response = await request('/lo/challenge?event=3', { method: 'POST', token });
+    assert.equal(response.status, 200, response.status === 200 ? '' : await response.text());
+    const challenge = await response.json();
+    assert.equal(challenge.session.is_test, true);
+    assert.equal((await scoped(3, () => verifyChallenge(challenge.token))).s, testSession);
+    const precheck = await request('/lo/precheck?event=3', { method: 'POST', token, body: { token: challenge.token, lat: -6, lng: 106, accuracy: 5 } });
+    assert.equal(precheck.status, 200, await precheck.text());
+    officialSession = await scoped(3, async () => (await q("INSERT INTO sessions (name,role,starts_at,ends_at,venue_ids,is_test) VALUES ('Official LO','panitia',now()-interval '30 minutes',now()+interval '1 hour',$1,false) RETURNING id", [[venue]])).rows[0].id);
+    const official = await (await request('/lo/challenge?event=3', { method: 'POST', token })).json();
+    assert.equal(official.session.is_test, false);
+    assert.equal((await scoped(3, () => verifyChallenge(official.token))).s, officialSession);
+  } finally {
+    await scoped(3, async () => {
+      await q('DELETE FROM sessions WHERE id=ANY($1::int[])', [[testSession, officialSession].filter(Boolean)]);
+      if (account) await q('DELETE FROM lo_accounts WHERE id=$1', [account]);
+      await q("DELETE FROM people WHERE code='lo-trial'");
+      if (venue) await q('DELETE FROM venues WHERE id=$1', [venue]);
+    });
+  }
 });
 
 test('activation archives the previous event, blocks changes and retains readable exports', async () => {
@@ -202,9 +232,9 @@ test('LO login succeeds independently of the selected or active event', async ()
     assert.equal(response.status, 200);
     const login = await response.json();
     assert.equal(login.event.id, 3);
-    assert.deepEqual(login.user.events.map((event) => event.id), [3]);
+    assert.deepEqual(login.user.events.map((event) => event.id), [3,4]);
     assert.equal((await request('/admin/me?event=3', { token: login.token })).status, 200);
-    assert.equal((await request('/admin/me?event=4', { token: login.token })).status, 403);
+    assert.equal((await request('/admin/scan/participants?event=4', { token: login.token })).status, 403);
   }
 });
 
@@ -238,7 +268,7 @@ test('a same-username account with different credentials does not gain access', 
   assert.equal(response.status, 200);
   const login = await response.json();
   assert.equal(login.event.id, 3);
-  assert.equal((await request('/admin/me?event=4', { token: login.token })).status, 403);
+  assert.equal((await request('/admin/scan/participants?event=4', { token: login.token })).status, 403);
   const bad = await request('/admin/login?event=3', { method: 'POST', token: null,
     body: { username: 'lo-sama', password: 'wrong-password' } });
   assert.equal(bad.status, 401);

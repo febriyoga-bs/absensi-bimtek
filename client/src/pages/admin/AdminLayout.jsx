@@ -26,7 +26,8 @@ export default function AdminLayout() {
   if (!adminToken.get()) return <Navigate to="/admin/login" state={{ next: loc.pathname + loc.search }} replace />;
 
   const lo = user?.role === 'lo';
-  const items = dashboardMenu.filter((n) => (lo ? n.lo : !n.loOnly));
+  const items = dashboardMenu.filter((n) => (lo ? n.lo && (!user.no_assignment
+    || ['/admin/pelaporan','/admin/rekap-absensi'].includes(n.to)) : !n.loOnly));
   if (['/admin', '/admin/', '/admin/pendampingan', '/admin/pendampingan/saya'].includes(loc.pathname)) {
     return <Navigate to="/admin/pelaporan" replace />;
   }

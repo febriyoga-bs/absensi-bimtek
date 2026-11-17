@@ -19,6 +19,7 @@ import { getArrivalRecap, getArrivalRecapDetails, importArrivalRecap } from '../
 import { finiteInteger } from '../security.js';
 import { eventId } from '../eventContext.js';
 import { loginLo } from '../loLogin.js';
+import { eventVenueScope } from '../eventVenues.js';
 
 const r = Router();
 
@@ -114,11 +115,12 @@ r.get('/assignments/mine', ah(async (req, res) => {
 /** Info akun yang sedang login (dipanggil saat dashboard dibuka; LO nonaktif langsung ditolak). */
 r.get('/me', ah(async (req, res) => {
   if (req.user.role === 'admin') return res.json({ role: 'admin', name: 'Admin utama' });
+  const {rows:events} = await q('SELECT id,name,status FROM public.bimtek_events ORDER BY id');
+  if (req.user.no_assignment) return res.json({role:'lo',name:req.user.name,venue:null,no_assignment:true,events});
   const { rows: [lo] } = await q(
     `SELECT l.name, l.active, v.id AS venue_id, v.name AS venue_name
      FROM lo_accounts l JOIN venues v ON v.id=l.venue_id WHERE l.id=$1`, [req.user.lo]);
   if (!lo || !lo.active) throw new HttpError(401, 'Akun LO tidak aktif. Silakan login ulang.');
-  const events = req.user.events && (await q('SELECT id,name,status FROM public.bimtek_events WHERE id=ANY($1::int[]) ORDER BY id', [req.user.events])).rows;
   res.json({ role: 'lo', name: lo.name, venue: { id: lo.venue_id, name: lo.venue_name }, ...(events && { events }) });
 }));
 
@@ -189,7 +191,7 @@ const publicVenue = ({ code_secret, ...v }) => v;
 r.get('/venues', ah(async (req, res) => {
   const lo = req.user.role === 'lo' ? req.user.venue : null;
   const { rows } = await q(
-    `SELECT v.*,
+    `SELECT v.*, ${eventVenueScope('v')} AS in_event,
        (SELECT count(*) FROM people p WHERE p.venue_id=v.id AND p.archived_at IS NULL)::int AS people_count,
        (SELECT count(*) FROM lo_accounts l WHERE l.venue_id=v.id AND l.active)::int AS lo_count
      FROM venues v WHERE ($1::int IS NULL OR v.id=$1) ORDER BY v.active DESC, v.name`, [lo]);

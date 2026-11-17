@@ -4,7 +4,7 @@ import { parseRows } from './peopleImport.js';
 import { HttpError } from './util.js';
 import { reportingDates, reportingDays } from './reportingDays.js';
 import { importProgressCsv, progressStatusSql, currentProgressSql } from './progressImport.js';
-import { currentEvent } from './eventContext.js';
+import { currentEvent, eventId } from './eventContext.js';
 
 // Arsip statis dari Pantau Pelaporan LO · Bimtek K3.html. Hanya data yang dipakai dasbor.
 const archive = JSON.parse(readFileSync(new URL('./reportingK3.json', import.meta.url), 'utf8'));
@@ -36,7 +36,13 @@ export async function getPublicReporting(dataset) {
 }
 
 export async function getReporting(dataset, user) {
-  if (dataset === 'k3') return archive;
+  if (dataset === 'k3' || eventId()===2) {
+    const stored = eventId()===2 ? (await q('SELECT data FROM assignment_roster WHERE id=1')).rows[0]?.data?.archive : null;
+    const data = stored || archive;
+    const matches = user.role==='lo' ? data.lo.filter((row)=>contactKey('',row.name)===contactKey('',user.name)) : [];
+    return {...data,title:'BIMTEK Tahap 2',check_in_days:[],own:matches.length===1 ? matches[0] : null,
+      no_assignment:user.role==='lo' && matches.length!==1};
+  }
   if (dataset !== 'current') throw new HttpError(400, 'Kegiatan pelaporan tidak valid.');
   const [{ rows: [roster] }, { rows: records }, { rows: contacts }] = await Promise.all([
     q("SELECT data->'lo' AS lo, data->'facilitators' AS facilitators, data->'schools' AS schools FROM assignment_roster WHERE id=1"),
@@ -68,13 +74,14 @@ export async function getReporting(dataset, user) {
        LEFT JOIN presence ON presence.person_id=p.id AND presence.venue_id=v.id
        LEFT JOIN school_reporting m ON m.npsn=s.npsn
        LEFT JOIN school_progress_report pr ON pr.npsn=s.npsn WHERE r.id=1`, [reportingDates]),
-    user.role === 'public' ? Promise.resolve({ rows: [] }) : q(`SELECT v.name AS venue,p.name,p.phone FROM people p JOIN venues v ON v.id=p.venue_id
+    user.role === 'public' || user.no_assignment ? Promise.resolve({ rows: [] }) : q(`SELECT v.name AS venue,p.name,p.phone FROM people p JOIN venues v ON v.id=p.venue_id
        WHERE p.role='peserta' AND p.archived_at IS NULL AND lower(trim(p.position)) LIKE 'fasil%'
          AND ($1::int IS NULL OR p.venue_id=$1)`, [user.role === 'lo' ? user.venue : null]),
   ]);
   const lo = roster?.lo || [];
   const source = new Map(records.map((row) => [row.npsn, row]));
-  const own = user.role === 'lo' ? lo.find((row) => row.account_id === user.lo && row.venue_id === user.venue) : null;
+  const own = user.role === 'lo' ? lo.find((row) => row.account_id === user.lo && row.venue_id === user.venue)
+    || lo.find((row)=>row.venue_id===user.venue && contactKey('',row.name)===contactKey('',user.name)) : null;
   const phones = new Map();
   for (const contact of contacts) {
     const key = contactKey(contact.venue, contact.name);
@@ -94,6 +101,7 @@ export async function getReporting(dataset, user) {
     stamp: records.reduce((latest, row) => row.updated_at && (!latest || row.updated_at > latest) ? row.updated_at : latest, null),
     arrival_stamp: records.reduce((latest, row) => row.arrival_imported_at && (!latest || row.arrival_imported_at > latest) ? row.arrival_imported_at : latest, null),
     own: own && { name: own.name, venue: own.venue },
+    no_assignment:user.role==='lo' && !own,
     venues: [...new Set(lo.map((row) => row.venue))],
     lo: lo.map(({ name, venue }) => ({ name, venue })),
     facilitators,

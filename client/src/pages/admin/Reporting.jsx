@@ -1,4 +1,5 @@
 import { personName } from '../../lib/personName.js';
+import { useEvents } from '../../components/EventScope.jsx';
 import FilterField from '../../components/FilterField.jsx';
 import { useEffect, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
@@ -270,7 +271,7 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
   const byFacilitator = grouped(schools, (row) => row.facilitator_id);
   const byLo = grouped(data.schools, (row) => ownerKey({ name: row.lo, venue: row.venue }));
   const facilitators = new Map(data.facilitators.map((f) => [f.id, f]));
-  const current = dataset === 'current';
+  const current = dataset === 'current' && selectedEvent()?.id!==2;
   const checkInDays = current ? data.check_in_days || [] : [];
   const checkInStatus = (school, day) => school.check_in_dates?.includes(day.date) ? 'sudah_absen' : 'belum_absen';
   const venueStatus = (school) => current ? school.venue_attendance || 'tidak_terdata' : school.attendance;
@@ -511,6 +512,7 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
 
 export default function Reporting() {
   const { user, lo } = useOutletContext();
+  const events = useEvents();
   const [dataset, setDataset] = useState('current');
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
@@ -527,12 +529,13 @@ export default function Reporting() {
     <div className="reporting-page">
       <div className="page-head"><div><h2>Pantau Pelaporan</h2><p className="muted">Pantau Laporan 50%, antrean reviu, dan kehadiran sekolah.</p></div></div>
       <EventTabs current={dataset === 'current'} onSelect={() => { setDataset('current'); setData(null); setError(''); refresh(); }}>
-        {<button type="button" className={dataset === 'k3' ? 'on' : ''} aria-pressed={dataset === 'k3'}
+        {!events?.events.some((event)=>event.id===2) && <button type="button" className={dataset === 'k3' ? 'on' : ''} aria-pressed={dataset === 'k3'}
           onClick={() => { if (dataset !== 'k3') { setDataset('k3'); setData(null); setError(''); } }}>BIMTEK Tahap 2</button>}
       </EventTabs>
       {error && <p className="alert alert--err" role="alert">{error} <button className="btn btn--sm" onClick={refresh}>Coba lagi</button></p>}
+      {lo && (user.no_assignment || data?.no_assignment) && <p className="alert">Anda belum memiliki penugasan pada tahap ini. Ringkasan ditampilkan untuk dilihat; pencatatan absensi mengikuti tahap penugasan Anda.</p>}
       {!data && !error && <div className="kpis"><SkelCards n={3} h={76} /></div>}
-      {data && <ReportingView key={`${dataset}:${lo ? 'lo' : 'admin'}`} data={data} dataset={dataset} refresh={refresh} account={lo ? user : null}
+      {data && <ReportingView key={`${dataset}:${lo ? 'lo' : 'admin'}`} data={data} dataset={dataset} refresh={refresh} account={lo && !user.no_assignment && !data.no_assignment ? user : null}
         canImport={dataset === 'current' && user?.role === 'admin' && !lo && selectedEvent()?.status !== 'archived'} />}
     </div>
   );

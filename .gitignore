@@ -5,6 +5,7 @@ node_modules/
 dist/
 
 # Hasil pembuatan akun LO berisi kredensial, hanya disimpan lokal
+/data/backups/
 /output/pdf/Akun-LO-*.pdf
 /output/xlsx/Akun-LO-*.xlsx
 /output/xlsx/Akun-LO-*.xlsx.*

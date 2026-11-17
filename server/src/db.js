@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { currentEvent, searchPathSql } from './eventContext.js';
 import { scopedConnection } from './scopedConnection.js';
+import { eventSql, unifiedStorage, setUnifiedStorage } from './unifiedStorage.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const serverless = !!process.env.VERCEL;
@@ -27,14 +28,26 @@ export const rawPool = new pg.Pool({
 });
 rawPool.on('error', (e) => console.error('pg pool error', e.message));
 
+let storageCheck, storageCheckedAt = 0;
+export async function ensureStorageMode() {
+  if (Date.now() - storageCheckedAt < 5000) return unifiedStorage();
+  if (!storageCheck) storageCheck = (async () => {
+    const { rows: [table] } = await rawPool.query("SELECT to_regclass('public.bimtek_storage') AS name");
+    const enabled = table?.name && (await rawPool.query('SELECT unified FROM public.bimtek_storage WHERE id=1')).rows[0]?.unified;
+    setUnifiedStorage(!!enabled); storageCheckedAt = Date.now(); return !!enabled;
+  })().finally(() => { storageCheck = null; });
+  return storageCheck;
+}
+
 export const q = async (text, params) => {
+  await ensureStorageMode();
   if (rawPool.waitingCount >= 100) {
     const error = new Error('Server database sedang sibuk. Coba lagi sebentar.'); error.status = 503; throw error;
   }
   const client = await rawPool.connect();
   try {
     await client.query(`BEGIN; ${searchPathSql()}`);
-    const result = await client.query(text, params);
+    const result = await client.query(eventSql(text), params);
     await client.query('COMMIT');
     return result;
   } catch (error) {
@@ -47,12 +60,14 @@ export const pool = {
   query: q,
   end: () => rawPool.end(),
   async connect() {
+    await ensureStorageMode();
     const client = await rawPool.connect();
     return scopedConnection(client, currentEvent());
   },
 };
 
 export async function migrate() {
+  if (await ensureStorageMode()) return;
   const sql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   const client = await rawPool.connect();
   try {

@@ -36,6 +36,7 @@ export default function LoSelfAttendance() {
         </div>
       </div>
       <div className="lo-self-attendance">
+        {challenge?.session?.is_test && <p className="alert alert--warn" role="status">Mode uji coba aktif. Absensi ini tidak masuk rekap resmi.</p>}
         {result ? <Done result={result} role="LO" onClose={() => setResult(null)} />
           : challenge ? <CaptureStep role="panitia" selfLo ch={challenge}
             onDone={(receipt) => { setChallenge(null); setResult(receipt); }}

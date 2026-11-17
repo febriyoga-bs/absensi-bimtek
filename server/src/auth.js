@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { q } from './db.js';
-import { eventId } from './eventContext.js';
+import { q, rawPool } from './db.js';
+import { eventId, eventContext } from './eventContext.js';
 
 const SECRET = () => {
   const s = process.env.JWT_SECRET;
@@ -35,21 +35,33 @@ export async function requireAdmin(req, res, next) {
   if (p.role === 'lo') {
     try {
       if (Array.isArray(p.accounts) && !p.accounts.some((account) => account.event === eventId())) {
-        return res.status(403).json({ error: 'Akun Anda tidak memiliki penugasan untuk kegiatan ini.' });
+        const readable = req.method==='GET' && ['/me','/reporting','/venue-attendance','/sessions'].includes(req.path);
+        if (!readable) return res.status(403).json({ error: 'Akun Anda tidak memiliki penugasan untuk kegiatan ini.' });
+        const {rows:events} = await rawPool.query('SELECT * FROM public.bimtek_events ORDER BY id');
+        let identity;
+        for (const grant of p.accounts) {
+          const source = events.find((event) => event.id===grant.event);
+          if (!source) continue;
+          const result = await eventContext.run(source, () => q('SELECT name FROM lo_accounts WHERE id=$1 AND active AND lower(username)=lower($2)', [grant.id,p.username]));
+          if (result.rows[0]) { identity=result.rows[0]; break; }
+        }
+        if (!identity) return res.status(401).json({error:'Akun LO tidak aktif. Silakan login ulang.'});
+        req.user={role:'lo',lo:null,venue:null,name:identity.name,no_assignment:true,events:events.map((event)=>event.id)};
+        return next();
       }
-      const { rows: [account] } = await q('SELECT id, active, venue_id FROM lo_accounts WHERE lower(username)=lower($1)', [p.username]);
+      const { rows: [account] } = await q('SELECT id, name, active, venue_id FROM lo_accounts WHERE lower(username)=lower($1)', [p.username]);
       if (!account?.active) {
         return res.status(401).json({ error: 'Akun atau penempatan venue berubah. Silakan login ulang.' });
       }
       if (Array.isArray(p.accounts) && !p.accounts.some((grant) => grant.event === eventId() && grant.id === account.id)) {
         return res.status(403).json({ error: 'Penugasan akun berubah. Silakan login ulang.' });
       }
-      p.lo = account.id; p.venue = account.venue_id;
+      p.lo = account.id; p.venue = account.venue_id; p.name=account.name;
     } catch (e) {
       return next(e);
     }
   }
-  req.user = { role: p.role === 'lo' ? 'lo' : 'admin', lo: p.lo ?? null, venue: p.venue ?? null,
+  req.user = { role: p.role === 'lo' ? 'lo' : 'admin', lo: p.lo ?? null, venue: p.venue ?? null, name:p.name,
     ...(Array.isArray(p.accounts) && { events: p.accounts.map((account) => account.event) }) };
   next();
 }

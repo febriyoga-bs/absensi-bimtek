@@ -1,4 +1,5 @@
 import { searchPathSql } from './eventContext.js';
+import { eventSql } from './unifiedStorage.js';
 
 /** Keep every checkout scoped, including callers that do not open a transaction. */
 export function scopedConnection(client, event) {
@@ -12,13 +13,13 @@ export function scopedConnection(client, event) {
         return result;
       }
       if (transaction) {
-        const result = await client.query(text, params);
+        const result = await client.query(eventSql(text), params);
         if (typeof text === 'string' && /^\s*(COMMIT|ROLLBACK)\s*;?\s*$/i.test(text)) transaction = false;
         return result;
       }
       try {
         await client.query(`BEGIN; ${searchPathSql(event)}`);
-        const result = await client.query(text, params);
+        const result = await client.query(eventSql(text), params);
         await client.query('COMMIT');
         return result;
       } catch (error) {

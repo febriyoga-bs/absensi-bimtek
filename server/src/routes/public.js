@@ -14,6 +14,7 @@ import { getVerval } from '../verval.js';
 import { publicReadLimiter, vervalLimiter, schoolDetailLimiter } from '../security.js';
 import { createAsyncCache } from '../asyncCache.js';
 import { currentEvent, eventId } from '../eventContext.js';
+import { getLoProfile as resolveLoProfile } from '../loProfile.js';
 
 const r = Router();
 const ROLES = ['peserta', 'panitia'];
@@ -115,13 +116,13 @@ const ipLimiter = rateLimit({ windowMs: 60_000, limit: Number(process.env.IP_RAT
   message: { error: 'Server sedang sangat sibuk, coba lagi dalam 1 menit.' } });
 const MAX_FAILED_PER_PERSON = 10; // percobaan ditolak per orang per 10 menit
 
-async function activeSession(role, venue) {
+async function activeSession(role, venue, allowTest = false) {
   const { rows } = await q(
     `SELECT * FROM sessions
-     WHERE NOT is_test AND role IN ($1,'semua') AND now() BETWEEN starts_at AND ends_at
+     WHERE (NOT is_test OR $3::boolean) AND role IN ($1,'semua') AND now() BETWEEN starts_at AND ends_at
        AND ($2::int IS NULL OR cardinality(COALESCE(venue_ids,'{}'))=0 OR $2=ANY(venue_ids))
-     ORDER BY starts_at, id LIMIT 1`,
-    [role, venue]
+     ORDER BY is_test, starts_at, id LIMIT 1`,
+    [role, venue, allowTest]
   );
   return rows[0];
 }
@@ -139,7 +140,7 @@ async function allowedVenues(person, session) {
   return rows;
 }
 
-const publicSession = (s) => s && withReportingDay({ name: s.name, type: s.type, role: s.role, starts_at: s.starts_at, ends_at: s.ends_at });
+const publicSession = (s) => s && withReportingDay({ name: s.name, type: s.type, role: s.role, starts_at: s.starts_at, ends_at: s.ends_at, is_test: s.is_test });
 const alreadyRecorded = (status) => status === 'berhalangan'
   ? 'Anda tercatat mundur/berhalangan hadir untuk sesi ini. Hubungi panitia jika status perlu diubah.'
   : 'Anda sudah absen untuk sesi ini.';
@@ -242,13 +243,7 @@ r.post('/challenge', ipLimiter, ah(async (req, res) => {
 }));
 
 async function getLoProfile(user) {
-  const { rows: [person] } = await q(
-    `SELECT p.* FROM lo_accounts l JOIN people p
-       ON lower(p.code)=lower(l.username) AND p.venue_id=l.venue_id
-     WHERE l.id=$1 AND l.venue_id=$2 AND l.active
-       AND p.role='panitia' AND lower(trim(p.position))='lo' AND p.archived_at IS NULL`,
-    [user.lo, user.venue]);
-  return person;
+  return resolveLoProfile(user, q);
 }
 
 r.post('/lo/challenge', ipLimiter, requireAdmin, requireLo, ah(async (req, res) => {
@@ -258,7 +253,7 @@ r.post('/lo/challenge', ipLimiter, requireAdmin, requireLo, ah(async (req, res) 
 }));
 
 async function buildChallenge(person, loAccount) {
-  const session = await activeSession(person.role, person.venue_id);
+  const session = await activeSession(person.role, person.venue_id, !!loAccount);
   if (!session) throw new HttpError(400, 'Belum ada sesi absensi yang dibuka saat ini.');
 
   const venues = await allowedVenues(person, session);
@@ -336,7 +331,7 @@ const precheck = ah(async (req, res) => {
   if (![lat, lng].every((x) => typeof x === 'number' && Number.isFinite(x))) throw new HttpError(400, 'Lokasi tidak valid');
   const [person, { rows: [session] }] = await Promise.all([
     challengePerson(req, ch),
-    q('SELECT * FROM sessions WHERE id=$1 AND NOT is_test', [ch.s]),
+    q('SELECT * FROM sessions WHERE id=$1 AND (NOT is_test OR $2::boolean)', [ch.s, ch.lo != null]),
   ]);
   if (!person || !session) throw new HttpError(400, 'Data tidak ditemukan');
   const settings = await getSettings();
@@ -364,7 +359,7 @@ const recordAttendance = ah(async (req, res) => {
   const settings = await getSettings();
   const [person, { rows: [session] }] = await Promise.all([
     challengePerson(req, ch),
-    q('SELECT * FROM sessions WHERE id=$1 AND NOT is_test', [ch.s]),
+    q('SELECT * FROM sessions WHERE id=$1 AND (NOT is_test OR $2::boolean)', [ch.s, ch.lo != null]),
   ]);
   if (!person || !session) throw new HttpError(400, 'Data tidak ditemukan');
   if (Date.now() > new Date(session.ends_at).getTime() + 60_000) {
@@ -447,11 +442,11 @@ const recordAttendance = ah(async (req, res) => {
     `INSERT INTO attendance (person_id, session_id, venue_id, photo_path, lat, lng, accuracy_m, distance_m, status,
        risk_score, flags, samples, device_id, ip, user_agent, client_time)
      SELECT $1,s.id,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16 FROM sessions s
-     WHERE s.id=$2 AND NOT s.is_test
+     WHERE s.id=$2 AND (NOT s.is_test OR $17::boolean)
      ON CONFLICT (person_id, session_id) DO NOTHING RETURNING id, created_at`,
     [person.id, session.id, loc.venue.id, file, loc.lat, loc.lng, loc.accuracy, loc.distance, status, score,
       JSON.stringify(flags), JSON.stringify(compactSamples(samples)), dev, ip, ua,
-      clientTime && !isNaN(new Date(clientTime)) ? new Date(clientTime) : null]
+      clientTime && !isNaN(new Date(clientTime)) ? new Date(clientTime) : null, ch.lo != null]
   );
   if (!ins.rows[0]) {
     await deletePhoto(file);

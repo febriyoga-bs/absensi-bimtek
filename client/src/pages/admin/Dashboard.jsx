@@ -7,6 +7,7 @@ import { checkInDayLabel, fmtDT, sessionTitle } from './shared.js';
 import { Skel, SkelCards } from '../../components/Skeleton.jsx';
 import AttendanceDetailDialog from './AttendanceDetailDialog.jsx';
 import { venueAttendanceGroups as venueGroups } from '../../lib/venueAttendanceGroups.js';
+import { useEvents } from '../../components/EventScope.jsx';
 
 const number = new Intl.NumberFormat('id-ID');
 const sessionStatuses = [
@@ -55,6 +56,7 @@ function VenueAttendanceCard({ venue, day, onDetails, visibleGroups }) {
 
 export default function Dashboard() {
   const { user, lo } = useOutletContext() || {};
+  const { event } = useEvents() || {};
   const [data, setSessions] = useState(null);
   const sessions = data || [];
   const loading = !data;
@@ -143,6 +145,11 @@ export default function Dashboard() {
           </select></FilterField>}
         </div>
       </div>
+      {lo && user?.venue && venues?.some((venue) => venue.id === user.venue.id && venue.in_event === false) && (
+        <p className="alert alert--warn" role="status">
+          Venue {user.venue.name} tidak termasuk venue {event?.name || 'BIMTEK pada tahap ini'}. Rekap absensi untuk venue ini tidak tersedia pada tahap yang dipilih.
+        </p>
+      )}
       {!lo && venues && activeVenues === 0 && (
         <div className="alert alert--warn" style={{ marginBottom: 16 }}><FontIcon name="triangle-exclamation" />
           <span>Aktifkan venue sebelum membuka sesi untuk LO. <Link to="/admin/venue">Kelola venue</Link></span>

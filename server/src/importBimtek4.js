@@ -4,8 +4,9 @@ import 'dotenv/config';
 import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
-import { rawPool } from './db.js';
-import { searchPathSql } from './eventContext.js';
+import { rawPool, pool, ensureStorageMode } from './db.js';
+import { eventContext } from './eventContext.js';
+import { unifiedStorage } from './unifiedStorage.js';
 import { hashPassword } from './auth.js';
 
 const venues = {
@@ -30,12 +31,12 @@ if (roster.stage !== 4 || roster.assignment_policy !== 'participant_sheet_wins' 
 }
 for (const name of roster.venues) if (!venues[name]) throw new Error(`Venue belum dikonfigurasi: ${name}`);
 
-const client = await rawPool.connect();
+await ensureStorageMode();
+const { rows: [event] } = await rawPool.query('SELECT * FROM public.bimtek_events WHERE id=4');
+if (!event) throw new Error('Kegiatan Tahap 4 belum tersedia. Jalankan migrasi terlebih dahulu.');
+const client = await eventContext.run(event, () => pool.connect());
 try {
   await client.query('BEGIN');
-  const { rows: [event] } = await client.query('SELECT * FROM public.bimtek_events WHERE id=4');
-  if (!event) throw new Error('Kegiatan Tahap 4 belum tersedia. Jalankan migrasi terlebih dahulu.');
-  await client.query(searchPathSql(event));
   const { rows: existingVenues } = await client.query('SELECT id,name FROM venues');
   const venueIds = new Map();
   for (const name of roster.venues) {
@@ -48,7 +49,9 @@ try {
       venueIds.set(name, added.id);
     }
   }
-  const { rows: oldAccounts } = await client.query('SELECT id,name,username,password_hash FROM public.lo_accounts WHERE active');
+  const { rows: oldAccounts } = await rawPool.query(unifiedStorage()
+    ? 'SELECT id,name,username,password_hash FROM public.event_lo_accounts WHERE event_id=3 AND active'
+    : 'SELECT id,name,username,password_hash FROM public.lo_accounts WHERE active');
   const { rows: targetAccounts } = await client.query('SELECT id,name,username FROM lo_accounts');
   const usedUsernames = new Set(targetAccounts.map((row) => row.username.toLowerCase()));
   const credentials = [];

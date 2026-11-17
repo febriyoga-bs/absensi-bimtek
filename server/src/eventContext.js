@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { unifiedStorage } from './unifiedStorage.js';
 
 export const eventContext = new AsyncLocalStorage();
 export const currentEvent = () => eventContext.getStore();
@@ -11,7 +12,13 @@ export function eventSchema(event = currentEvent()) {
 
 // A transaction-local search_path also works with Supabase transaction pooling.
 // Never fall back to public: a missing table must fail, not read another event.
-export const searchPathSql = (event) => `SET LOCAL search_path TO "${eventSchema(event)}", pg_catalog`;
+export const searchPathSql = (event = currentEvent()) => {
+  const schema = eventSchema(event);
+  if (!unifiedStorage()) return `SET LOCAL search_path TO "${schema}", pg_catalog`;
+  const id = event?.id || 3;
+  if (!Number.isSafeInteger(id) || id < 1) throw new Error('Kegiatan tidak valid.');
+  return `SET LOCAL ROLE bimtek_app; SET LOCAL app.event_id = '${id}'; SET LOCAL search_path TO public, pg_catalog`;
+};
 
 export const legacyReportingDays = [
   { date: '2026-11-11', label: 'Absensi Hari-1', shortDate: '11 Nov' },

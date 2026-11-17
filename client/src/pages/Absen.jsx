@@ -268,7 +268,7 @@ export function CaptureStep({ role, info, ch, onDone, onRestart, selfLo = false 
   function capture() {
     const lines = [
       `${info?.event_name || 'BIMTEK'} • ${sessionTitle(ch.session)}`,
-      `${ch.person.name} (${role})`,
+      `${ch.person.name} (${ROLE[role]?.label || role})`,
       `${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })} WIB${area?.inside ? ' • ' + area.venue : ''}`,
       `${last.lat.toFixed(6)}, ${last.lng.toFixed(6)} ±${Math.round(last.accuracy)} m • #${ch.nonce}`,
     ];

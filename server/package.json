@@ -8,6 +8,7 @@
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
     "migrate": "node src/migrate.js",
+    "migrate:unify": "node src/unify.js",
     "seed-venues": "node src/seedVenues.js",
     "seed-lo": "node src/seedLoAccounts.js",
     "import-bimtek3": "node src/importBimtek3.js",
