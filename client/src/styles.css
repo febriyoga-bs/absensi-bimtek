@@ -286,6 +286,11 @@ select:disabled { background-color: var(--surface-2); color: var(--muted); curso
 /* Capture */
 .capture { display: grid; gap: 14px; }
 .lo-self-attendance { max-width: 520px; }
+.attendance-photo-history { margin: 12px 0; }
+.attendance-photo-history summary { cursor: pointer; font-weight: 600; }
+.attendance-photo-history figure { margin: 12px 0; }
+.attendance-photo-history img { width: 100%; max-height: 320px; object-fit: contain; border-radius: 8px; cursor: zoom-in; }
+.attendance-photo-history figcaption { font-size: 12px; margin-top: 6px; }
 .lo-self-history { display: grid; gap: 16px; margin-top: 24px; }
 .lo-self-history h3 { margin: 0; }
 .lo-self-photo { max-height: 480px; object-fit: contain; border-radius: 12px; background: #0b1220; }

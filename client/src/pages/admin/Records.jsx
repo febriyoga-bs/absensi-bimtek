@@ -222,6 +222,15 @@ export default function Records() {
                   </ul>
                 )}
                 {r.participant_note && <div className="rec__note small"><b>Catatan</b><div>{r.participant_note}</div></div>}
+                {!!r.photo_history?.length && <details className="attendance-photo-history">
+                  <summary>Riwayat foto ({r.photo_history.length})</summary>
+                  {r.photo_history.map((version,index) => <figure key={index}>
+                    {version.has_photo && <img src={adminUrl(`/photo/${r.id}?version=${index}`)} loading="lazy"
+                      alt={`Foto absensi sebelumnya ${personName(r.name)}, percobaan ${index+1}`}
+                      onClick={() => setZoom(adminUrl(`/photo/${r.id}?version=${index}`))} />}
+                    <figcaption>{fmtDT(version.at)} WIB · {ST_LABEL[version.status] || version.status}</figcaption>
+                  </figure>)}
+                </details>}
                 <div className="row">
                   {r.can_edit_note && r.role !== 'panitia' && <button type="button" className="btn btn--sm" disabled={loading}
                     onClick={() => { setNoteNotice(''); setNoteTarget(r); }}>Ubah catatan</button>}

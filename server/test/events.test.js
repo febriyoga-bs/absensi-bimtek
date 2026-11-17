@@ -211,6 +211,17 @@ test('LO self attendance falls back to an open test session and prechecks its lo
     assert.notEqual(updated.records[0].status, 'ditolak');
     assert.equal(updated.recorded, true);
     assert.equal(updated.retry, false);
+    assert.equal(updated.records[0].photo_history.length, 1);
+    assert.equal(updated.records[0].photo_history[0].status, 'ditolak');
+    assert.equal(updated.records[0].photo_history[0].photo_path, undefined);
+    const oldPhoto = await request(`/lo/attendance/${attendance}/photo?event=3&version=0`, { token });
+    assert.equal(oldPhoto.status,200);
+    assert.deepEqual(Buffer.from(await oldPhoto.arrayBuffer()),photoBytes);
+    assert.equal((await request(`/lo/attendance/${attendance}/photo?event=3&version=9`, { token })).status,404);
+    assert.equal((await request('/lo/attendance/1/photo?event=3&version=0', { token })).status,404);
+    const adminHistory = await request(`/admin/photo/${attendance}?event=3&version=0&bytes=true`);
+    assert.equal(adminHistory.status,200);
+    assert.deepEqual(Buffer.from(await adminHistory.arrayBuffer()),photoBytes);
     assert.equal((await request('/lo/challenge?event=3', { method: 'POST', token })).status, 409);
   } finally {
     if (previousUploadDir === undefined) delete process.env.UPLOAD_DIR; else process.env.UPLOAD_DIR = previousUploadDir;

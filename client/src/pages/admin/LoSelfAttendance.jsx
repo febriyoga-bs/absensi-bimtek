@@ -82,6 +82,15 @@ export default function LoSelfAttendance() {
               <div><dt>Waktu</dt><dd>{fmtFull(record.at)}</dd></div>
               <div><dt>Status</dt><dd><span className={`status-tag status-tag--${record.status}`}>{({ valid: 'Valid', review: 'Menunggu verifikasi', ditolak: 'Ditolak', berhalangan: 'Berhalangan' })[record.status] || record.status}</span></dd></div>
             </dl>
+            {!!record.photo_history?.length && <details className="attendance-photo-history">
+              <summary>Riwayat foto ({record.photo_history.length})</summary>
+              {record.photo_history.map((version,index) => <figure key={index}>
+                {version.has_photo && <img className="preview lo-self-photo" loading="lazy"
+                  src={`/api${eventPath(`/lo/attendance/${record.id}/photo?version=${index}&t=${encodeURIComponent(adminToken.get() || '')}`)}`}
+                  alt={`Foto absensi sebelumnya, percobaan ${index+1}`} />}
+                <figcaption>{fmtFull(version.at)} · {({ditolak:'Ditolak',valid:'Valid',review:'Menunggu verifikasi'})[version.status] || version.status}</figcaption>
+              </figure>)}
+            </details>}
             {record.status === 'ditolak' && <>
               <button type="button" className="btn btn--primary" disabled={busy || record.session_id !== history.current_session_id} onClick={start}>
                 {busy ? <Spinner size={18} /> : <Icon name="refresh" size={18} />} Absen Ulang
