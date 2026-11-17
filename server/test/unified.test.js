@@ -62,8 +62,12 @@ test('cross-event inserts fail and explicit transactions roll back without chang
   assert.equal((await scoped(4,()=>q('SELECT name FROM people WHERE id=1'))).rows[0].name,'Person 4');
 });
 test('one login exposes all three stage tabs while keeping assignment-only actions protected',async()=>{
-  const response=await fetch(origin+'/api/admin/login?event=4',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'LO.Test',password:'shared-password'})});
+  await rawPool.query("UPDATE public.bimtek_events SET status=CASE WHEN id=4 THEN 'active' ELSE 'archived' END");
+  const response=await fetch(origin+'/api/admin/login?event=3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'LO.Test',password:'shared-password'})});
   assert.equal(response.status,200);const login=await response.json();assert.deepEqual(login.user.events.map(e=>e.id),[2,3,4]);
+  assert.equal(login.event.id,4,'active stage overrides the saved archive at login');
+  const admin=await fetch(origin+'/api/admin/login?event=3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:'test-password'})});
+  assert.equal(admin.status,200);assert.equal((await admin.json()).event.id,4);
   for(const id of [2,3,4]){const me=await fetch(origin+`/api/admin/me?event=${id}`,{headers:{Authorization:`Bearer ${login.token}`}});assert.equal(me.status,200);}
   const blocked=await fetch(origin+'/api/lo/challenge?event=2',{method:'POST',headers:{Authorization:`Bearer ${login.token}`}});assert.equal(blocked.status,409);
   const archive=await fetch(origin+'/api/admin/reporting?event=2&dataset=current',{headers:{Authorization:`Bearer ${login.token}`}});assert.equal(archive.status,200);assert.ok((await archive.json()).schools.length>0);

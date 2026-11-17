@@ -26,7 +26,7 @@ async function photoForPdf(row) {
   } finally { bitmap.close(); }
 }
 
-export async function printAttendance({ filters, title, onProgress }) {
+export async function printAttendance({ filters, title, heading = 'Rekap Absensi', onProgress }) {
   const records = [], seen = new Set(); let total = 0;
   do {
     const params = new URLSearchParams({ ...filters, limit: '200', offset: String(records.length) });
@@ -40,43 +40,46 @@ export async function printAttendance({ filters, title, onProgress }) {
   if (!records.length) throw new Error('Tidak ada absensi yang cocok dengan filter untuk diunduh.');
   const { jsPDF } = await import('jspdf');
   const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
-  pdf.setProperties({ title: 'Rekap Absensi BIMTEK Revitalisasi SD', author: 'Dashboard LO' });
-  const gap = 4, width = (277 - 3 * gap) / 4, lineHeight = 3.6, printed = time(Date.now());
-  let y, cards = [];
+  pdf.setProperties({ title: printable(heading), author: 'Dashboard LO' });
+  const gap = 4, width = (277 - 3 * gap) / 4, lineHeight = 3.1, printed = time(Date.now());
+  let y, cards = [], rowOnPage = 0;
+  const overflow = [];
   const textLines = (value, bold = false) => {
-    pdf.setFont('helvetica', bold ? 'bold' : 'normal'); pdf.setFontSize(bold ? 9 : 8);
+    pdf.setFont('helvetica', bold ? 'bold' : 'normal'); pdf.setFontSize(bold ? 8 : 7);
     return pdf.splitTextToSize(printable(value), width - 6).map(text => ({ text, bold }));
   };
   const header = () => {
-    pdf.setFillColor(23, 59, 118); pdf.rect(10, 8, 277, 13, 'F');
     pdf.setFont('helvetica', 'bold'); pdf.setFontSize(13); pdf.setTextColor(255);
-    pdf.text('Rekap Absensi BIMTEK Revitalisasi SD', 14, 16.5);
+    const headingLines = pdf.splitTextToSize(printable(heading), 269);
+    const headerHeight = 7 + headingLines.length * 6;
+    pdf.setFillColor(23, 59, 118); pdf.rect(10, 8, 277, headerHeight, 'F');
+    pdf.text(headingLines, 14, 16.5);
     pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(40, 59, 83);
     const scope = pdf.splitTextToSize(printable(title), 277);
-    pdf.text(scope, 10, 26); y = 29 + scope.length * 3.4;
+    pdf.text(scope, 10, 13 + headerHeight); y = 16 + headerHeight + scope.length * 3.4;
     pdf.text(`${records.length} catatan absensi - Dibuat ${printed} WIB`, 10, y); y += 6;
   };
-  header(); const maxHeight = 194 - y;
+  header(); const cardHeight = (194 - y - gap) / 2;
   const flush = () => {
     if (!cards.length) return;
-    const height = Math.max(...cards.map(card => card.height));
-    if (y + height > 194) { pdf.addPage(); header(); }
+    const height = cardHeight;
+    if (rowOnPage === 2) { pdf.addPage(); header(); rowOnPage = 0; }
     cards.forEach((card, index) => {
       const x = 10 + index * (width + gap); let top = y + 4;
       pdf.setDrawColor(209, 221, 235); pdf.setFillColor(248, 250, 254);
       pdf.roundedRect(x, y, width, height, 2, 2, 'FD');
       if (card.photo) {
-        const imageWidth = Math.min(width - 6, 40 * card.photo.ratio), imageHeight = imageWidth / card.photo.ratio;
+        const imageWidth = Math.min(width - 6, 24 * card.photo.ratio), imageHeight = imageWidth / card.photo.ratio;
         pdf.addImage(card.photo.data, 'JPEG', x + (width - imageWidth) / 2, top, imageWidth, imageHeight);
-        top += 43;
+        top += 28;
       }
       card.lines.forEach(({ text, bold }) => {
         pdf.setTextColor(bold ? 23 : 50, bold ? 59 : 67, bold ? 118 : 87);
-        pdf.setFont('helvetica', bold ? 'bold' : 'normal'); pdf.setFontSize(bold ? 9 : 8);
+        pdf.setFont('helvetica', bold ? 'bold' : 'normal'); pdf.setFontSize(bold ? 8 : 7);
         pdf.text(text, x + 3, top); top += lineHeight;
       });
     });
-    y += height + gap; cards = [];
+    y += height + gap; rowOnPage++; cards = [];
   };
   for (const [index, row] of records.entries()) {
     onProgress?.(`menyiapkan PDF ${index + 1}/${records.length}`);
@@ -87,18 +90,28 @@ export async function printAttendance({ filters, title, onProgress }) {
       ...(row.scanned_by ? textLines(`Dicatat oleh ${personName(row.scanned_by)}`) : []),
       ...(row.participant_note ? [...textLines('Catatan kendala', true), ...textLines(row.participant_note)] : []),
       ...(!photo ? textLines('Tidak ada foto') : []) ];
-    let first = true;
-    while (lines.length) {
-      const image = first ? photo : null;
-      const continuation = first ? [] : textLines(`${personName(row.name)} (lanjutan)`, true);
-      const count = Math.max(1, Math.floor((maxHeight - (image ? 43 : 0) - 8) / lineHeight) - continuation.length);
-      const part = [...continuation, ...lines.splice(0, count)];
-      cards.push({ photo: image, lines: part, height: (image ? 43 : 0) + 8 + part.length * lineHeight });
-      if (cards.length === 4) flush(); first = false;
+    const count = Math.max(2, Math.floor((cardHeight - (photo ? 28 : 0) - 8) / lineHeight));
+    let part = lines;
+    if (lines.length > count) {
+      overflow.push({ name: personName(row.name), code: row.code, lines: lines.slice(count - 1) });
+      part = [...lines.slice(0, count - 1), { text: `Rincian lanjutan: lampiran ${overflow.length}`, bold: true }];
     }
+    cards.push({ photo, lines: part });
+    if (cards.length === 4) flush();
     if (index % 10 === 0) await new Promise(resolve => setTimeout(resolve, 0));
   }
-  flush(); const pages = pdf.getNumberOfPages();
+  flush();
+  // Keep eight distinct profiles on each full page without discarding long notes.
+  for (const [index, entry] of overflow.entries()) {
+    pdf.addPage(); header();
+    const continuation = textLines(`Lampiran ${index + 1}: ${entry.name} (${entry.code || '-'})`, true);
+    for (const line of [...continuation, ...entry.lines]) {
+      if (y > 191) { pdf.addPage(); header(); }
+      pdf.setFont('helvetica', line.bold ? 'bold' : 'normal'); pdf.setFontSize(line.bold ? 8 : 7);
+      pdf.setTextColor(40, 59, 83); pdf.text(line.text, 10, y); y += lineHeight;
+    }
+  }
+  const pages = pdf.getNumberOfPages();
   for (let page = 1; page <= pages; page++) {
     pdf.setPage(page); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(100);
     pdf.text(`Halaman ${page} / ${pages}`, 287, 202, { align: 'right' });

@@ -43,10 +43,11 @@ export default function AttendanceDownloadDialog({ sessions, venues, lo, initial
     if (lo) delete selected.venue_id;
     try {
       if (format === 'pdf') {
-        const title = [sessionTitle(sessions.find((session) => String(session.id) === filters.session_id)),
-          selected.venue_id ? venues.find((venue) => String(venue.id) === selected.venue_id)?.name : 'Semua venue yang dapat diakses',
+        const sessionName = sessionTitle(sessions.find((session) => String(session.id) === String(filters.session_id)));
+        const venueName = selected.venue_id ? venues.find((venue) => String(venue.id) === String(selected.venue_id))?.name : lo && venues.length === 1 ? venues[0].name : 'Semua venue';
+        const title = [sessionName, venueName,
           selected.recorded_by || 'Semua LO pencatat', selected.position || 'Semua jabatan', statusLabels[selected.status] || 'Semua status'].filter(Boolean).join(' · ');
-        await printAttendance({ filters: selected, title, onProgress: setProgress });
+        await printAttendance({ filters: selected, title, heading: `Rekap Absensi - ${sessionName} - ${venueName}`, onProgress: setProgress });
       } else {
         const query = new URLSearchParams({ ...selected, ...(scope === 'all' ? { include_all: 'true' } : { recorded_only: 'true' }) });
         const response = await fetch(adminUrl(`/export?${query}`));
