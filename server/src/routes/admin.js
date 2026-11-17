@@ -2,7 +2,7 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
 import fs from 'fs';
-import { q, getSettings, pool } from '../db.js';
+import { q, getSettings, pool, rawPool } from '../db.js';
 import { ah, HttpError, clientIp } from '../util.js';
 import {
   requireAdmin, requireLo, requireSuper, signAdmin, checkAdminPassword, hashPassword, verifyPassword,
@@ -51,7 +51,8 @@ export const loginHandler = ah(async (req, res) => {
 
   if (!username) {
     if (!checkAdminPassword(password)) throw new HttpError(401, 'Password salah');
-    return res.json({ token: signAdmin({ role: 'admin' }), user: { role: 'admin', name: 'Admin utama' } });
+    const { rows: [event] } = await rawPool.query("SELECT id,name,status FROM public.bimtek_events ORDER BY (status='active') DESC,id DESC LIMIT 1");
+    return res.json({ token: signAdmin({ role: 'admin' }), user: { role: 'admin', name: 'Admin utama' }, event });
   }
 
   const { claims, user, event } = await loginLo(username, password, req.query.event);

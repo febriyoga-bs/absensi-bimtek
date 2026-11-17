@@ -38,8 +38,9 @@ export async function loginLo(username, password, preferredEvent) {
       unifiedStorage()?[grant.id,event.id]:[grant.id]);
     if(account)allowed.push({account,event});
   }
-  const chosen = allowed.find(({ event }) => event.id === Number(preferredEvent))
-    || allowed.find(({ event }) => event.status === 'active') || allowed.at(-1);
+  // A saved archive selection must not become the landing stage of a new login.
+  const chosen = [...allowed].reverse().find(({ event }) => event.status === 'active')
+    || allowed.find(({ event }) => event.id === Number(preferredEvent)) || allowed.at(-1);
   const { account, event } = chosen;
   await rawPool.query(unifiedStorage()
     ? 'UPDATE public.event_lo_accounts SET last_login_at=now() WHERE id=$1 AND event_id=$2'
