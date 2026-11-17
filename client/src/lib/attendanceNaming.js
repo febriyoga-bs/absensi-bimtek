@@ -6,6 +6,7 @@ export const attendanceFilename = (heading, extension) => `${loLabel(heading)
 
 export function attendanceCell(header, value) {
   const text = String(value ?? '');
+  if (header === 'Peran') return personName(text);
   if (header === 'Nama') return personName(text);
   if (['LO Bertugas', 'Diabsenkan oleh LO', 'LO Pencatat'].includes(header)) return text.split(';').map(personName).join('; ');
   if (['URL Foto', 'NPSN'].includes(header)) return text;
