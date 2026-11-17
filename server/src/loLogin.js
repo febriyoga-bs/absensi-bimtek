@@ -3,6 +3,7 @@ import { unifiedStorage } from './unifiedStorage.js';
 import { eventSchema } from './eventContext.js';
 import { verifyPassword } from './auth.js';
 import { HttpError } from './util.js';
+import { identityGrants } from './loIdentity.js';
 
 // Authentication searches accounts independently of the selected activity.
 // Each grant is still tied to an account whose credentials were verified.
@@ -25,6 +26,18 @@ export async function loginLo(username, password, preferredEvent) {
   if (!matches.length) throw new HttpError(401, 'Username atau password salah');
   const allowed = matches.filter(({ account }) => account.active);
   if (!allowed.length) throw new HttpError(403, 'Akun LO ini dinonaktifkan. Hubungi admin utama.');
+  const linked = await identityGrants(allowed.map(({account,event})=>({event:event.id,id:account.id})));
+  for (const grant of linked) {
+    if (allowed.some(({account,event})=>event.id===grant.event && account.id===grant.id)) continue;
+    const event=events.find((event)=>event.id===grant.event);
+    if (!event || event.id===2) continue;
+    const schema=eventSchema(event);
+    const {rows:[account]}=await rawPool.query(unifiedStorage()
+      ? `SELECT l.*,v.name AS venue_name FROM public.event_lo_accounts l JOIN public.event_venues v ON v.event_id=l.event_id AND v.id=l.venue_id WHERE l.event_id=$2 AND l.id=$1 AND l.active`
+      : `SELECT l.*,v.name AS venue_name FROM "${schema}".lo_accounts l JOIN "${schema}".venues v ON v.id=l.venue_id WHERE l.id=$1 AND l.active`,
+      unifiedStorage()?[grant.id,event.id]:[grant.id]);
+    if(account)allowed.push({account,event});
+  }
   const chosen = allowed.find(({ event }) => event.id === Number(preferredEvent))
     || allowed.find(({ event }) => event.status === 'active') || allowed.at(-1);
   const { account, event } = chosen;

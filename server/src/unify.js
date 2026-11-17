@@ -13,8 +13,14 @@ if (apply && !args.has('--runtime-ready')) throw new Error('Deploy runtime yang 
 const c=await rawPool.connect();
 try {
   await c.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+  const {rows:[marker]}=await c.query("SELECT to_regclass('public.bimtek_storage') AS name");
+  if(marker.name && (await c.query('SELECT unified FROM public.bimtek_storage WHERE id=1')).rows[0]?.unified) {
+    console.log(JSON.stringify({alreadyUnified:true,applied:false}));await c.query('ROLLBACK');
+  } else {
   const {rows:events}=await c.query('SELECT * FROM public.bimtek_events ORDER BY id');
   const snapshot={version:1,created_at:new Date().toISOString(),events,sources:[]};
+  const {rows:[links]}=await c.query("SELECT to_regclass('public.lo_account_links') AS name");
+  if(links.name)snapshot.lo_account_links=(await c.query('SELECT * FROM public.lo_account_links')).rows;
   for(const event of events.filter(e=>e.id!==2)) {
     const schema=eventSchema(event),tables={};
     for(const table of eventTables) tables[table]=(await c.query(`SELECT * FROM "${schema}".${table}`)).rows;
@@ -30,6 +36,7 @@ try {
     const result=await unifyMigration(c);
     await c.query(apply?'COMMIT':'ROLLBACK');
     console.log(JSON.stringify({applied:apply,dry_run:!apply,...result}));
+  }
   }
 }catch(error){await c.query('ROLLBACK').catch(()=>{});console.error('Migration failed:',error.code||error.name,error.message);process.exitCode=1;}
 finally{c.release();await rawPool.end();}

@@ -7,6 +7,7 @@ import { reportingDates } from '../src/reportingDays.js';
 import { signAdmin, signChallenge, verifyChallenge, hashPassword } from '../src/auth.js';
 import app from '../src/app.js';
 import { invalidateEventMetadata } from '../src/events.js';
+import { invalidateIdentityLinks } from '../src/loIdentity.js';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -369,4 +370,26 @@ test('verification and arrival recap APIs are restricted to the main admin', asy
   }
   assert.equal((await request('/admin/attendance/1?event=3', {method:'PATCH',token,body:{status:'ditolak'}})).status, 403);
   assert.equal((await request('/admin/venue-attendance?event=3', {token})).status, 200);
+});
+
+test('an explicit identity merge updates old sessions and new logins without matching passwords or names', async () => {
+  const ids={};
+  for(const event of [3,4])await scoped(event,async()=>{
+    ids[event]=(await q('INSERT INTO lo_accounts(name,username,password_hash,venue_id) VALUES($1,$2,$3,(SELECT id FROM venues LIMIT 1)) RETURNING id',
+      ['Canonical Name',`merged-${event}`,hashPassword(`password-${event}`)])).rows[0].id;
+  });
+  const token=signAdmin({role:'lo',username:'merged-3',accounts:[{event:3,id:ids[3]}]});
+  const before=await (await request('/admin/me?event=4',{token})).json();
+  assert.equal(before.no_assignment,true);
+  await rawPool.query(`CREATE TABLE public.lo_account_links(group_id uuid NOT NULL,event_id int NOT NULL,account_id int NOT NULL,PRIMARY KEY(event_id,account_id));
+    INSERT INTO public.lo_account_links VALUES('00000000-0000-4000-8000-000000000001',3,${ids[3]}),('00000000-0000-4000-8000-000000000001',4,${ids[4]})`);
+  invalidateIdentityLinks();
+  const after=await request('/admin/me?event=4',{token});
+  assert.equal(after.status,200);assert.equal((await after.json()).no_assignment,undefined);
+  const login=await request('/admin/login?event=4',{method:'POST',token:null,body:{username:'merged-3',password:'password-3'}});
+  assert.equal(login.status,200);const data=await login.json();assert.equal(data.event.id,4);
+  assert.equal((await request('/admin/me?event=3',{token:data.token})).status,200);
+  assert.equal((await request('/admin/login?event=4',{method:'POST',token:null,body:{username:'merged-3',password:'wrong'}})).status,401);
+  await scoped(4,()=>q('UPDATE lo_accounts SET active=false WHERE id=$1',[ids[4]]));
+  assert.equal((await request('/admin/me?event=4',{token:data.token})).status,401);
 });

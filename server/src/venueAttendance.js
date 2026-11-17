@@ -10,6 +10,7 @@ const participantPositions = {
 
 function assignmentProfiles(rows, profiles, venueIds, venueId) {
   const byName = new Map();
+  const byCode = new Map(profiles.filter((profile)=>profile.code).map((profile)=>[profile.code.toLowerCase(),profile]));
   for (const profile of profiles) {
     const key = nameKey(profile.name);
     if (!byName.has(key)) byName.set(key, []);
@@ -23,7 +24,7 @@ function assignmentProfiles(rows, profiles, venueIds, venueId) {
     const key = nameKey(row.name);
     if (id == null || !key) continue;
     const names = [...new Set([key, nameKey(row.account_name)].filter(Boolean))];
-    assignments.set(`${id}:${key}`, { id, names, name: row.name });
+    assignments.set(`${id}:${key}`, { id, names, name: row.name,username:row.account_username });
     for (const name of names) {
       if (!venuesByPerson.has(name)) venuesByPerson.set(name, new Set());
       venuesByPerson.get(name).add(id);
@@ -32,10 +33,12 @@ function assignmentProfiles(rows, profiles, venueIds, venueId) {
 
   const counted = new Set();
   const result = [];
-  for (const { id, names, name } of assignments.values()) {
+  for (const { id, names, name,username } of assignments.values()) {
     if (venueId != null && venueId !== id) continue;
-    const candidates = new Set(names.flatMap((name) => (byName.get(name) || []).filter((p) =>
-      p.venue_id === id || (p.venue_id == null && venuesByPerson.get(name).size === 1))));
+    const coded = username && byCode.get(username.toLowerCase());
+    const candidates = coded ? new Set(coded.venue_id===id ? [coded] : [])
+      : new Set(names.flatMap((name) => (byName.get(name) || []).filter((p) =>
+        p.venue_id === id || (p.venue_id == null && venuesByPerson.get(name).size === 1))));
     const assigned = [...candidates].filter((p) => p.venue_id === id);
     const matches = assigned.length ? assigned : [...candidates];
     const match = matches.length === 1 ? matches[0] : null;
@@ -50,7 +53,7 @@ function assignmentProfiles(rows, profiles, venueIds, venueId) {
 
 const loadRoster = () => q(`SELECT
   (SELECT jsonb_agg(f) FROM jsonb_to_recordset(data->'facilitators') AS f(name text, venue text)) AS facilitators,
-  (SELECT jsonb_agg(to_jsonb(l) || jsonb_build_object('account_name', a.name))
+  (SELECT jsonb_agg(to_jsonb(l) || jsonb_build_object('account_name', a.name,'account_username',a.username))
    FROM jsonb_to_recordset(data->'lo') AS l(name text, venue text, venue_id int, account_id int)
    LEFT JOIN lo_accounts a ON a.id=l.account_id) AS lo
   FROM assignment_roster WHERE id=1`);
@@ -58,13 +61,13 @@ const loadRoster = () => q(`SELECT
 const statusOrder = "CASE a.status WHEN 'valid' THEN 0 WHEN 'review' THEN 1 WHEN 'berhalangan' THEN 2 ELSE 3 END";
 
 const loadProfiles = (venueId, day) => q(`WITH profiles AS (
-  SELECT id, name, venue_id, CASE
+  SELECT id, code, name, venue_id, CASE
     WHEN lower(trim(position)) LIKE 'fasil%' THEN 'fasil'
     WHEN role='panitia' AND (lower(trim(position)) ~ '^lo($|[[:space:]])'
       OR lower(trim(position))='liaison officer') THEN 'lo'
   END AS category FROM people WHERE archived_at IS NULL
 )
-SELECT p.id, p.name, p.venue_id, p.category, arrival.marks->>p.id::text AS arrival_status, (
+SELECT p.id, p.code, p.name, p.venue_id, p.category, arrival.marks->>p.id::text AS arrival_status, (
   SELECT COALESCE(jsonb_object_agg(t.venue_id,t.status),'{}')
   FROM (
     SELECT DISTINCT ON (a.venue_id) a.venue_id, a.status FROM attendance a JOIN sessions s ON s.id=a.session_id AND NOT s.is_test

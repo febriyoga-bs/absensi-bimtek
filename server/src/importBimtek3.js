@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { hashPassword } from './auth.js';
 import { pool } from './db.js';
+import { ensureRosterLoProfiles } from './loProfile.js';
 
 // Nama mengikuti Excel. Titik awal berasal dari referensi hotel/peta.
 // Venue baru dibuat nonaktif sampai panitia mengecek titik dan radius absensi.
@@ -194,6 +195,7 @@ async function importRoster(db, roster, { dryRun, credentialsPath, resetLogins, 
   await db.query(
     'INSERT INTO assignment_roster (id, data) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data',
     [JSON.stringify({ ...roster, lo: rosterLo, attendance_assignments: attendanceAssignments([...roster.participants, ...assignments], rosterLo) })]);
+  await ensureRosterLoProfiles(db.query.bind(db));
   if (credentials.length) {
     const header = resetLogins ? 'Username\tNama LO\tVenue' : 'Username\tPassword awal\tNama LO\tVenue';
     writeFileSync(credentialsPath, [header, ...credentials].join('\n') + '\n',

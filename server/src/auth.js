@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { q, rawPool } from './db.js';
 import { eventId, eventContext } from './eventContext.js';
+import { identityGrants } from './loIdentity.js';
 
 const SECRET = () => {
   const s = process.env.JWT_SECRET;
@@ -34,6 +35,7 @@ export async function requireAdmin(req, res, next) {
   }
   if (p.role === 'lo') {
     try {
+      p.accounts=await identityGrants(p.accounts);
       if (Array.isArray(p.accounts) && !p.accounts.some((account) => account.event === eventId())) {
         const readable = req.method==='GET' && ['/me','/reporting','/venue-attendance','/sessions'].includes(req.path);
         if (!readable) return res.status(403).json({ error: 'Akun Anda tidak memiliki penugasan untuk kegiatan ini.' });
@@ -42,14 +44,15 @@ export async function requireAdmin(req, res, next) {
         for (const grant of p.accounts) {
           const source = events.find((event) => event.id===grant.event);
           if (!source) continue;
-          const result = await eventContext.run(source, () => q('SELECT name FROM lo_accounts WHERE id=$1 AND active AND lower(username)=lower($2)', [grant.id,p.username]));
+          const result = await eventContext.run(source, () => q('SELECT name FROM lo_accounts WHERE id=$1 AND active', [grant.id]));
           if (result.rows[0]) { identity=result.rows[0]; break; }
         }
         if (!identity) return res.status(401).json({error:'Akun LO tidak aktif. Silakan login ulang.'});
         req.user={role:'lo',lo:null,venue:null,name:identity.name,no_assignment:true,events:events.map((event)=>event.id)};
         return next();
       }
-      const { rows: [account] } = await q('SELECT id, name, active, venue_id FROM lo_accounts WHERE lower(username)=lower($1)', [p.username]);
+      const grant=p.accounts.find((account)=>account.event===eventId());
+      const { rows: [account] } = await q('SELECT id, name, active, venue_id FROM lo_accounts WHERE id=$1', [grant.id]);
       if (!account?.active) {
         return res.status(401).json({ error: 'Akun atau penempatan venue berubah. Silakan login ulang.' });
       }
