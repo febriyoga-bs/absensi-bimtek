@@ -7,6 +7,7 @@ import { sessionTitle } from './shared.js';
 import { downloadAttendanceExcel } from '../../lib/attendanceExcel.js';
 import { downloadFile } from '../../lib/downloadFile.js';
 import { personName } from '../../lib/personName.js';
+import { attendanceFilename, loLabel } from '../../lib/attendanceNaming.js';
 
 const statusLabels = { valid: 'Valid', review: 'Perlu dicek', ditolak: 'Ditolak', berhalangan: 'Mundur/Berhalangan Hadir' };
 
@@ -42,12 +43,13 @@ export default function AttendanceDownloadDialog({ sessions, venues, lo, initial
     const selected = Object.fromEntries(Object.entries(filters).filter(([, value]) => value !== ''));
     if (lo) delete selected.venue_id;
     try {
+      const sessionName = sessionTitle(sessions.find((session) => String(session.id) === String(filters.session_id)));
+      const venueName = selected.venue_id ? venues.find((venue) => String(venue.id) === String(selected.venue_id))?.name : lo && venues.length === 1 ? venues[0].name : 'Semua venue';
+      const heading = `Rekap Absensi - ${sessionName} - ${venueName}`;
       if (format === 'pdf') {
-        const sessionName = sessionTitle(sessions.find((session) => String(session.id) === String(filters.session_id)));
-        const venueName = selected.venue_id ? venues.find((venue) => String(venue.id) === String(selected.venue_id))?.name : lo && venues.length === 1 ? venues[0].name : 'Semua venue';
         const title = [sessionName, venueName,
-          selected.recorded_by || 'Semua LO pencatat', selected.position || 'Semua jabatan', statusLabels[selected.status] || 'Semua status'].filter(Boolean).join(' · ');
-        await printAttendance({ filters: selected, title, heading: `Rekap Absensi - ${sessionName} - ${venueName}`, onProgress: setProgress });
+          selected.recorded_by ? personName(selected.recorded_by) : 'Semua LO pencatat', loLabel(selected.position) || 'Semua jabatan', statusLabels[selected.status] || 'Semua status'].filter(Boolean).join(' · ');
+        await printAttendance({ filters: selected, title, heading, onProgress: setProgress });
       } else {
         const query = new URLSearchParams({ ...selected, ...(scope === 'all' ? { include_all: 'true' } : { recorded_only: 'true' }) });
         const response = await fetch(adminUrl(`/export?${query}`));
@@ -57,8 +59,8 @@ export default function AttendanceDownloadDialog({ sessions, venues, lo, initial
         }
         if (format === 'xlsx') {
           setProgress('merapikan kolom');
-          await downloadAttendanceExcel(await response.text(), `rekap-absensi-${filters.session_id}.xlsx`);
-        } else downloadFile(await response.blob(), `rekap-absensi-${filters.session_id}.csv`);
+          await downloadAttendanceExcel(await response.text(), attendanceFilename(heading, 'xlsx'));
+        } else downloadFile(await response.blob(), attendanceFilename(heading, 'csv'));
       }
       onClose();
     } catch (cause) { setError(cause.message); }

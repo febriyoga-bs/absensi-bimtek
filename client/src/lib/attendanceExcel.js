@@ -1,4 +1,4 @@
-import { personName } from './personName.js';
+import { attendanceCell } from './attendanceNaming.js';
 import { downloadFile } from './downloadFile.js';
 
 export async function downloadAttendanceExcel(csv, filename) {
@@ -10,8 +10,7 @@ export async function downloadAttendanceExcel(csv, filename) {
   const [headers, ...body] = data;
   const rows = body.map((row) => headers.map((header, index) => {
     const value = String(row[index] ?? '');
-    return header === 'Nama' ? personName(value)
-      : header === 'LO Bertugas' ? value.split(';').map(personName).join('; ') : value;
+    return attendanceCell(header, value);
   }));
   const widths = headers.map((header, column) => Math.min(header === 'URL Foto' ? 64 : 54,
     Math.max(14, ...[header, ...rows.map((row) => row[column])].map((value) =>
