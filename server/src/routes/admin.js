@@ -1072,7 +1072,7 @@ r.get('/attendance', requireSuper, ah(async (req, res) => {
   const [{ rows }, { rows: [summary] }] = await Promise.all([
     q(
       `SELECT a.id, a.status, a.risk_score, a.flags, a.lat, a.lng, a.accuracy_m, a.distance_m,
-              a.created_at, a.device_id, a.user_agent, a.ip, a.photo_path, a.venue_id, a.method, a.scanned_by, a.participant_note,
+              a.created_at, a.device_id, a.user_agent, a.ip, a.photo_path, a.photo_history, a.venue_id, a.method, a.scanned_by, a.participant_note,
               p.name, p.code, p.role, p.institution, p.position, v.name AS venue_name,
               ${assignedToLo('$6', '$2')} AS can_verify,
               ${canDeleteAttendance('$6', '$2')} AS can_delete,
@@ -1102,7 +1102,9 @@ r.get('/attendance', requireSuper, ah(async (req, res) => {
   const { recorders, session_exists: sessionExists, ...c } = summary;
   if (!sessionExists) throw new HttpError(404, 'Sesi absensi tidak ditemukan pada kegiatan ini. Pilih sesi yang sesuai.');
   // Signed URL R2 hanya untuk foto di halaman ini (bukan semua foto sesi)
-  const out = await Promise.all(rows.map(async ({ photo_path, ...x }) => ({ ...x, photo_url: photo_path ? await photoUrl(photo_path) : null, has_photo: !!photo_path })));
+  const out = await Promise.all(rows.map(async ({ photo_path, photo_history, ...x }) => ({ ...x,
+    photo_history: photo_history.map(({photo_path,...version}) => ({...version,has_photo:!!photo_path})),
+    photo_url: photo_path ? await photoUrl(photo_path) : null, has_photo: !!photo_path })));
   res.json({
     rows: out,
     recorders,
@@ -1178,7 +1180,11 @@ r.get('/attempts', requireSuper, ah(async (req, res) => {
 r.get('/photo/:id', ah(async (req, res) => {
   if (!/^\d{1,10}$/.test(req.params.id) || Number(req.params.id) > 2147483647) throw new HttpError(404, 'Foto tidak ditemukan.');
   await assertOwnAttendance(req, req.params.id);
-  const { rows } = await q('SELECT photo_path FROM attendance WHERE id=$1', [req.params.id]);
+  const { rows } = await q('SELECT photo_path,photo_history FROM attendance WHERE id=$1', [req.params.id]);
+  if (req.query.version !== undefined) {
+    if (typeof req.query.version !== 'string' || !/^\d{1,6}$/.test(req.query.version) || !rows[0]?.photo_history[Number(req.query.version)]) throw new HttpError(404, 'Foto tidak ditemukan.');
+    rows[0].photo_path = rows[0].photo_history[Number(req.query.version)].photo_path;
+  }
   if (!rows[0]?.photo_path) return res.status(404).end();
   if (req.query.bytes === 'true') {
     res.set('Cache-Control', 'no-store');

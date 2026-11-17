@@ -251,11 +251,11 @@ r.get('/lo/attendance', requireAdmin, requireLo, ah(async (req, res) => {
   if (!person) throw new HttpError(404, 'Profil absensi LO belum terhubung. Hubungi Admin Utama.');
   const session = await activeSession(person.role, person.venue_id, true);
   const { rows } = await q(`SELECT a.id,a.session_id,a.status,a.created_at AS at,a.distance_m,
-    a.photo_path IS NOT NULL AS has_photo,p.name,v.name AS venue,s.name AS session,s.type AS session_type,s.is_test
+    a.photo_path IS NOT NULL AS has_photo,a.photo_history,p.name,v.name AS venue,s.name AS session,s.type AS session_type,s.is_test
     FROM attendance a JOIN people p ON p.id=a.person_id JOIN sessions s ON s.id=a.session_id
     JOIN venues v ON v.id=a.venue_id WHERE a.person_id=$1 ORDER BY a.created_at DESC,a.id DESC`, [person.id]);
   res.set('Cache-Control', 'no-store');
-  res.json({ records: rows, current_session_id: session?.id || null,
+  res.json({ records: rows.map(({photo_history,...row}) => ({...row,photo_history:photo_history.map(({photo_path,...version}) => ({...version,has_photo:!!photo_path}))})), current_session_id: session?.id || null,
     recorded: rows.some((row) => row.session_id === session?.id && row.status !== 'ditolak'),
     retry: rows.some((row) => row.session_id === session?.id && row.status === 'ditolak') });
 }));
@@ -264,7 +264,11 @@ r.get('/lo/attendance/:id/photo', requireAdmin, requireLo, ah(async (req, res) =
   if (!/^\d{1,10}$/.test(req.params.id) || Number(req.params.id) > 2147483647) throw new HttpError(404, 'Foto tidak ditemukan.');
   const person = await getLoProfile(req.user);
   if (!person) throw new HttpError(404, 'Foto tidak ditemukan.');
-  const { rows: [record] } = await q('SELECT photo_path FROM attendance WHERE id=$1 AND person_id=$2', [req.params.id, person.id]);
+  const { rows: [record] } = await q('SELECT photo_path,photo_history FROM attendance WHERE id=$1 AND person_id=$2', [req.params.id, person.id]);
+  if (req.query.version !== undefined) {
+    if (typeof req.query.version !== 'string' || !/^\d{1,6}$/.test(req.query.version) || !record?.photo_history[Number(req.query.version)]) throw new HttpError(404, 'Foto tidak ditemukan.');
+    record.photo_path = record.photo_history[Number(req.query.version)].photo_path;
+  }
   if (!record?.photo_path) throw new HttpError(404, 'Foto tidak ditemukan.');
   res.set('Cache-Control', 'no-store');
   res.type('image/jpeg').send(await readPhoto(record.photo_path));
@@ -463,17 +467,20 @@ const recordAttendance = ah(async (req, res) => {
   );
 
   const ins = await q(
-    `INSERT INTO attendance (person_id, session_id, venue_id, photo_path, lat, lng, accuracy_m, distance_m, status,
+    `INSERT INTO attendance AS current_attendance (person_id, session_id, venue_id, photo_path, lat, lng, accuracy_m, distance_m, status,
        risk_score, flags, samples, device_id, ip, user_agent, client_time)
      SELECT $1,s.id,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16 FROM sessions s
      WHERE s.id=$2 AND (NOT s.is_test OR $17::boolean)
      ON CONFLICT (person_id, session_id) DO UPDATE SET
+       photo_history=current_attendance.photo_history || jsonb_build_array(jsonb_build_object(
+         'photo_path',current_attendance.photo_path,'at',current_attendance.created_at,
+         'status',current_attendance.status,'venue_id',current_attendance.venue_id)),
        venue_id=EXCLUDED.venue_id,photo_path=EXCLUDED.photo_path,lat=EXCLUDED.lat,lng=EXCLUDED.lng,
        accuracy_m=EXCLUDED.accuracy_m,distance_m=EXCLUDED.distance_m,status=EXCLUDED.status,
        risk_score=EXCLUDED.risk_score,flags=EXCLUDED.flags,samples=EXCLUDED.samples,
        device_id=EXCLUDED.device_id,ip=EXCLUDED.ip,user_agent=EXCLUDED.user_agent,
        client_time=EXCLUDED.client_time,created_at=EXCLUDED.created_at,method='selfie',scanned_by=NULL
-     WHERE attendance.status='ditolak' AND $17::boolean RETURNING id, created_at`,
+     WHERE current_attendance.status='ditolak' AND $17::boolean RETURNING id, created_at`,
     [person.id, session.id, loc.venue.id, file, loc.lat, loc.lng, loc.accuracy, loc.distance, status, score,
       JSON.stringify(flags), JSON.stringify(compactSamples(samples)), dev, ip, ua,
       clientTime && !isNaN(new Date(clientTime)) ? new Date(clientTime) : null, ch.lo != null]

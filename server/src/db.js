@@ -67,7 +67,10 @@ export const pool = {
 };
 
 export async function migrate() {
-  if (await ensureStorageMode()) return;
+  if (await ensureStorageMode()) {
+    await rawPool.query("ALTER TABLE public.event_attendance ADD COLUMN IF NOT EXISTS photo_history JSONB NOT NULL DEFAULT '[]'::jsonb");
+    return;
+  }
   const sql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   const client = await rawPool.connect();
   try {
