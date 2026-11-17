@@ -447,8 +447,18 @@ const inRosterAt = (time) => `(p.roster_added_at IS NULL OR p.roster_added_at <=
   AND (p.archived_at IS NULL OR p.archived_at > ${time})
   AND NOT (p.role='panitia' AND lower(p.code)='admin.ryan')`;
 
+async function scopeTestSession(req) {
+  if (!req.query.test_session_id) return null;
+  const id = Number(req.query.test_session_id);
+  if (!Number.isSafeInteger(id) || id < 1 || id > 2147483647) throw new HttpError(400, 'Sesi test tidak valid.');
+  if (req.query.day) throw new HttpError(400, 'Pilih hari resmi atau sesi test.');
+  const { rows: [session] } = await q(`SELECT id FROM sessions WHERE id=$1 AND is_test
+    AND ($2::int IS NULL OR cardinality(COALESCE(venue_ids,'{}'))=0 OR $2=ANY(venue_ids))`, [id, scopeVenue(req)]);
+  if (!session) throw new HttpError(404, 'Sesi test tidak ditemukan untuk venue ini.');
+  return id;
+}
 r.get('/venue-attendance', ah(async (req, res) => {
-  res.json(await getVenueAttendance(scopeVenue(req), scopeDay(req)));
+  res.json(await getVenueAttendance(scopeVenue(req), scopeDay(req), await scopeTestSession(req)));
 }));
 
 r.get('/venue-attendance/:venueId/:group', ah(async (req, res) => {
@@ -457,7 +467,7 @@ r.get('/venue-attendance/:venueId/:group', ah(async (req, res) => {
     throw new HttpError(400, 'Venue tidak valid.');
   }
   if (req.user.role === 'lo' && venueId !== req.user.venue) throw new HttpError(403, 'Bukan venue Anda.');
-  res.json(await getVenueAttendanceDetails(venueId, req.params.group, scopeDay(req)));
+  res.json(await getVenueAttendanceDetails(venueId, req.params.group, scopeDay(req), await scopeTestSession(req)));
 }));
 
 /**
@@ -486,9 +496,10 @@ r.get('/sessions', ah(async (req, res) => {
      FROM sessions s
      WHERE ($1::int IS NULL OR cardinality(COALESCE(s.venue_ids,'{}'))=0 OR $1 = ANY(s.venue_ids))
        AND (NOT $2::boolean OR NOT s.is_test)
+       AND (NOT $4::boolean OR s.is_test)
        AND ($3::date IS NULL OR (NOT s.is_test AND (s.starts_at AT TIME ZONE 'Asia/Jakarta')::date=$3))
      ORDER BY starts_at`,
-    [v, req.query.official === '1', scopeDay(req)]
+    [v, req.query.official === '1', scopeDay(req), req.query.test_only === '1']
   );
   res.json(rows.map(withReportingDay));
 }));

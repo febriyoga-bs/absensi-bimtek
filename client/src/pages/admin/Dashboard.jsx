@@ -15,7 +15,7 @@ const sessionStatuses = [
   ['rejected', 'Ditolak', 'circle-xmark'], ['unavailable', 'Berhalangan', 'user-slash'], ['blocked', 'Diblokir', 'ban'],
 ];
 
-function VenueAttendanceCard({ venue, day, onDetails, visibleGroups }) {
+function VenueAttendanceCard({ venue, day, testSession, onDetails, visibleGroups }) {
   const participantGroups = visibleGroups.filter(([key]) => key !== 'lo');
   const total = participantGroups.reduce((sum, [key]) => sum + venue[key].total, 0);
   const attended = participantGroups.reduce((sum, [key]) => sum + venue[key].attended, 0);
@@ -36,9 +36,9 @@ function VenueAttendanceCard({ venue, day, onDetails, visibleGroups }) {
           return (
             <button type="button" key={key} aria-haspopup="dialog" aria-label={`Lihat daftar ${label} di ${venue.name}`}
               onClick={() => onDetails({
-                label, subtitle: [venue.name, day && checkInDayLabel(day)].filter(Boolean).join(' · '),
-                path: `/admin/venue-attendance/${venue.id}/${key}${day ? `?day=${day.date}` : ''}`,
-                sessionDay: day && checkInDayLabel(day),
+                label, subtitle: [venue.name, testSession ? sessionTitle(testSession) : day && checkInDayLabel(day)].filter(Boolean).join(' · '),
+                path: `/admin/venue-attendance/${venue.id}/${key}${testSession ? `?test_session_id=${testSession.id}` : day ? `?day=${day.date}` : ''}`,
+                sessionDay: testSession ? sessionTitle(testSession) : day && checkInDayLabel(day),
                 filterByCheckIn: true,
               })}>
               <span className="venue-attendance__label">{label} <FontIcon name="chevron-right" /></span>
@@ -63,6 +63,7 @@ export default function Dashboard() {
   const [venues, setVenues] = useState(null);
   const [venueId, setVenueId] = useState(''); // filter venue (admin utama)
   const [days, setDays] = useState([]);
+  const [testSessions, setTestSessions] = useState([]);
   const [day, setDay] = useState(null);
   const [venueAttendance, setVenueAttendance] = useState(null);
   const [summaryError, setSummaryError] = useState(false);
@@ -82,6 +83,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     api('/admin/venues', { admin: true }).then(setVenues);
+    api('/admin/sessions?test_only=1', { admin: true }).then(setTestSessions).catch(() => setSessionsError(true));
     api('/info').then((info) => {
       const available = info.check_in_days || [];
       const today = new Intl.DateTimeFormat('sv-SE', {
@@ -95,14 +97,16 @@ export default function Dashboard() {
     }).catch(() => { setSessionsError(true); setSummaryError(true); });
   }, []);
 
-  const dayQs = day ? `?day=${day}` : '';
-  const qs = `?official=1${day ? `&day=${day}` : ''}${!lo && venueId ? `&venue_id=${venueId}` : ''}`;
+  const testId = day?.startsWith('test:') ? day.slice(5) : '';
+  const selectedTest = testSessions.find((session) => String(session.id) === testId);
+  const dayQs = testId ? `?test_session_id=${testId}` : day ? `?day=${day}` : '';
+  const qs = `?${testId ? 'test_only=1' : 'official=1'}${day && !testId ? `&day=${day}` : ''}${!lo && venueId ? `&venue_id=${venueId}` : ''}`;
   useEffect(() => {
     if (day === null) return;
     let active = true;
     setSessionsError(false);
     api(`/admin/sessions${qs}`, { admin: true })
-      .then((rows) => { if (active) setSessions(rows); })
+      .then((rows) => { if (active) setSessions(testId ? rows.filter((session) => String(session.id) === testId) : rows); })
       .catch(() => { if (active) setSessionsError(true); });
     return () => { active = false; };
   }, [qs, revision, day]);
@@ -133,11 +137,12 @@ export default function Dashboard() {
         </div>
         <div className="row dashboard-filters">
           <button type="button" className="btn" onClick={() => setRevision((value) => value + 1)}>Muat ulang</button>
-          {days.length > 0 && <FilterField label="Hari absensi"><select aria-label="Hari absensi" value={day} onChange={(e) => {
+          {(days.length > 0 || testSessions.length > 0) && <FilterField label="Hari / sesi absensi"><select aria-label="Hari absensi" value={day ?? ''} onChange={(e) => {
             setDay(e.target.value); setSessions(null); setVenueAttendance(null); setSummaryError(false);
           }}>
             <option value="">Semua sesi resmi</option>
             {days.map((item) => <option key={item.date} value={item.date}>{checkInDayLabel(item)}</option>)}
+            {testSessions.length > 0 && <optgroup label="Sesi test">{testSessions.map((session) => <option key={session.id} value={`test:${session.id}`}>{sessionTitle(session)} (Test)</option>)}</optgroup>}
           </select></FilterField>}
           {!lo && venues?.length > 1 && <FilterField label="Filter venue"><select aria-label="Filter venue" value={venueId} onChange={(e) => setVenueId(e.target.value)}>
             <option value="">Semua venue</option>
@@ -208,7 +213,7 @@ export default function Dashboard() {
       </section>
       <section className="venue-attendance-section" aria-labelledby="venue-attendance-title">
         <h3 id="venue-attendance-title">Ringkasan per venue</h3>
-        <p className="muted small">{day === null ? 'Menentukan hari absensi…' : selectedDay ? `Ringkasan ${checkInDayLabel(selectedDay)}.` : 'Gabungan semua sesi resmi.'} Setiap orang dihitung sekali per venue.</p>
+        <p className="muted small">{day === null ? 'Menentukan hari absensi…' : selectedTest ? `Ringkasan sesi test: ${sessionTitle(selectedTest)}. Tidak digabung dengan sesi resmi.` : selectedDay ? `Ringkasan ${checkInDayLabel(selectedDay)}.` : 'Gabungan semua sesi resmi.'} Setiap orang dihitung sekali per venue.</p>
         <div className="scan-display-controls">
           <details className="scan-column-picker">
             <summary className="btn btn--sm">Atur jenis peserta ({visibleGroups.length}/{venueGroups.length})</summary>
@@ -227,7 +232,7 @@ export default function Dashboard() {
         {!venueAttendance && !summaryError && <div className="stats"><SkelCards n={2} h={190} /></div>}
         {venueAttendance && !shownVenues.length && <p className="muted">Belum ada venue untuk ditampilkan.</p>}
         <div className="venue-attendance-grid">
-          {shownVenues.map((venue) => <VenueAttendanceCard key={venue.id} venue={venue} day={selectedDay} onDetails={setDetails} visibleGroups={visibleGroups} />)}
+          {shownVenues.map((venue) => <VenueAttendanceCard key={venue.id} venue={venue} day={selectedDay} testSession={selectedTest} onDetails={setDetails} visibleGroups={visibleGroups} />)}
         </div>
       </section>
       </div>

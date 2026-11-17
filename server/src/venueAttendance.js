@@ -60,7 +60,7 @@ const loadRoster = () => q(`SELECT
 
 const statusOrder = "CASE a.status WHEN 'valid' THEN 0 WHEN 'review' THEN 1 WHEN 'berhalangan' THEN 2 ELSE 3 END";
 
-const loadProfiles = (venueId, day) => q(`WITH profiles AS (
+const loadProfiles = (venueId, day, testSession = null) => q(`WITH profiles AS (
   SELECT id, code, name, venue_id, CASE
     WHEN lower(trim(position)) LIKE 'fasil%' THEN 'fasil'
     WHEN role='panitia' AND (lower(trim(position)) ~ '^lo($|[[:space:]])'
@@ -70,13 +70,14 @@ const loadProfiles = (venueId, day) => q(`WITH profiles AS (
 SELECT p.id, p.code, p.name, p.venue_id, p.category, arrival.marks->>p.id::text AS arrival_status, (
   SELECT COALESCE(jsonb_object_agg(t.venue_id,t.status),'{}')
   FROM (
-    SELECT DISTINCT ON (a.venue_id) a.venue_id, a.status FROM attendance a JOIN sessions s ON s.id=a.session_id AND NOT s.is_test
+    SELECT DISTINCT ON (a.venue_id) a.venue_id, a.status FROM attendance a JOIN sessions s ON s.id=a.session_id
     WHERE a.person_id=p.id AND a.venue_id IS NOT NULL AND ($1::int IS NULL OR a.venue_id=$1)
       AND ($2::date IS NULL OR (s.starts_at AT TIME ZONE 'Asia/Jakarta')::date=$2)
+      AND (CASE WHEN $3::int IS NULL THEN NOT s.is_test ELSE s.is_test AND s.id=$3 END)
     ORDER BY a.venue_id, ${statusOrder}
   ) t
 ) AS status_by_venue FROM profiles p LEFT JOIN venue_arrival_recap arrival ON arrival.venue_id=p.venue_id
-WHERE p.category IS NOT NULL`, [venueId, day]);
+WHERE p.category IS NOT NULL`, [venueId, day, testSession]);
 
 function rosterVenueIds(venues, roster) {
   const ids = new Map(venues.map(({ id, name }) => [name, id]));
@@ -91,39 +92,41 @@ function groupProfiles(roster, profiles, group, ids, venueId) {
   return assignmentProfiles(entries || [], profiles.filter((p) => p.category === group), ids, venueId);
 }
 
-export async function getVenueAttendanceDetails(venueId, group, day = null) {
+export async function getVenueAttendanceDetails(venueId, group, day = null, testSession = null) {
   if (Object.hasOwn(participantPositions, group)) {
     const { rows } = await q(`SELECT p.name, p.institution, p.ruangan AS room, p.npsn, a.status,
         arrival.marks->>p.id::text AS arrival_status
       FROM people p LEFT JOIN venue_arrival_recap arrival ON arrival.venue_id=p.venue_id
       LEFT JOIN LATERAL (
-        SELECT a.status FROM attendance a JOIN sessions s ON s.id=a.session_id AND NOT s.is_test
+        SELECT a.status FROM attendance a JOIN sessions s ON s.id=a.session_id
         WHERE a.person_id=p.id AND a.venue_id=p.venue_id
           AND ($3::date IS NULL OR (s.starts_at AT TIME ZONE 'Asia/Jakarta')::date=$3)
+          AND (CASE WHEN $4::int IS NULL THEN NOT s.is_test ELSE s.is_test AND s.id=$4 END)
         ORDER BY ${statusOrder} LIMIT 1
       ) a ON true
       WHERE p.role='peserta' AND p.archived_at IS NULL AND p.venue_id=$1 AND lower(trim(p.position))=$2
-      ORDER BY p.name, p.id`, [venueId, participantPositions[group], day]);
+      ORDER BY p.name, p.id`, [venueId, participantPositions[group], day, testSession]);
     return rows.map(({ status, arrival_status, ...entry }) => ({
       ...entry, people: [{ name: entry.name, registered: true, status, arrival_status }],
     }));
   }
   if (group !== 'lo' && group !== 'fasil') throw new HttpError(400, 'Kategori kehadiran tidak valid.');
   const [{ rows: venues }, { rows: [roster] }, { rows: profiles }] = await Promise.all([
-    q(`SELECT v.id, v.name FROM venues v WHERE ${eventVenueScope('v')}`), loadRoster(), loadProfiles(venueId, day),
+    q(`SELECT v.id, v.name FROM venues v WHERE ${eventVenueScope('v')}`), loadRoster(), loadProfiles(venueId, day, testSession),
   ]);
   return groupProfiles(roster, profiles, group, rosterVenueIds(venues, roster), venueId)
     .map(({ name, registered, status, arrival_status }) => ({ name, people: [{ name, registered, status, arrival_status }] }));
 }
 
-export async function getVenueAttendance(venueId, day = null) {
+export async function getVenueAttendance(venueId, day = null, testSession = null) {
   const [{ rows: venues }, { rows: [roster] }, { rows: profiles }] = await Promise.all([
     q(`WITH counts AS (
       SELECT p.venue_id, lower(trim(p.position)) AS category, count(*)::int AS total,
         count(*) FILTER (WHERE EXISTS (
-          SELECT 1 FROM attendance a JOIN sessions s ON s.id=a.session_id AND NOT s.is_test
+          SELECT 1 FROM attendance a JOIN sessions s ON s.id=a.session_id
           WHERE a.person_id=p.id AND a.venue_id=p.venue_id AND a.status IN ('valid','review')
             AND ($3::date IS NULL OR (s.starts_at AT TIME ZONE 'Asia/Jakarta')::date=$3)
+            AND (CASE WHEN $4::int IS NULL THEN NOT s.is_test ELSE s.is_test AND s.id=$4 END)
         ))::int AS attended
       FROM people p
       WHERE p.role='peserta' AND p.archived_at IS NULL AND lower(trim(p.position))=ANY($2::text[])
@@ -133,9 +136,9 @@ export async function getVenueAttendance(venueId, day = null) {
     SELECT v.id, v.name, COALESCE(jsonb_object_agg(c.category, jsonb_build_object(
       'total', c.total, 'registered', c.total, 'attended', c.attended)) FILTER (WHERE c.category IS NOT NULL), '{}') AS counts
     FROM venues v LEFT JOIN counts c ON c.venue_id=v.id WHERE ${eventVenueScope('v')}
-    GROUP BY v.id, v.name ORDER BY v.name`, [venueId, Object.values(participantPositions), day]),
+    GROUP BY v.id, v.name ORDER BY v.name`, [venueId, Object.values(participantPositions), day, testSession]),
     loadRoster(),
-    loadProfiles(venueId, day),
+    loadProfiles(venueId, day, testSession),
   ]);
 
   const cards = new Map(venues.filter(({ id }) => venueId == null || id === venueId).map(({ id, name, counts }) => [id, {

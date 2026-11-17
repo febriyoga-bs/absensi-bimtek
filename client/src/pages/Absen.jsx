@@ -4,6 +4,7 @@ import { api } from '../api.js';
 import { startGeoWatch } from '../lib/geo.js';
 import { getDeviceId } from '../lib/device.js';
 import { formatRoom } from '../lib/room.js';
+import { personName } from '../lib/personName.js';
 import { useNow, fmtFull, fmtHM, fmtRemaining, initials } from '../lib/time.js';
 import CameraCapture from '../components/CameraCapture.jsx';
 import Icon from '../components/Icon.jsx';
@@ -145,7 +146,7 @@ export default function Absen({ role }) {
                     {found.options.map((o) => (o.people.length ? o.people.map((p) => (
                       <button key={p.code} type="button" className="npsn-opt" disabled={busy} onClick={(e) => { setPicking(p.code); verify(e, p.code); }}>
                         <span className="npsn-opt__role">{p.position || o.label}</span>
-                        <b>{p.name}</b>
+                        <b>{personName(p.name)}</b>
                         {picking === p.code ? <Spinner size={18} /> : <Icon name="right" size={18} />}
                       </button>
                     )) : (
@@ -268,7 +269,7 @@ export function CaptureStep({ role, info, ch, onDone, onRestart, selfLo = false 
   function capture() {
     const lines = [
       `${info?.event_name || 'BIMTEK'} • ${sessionTitle(ch.session)}`,
-      `${ch.person.name} (${ROLE[role]?.label || role})`,
+      `${personName(ch.person.name)} (${ROLE[role]?.label || role})`,
       `${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })} WIB${area?.inside ? ' • ' + area.venue : ''}`,
       `${last.lat.toFixed(6)}, ${last.lng.toFixed(6)} ±${Math.round(last.accuracy)} m • #${ch.nonce}`,
     ];
@@ -314,7 +315,7 @@ export function CaptureStep({ role, info, ch, onDone, onRestart, selfLo = false 
       <div className="person">
         <span className={`avatar avatar--${role}`}>{initials(ch.person.name)}</span>
         <span className="person__text">
-          <b>{ch.person.name}</b>
+          <b>{personName(ch.person.name)}</b>
           <small>{[ch.person.position, ch.person.institution].filter(Boolean).join(' · ') || ch.person.code}</small>
           {ch.person.ruangan && <small>Ruangan: <b>{formatRoom(ch.person.ruangan)}</b></small>}
         </span>
@@ -420,7 +421,7 @@ export function Done({ result, role, onClose }) {
       <p className="muted">{ok ? 'Absensi Anda sudah tercatat.' : 'Absensi Anda perlu diperiksa oleh panitia.'}</p>
 
       <dl className="receipt">
-        <div><dt>Nama</dt><dd>{result.name}</dd></div>
+        <div><dt>Nama</dt><dd>{personName(result.name)}</dd></div>
         <div><dt>Peran</dt><dd className="cap">{role}</dd></div>
         <div><dt>Sesi</dt><dd>{sessionTitle({ name: result.session, type: result.session_type, check_in_day: result.check_in_day })}</dd></div>
         <div><dt>Venue</dt><dd>{result.venue} <span className="muted small">· {result.distance_m} m</span></dd></div>
