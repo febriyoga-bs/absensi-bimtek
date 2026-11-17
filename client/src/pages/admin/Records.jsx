@@ -46,6 +46,7 @@ export default function Records() {
   const sid = selectedSession ? String(selectedSession.id) : '';
   const recordedBy = params.get('recorded_by') || '';
   const status = params.get('status') || '';
+  const sort = params.get('sort') || 'risk';
   const position = params.get('position') || '';
   const venue = lo ? '' : params.get('venue') || '';
   const page = Math.max(Number(params.get('hal')) || 1, 1);
@@ -81,7 +82,7 @@ export default function Records() {
     if (requestedSid && requestedSid !== sid) return;
     const revision = ++loadRevision.current;
     const qs = new URLSearchParams({
-      session_id: sid, limit: PAGE, offset: (page - 1) * PAGE,
+      session_id: sid, limit: PAGE, offset: (page - 1) * PAGE, sort,
       ...(recordedBy && { recorded_by: recordedBy }),
       ...(position && { position }),
       ...(status && { status }), ...(venue && { venue_id: venue }),
@@ -94,7 +95,7 @@ export default function Records() {
     api(`/admin/attempts?session_id=${sid}${venue ? `&venue_id=${venue}` : ''}${position ? `&position=${encodeURIComponent(position)}` : ''}`, { admin: true })
       .then((data) => { if (loadRevision.current === revision) setAttempts(data); }).catch(() => {});
   };
-  useEffect(() => { load(); return () => { loadRevision.current++; }; }, [sid, requestedSid, status, venue, position, recordedBy, page, sessions]);
+  useEffect(() => { load(); return () => { loadRevision.current++; }; }, [sid, requestedSid, status, venue, position, recordedBy, sort, page, sessions]);
 
   async function setStatus(id, st) {
     await api(`/admin/attendance/${id}`, { method: 'PATCH', admin: true, body: { status: st } });
@@ -167,6 +168,15 @@ export default function Records() {
           <option value="valid">Valid{counts ? ` (${counts.valid})` : ''}</option>
           <option value="ditolak">Ditolak{counts ? ` (${counts.ditolak})` : ''}</option>
           <option value="berhalangan">Mundur/Berhalangan Hadir{counts ? ` (${counts.berhalangan})` : ''}</option>
+        </select></FilterField>
+        <FilterField label="Urutkan"><select aria-label="Urutkan absensi" value={sort} onChange={(e) => setParam('sort', e.target.value)}>
+          <option value="risk">Prioritas pemeriksaan</option>
+          <option value="newest">Waktu terbaru</option>
+          <option value="oldest">Waktu terlama</option>
+          <option value="name_asc">Nama A–Z</option>
+          <option value="name_desc">Nama Z–A</option>
+          <option value="venue_asc">Venue A–Z</option>
+          <option value="venue_desc">Venue Z–A</option>
         </select></FilterField>
         <button className="btn btn--sm" onClick={load}><Icon name="refresh" size={15} />Muat ulang</button>
         {sid && <button type="button" className="btn btn--sm" disabled={loading} onClick={() => setDownloadOpen(true)}>

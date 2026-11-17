@@ -1047,7 +1047,18 @@ function attendancePositionFilter(req) {
   return attendancePositions[position];
 }
 /** Daftar absen per sesi, dengan halaman (default 48 per halaman) agar ringan. */
+const attendanceOrders = {
+  risk: 'a.risk_score DESC, a.created_at DESC, a.id DESC',
+  newest: 'a.created_at DESC, a.id DESC',
+  oldest: 'a.created_at ASC, a.id ASC',
+  name_asc: 'lower(p.name) ASC, a.id ASC',
+  name_desc: 'lower(p.name) DESC, a.id DESC',
+  venue_asc: 'lower(v.name) ASC NULLS LAST, lower(p.name) ASC, a.id ASC',
+  venue_desc: 'lower(v.name) DESC NULLS LAST, lower(p.name) ASC, a.id ASC',
+};
 r.get('/attendance', requireSuper, ah(async (req, res) => {
+  const sort = req.query.sort ?? 'risk';
+  if (typeof sort !== 'string' || !Object.hasOwn(attendanceOrders, sort)) throw new HttpError(400, 'Urutan absensi tidak valid.');
   const sessionId = Number(req.query.session_id);
   if (!Number.isSafeInteger(sessionId) || sessionId < 1 || sessionId > 2147483647) throw new HttpError(400, 'Sesi absensi tidak valid.');
   const v = scopeVenue(req);
@@ -1069,7 +1080,7 @@ r.get('/attendance', requireSuper, ah(async (req, res) => {
                 AND ${canCheckInForLo('$6', '$2')}) AS can_edit_note
        FROM attendance a JOIN people p ON p.id=a.person_id LEFT JOIN venues v ON v.id=a.venue_id
        WHERE ${where} AND ($3::text IS NULL OR a.status=$3) AND ($7::text='' OR a.scanned_by=$7)
-       ORDER BY a.risk_score DESC, a.created_at DESC
+       ORDER BY ${attendanceOrders[sort]}
        LIMIT $4 OFFSET $5`,
       [sessionId, v, status, limit, offset, req.user.lo, recordedBy]
     ),

@@ -340,6 +340,32 @@ test('warm metadata requests reuse the event list and do not query unrelated ses
   } finally { rawPool.query = original; }
 });
 
+test('attendance sorting applies before pagination and rejects unsupported orders', async () => {
+  let session, people = [], venues = [];
+  try {
+    await scoped(3, async () => {
+      venues = (await q("INSERT INTO venues(name,lat,lng) VALUES('Sort Z',-6,106),('Sort A',-6,106) RETURNING id")).rows.map(v => v.id);
+      people = (await q("INSERT INTO people(code,name,role,venue_id) VALUES('sort-a','A Sort','peserta',$1),('sort-b','B Sort','peserta',$2) RETURNING id", venues)).rows.map(p => p.id);
+      session = (await q("INSERT INTO sessions(name,role,starts_at,ends_at) VALUES('Sorting test','semua',now(),now()+interval '1 hour') RETURNING id")).rows[0].id;
+      await q("INSERT INTO attendance(person_id,session_id,venue_id,status,risk_score,created_at) VALUES($1,$3,$4,'valid',0,now()),($2,$3,$5,'valid',5,now()-interval '1 hour')", [...people,session,...venues]);
+    });
+    for (const [sort, expected] of Object.entries({risk:'B Sort',newest:'A Sort',oldest:'B Sort',name_asc:'A Sort',name_desc:'B Sort',venue_asc:'B Sort',venue_desc:'A Sort'})) {
+      const response = await request(`/admin/attendance?event=3&session_id=${session}&sort=${sort}&limit=1`);
+      assert.equal(response.status,200);
+      const data = await response.json(); assert.equal(data.total,2); assert.equal(data.rows[0].name,expected);
+      const next = await (await request(`/admin/attendance?event=3&session_id=${session}&sort=${sort}&limit=1&offset=1`)).json();
+      assert.equal(next.rows.length,1); assert.notEqual(next.rows[0].name,expected);
+    }
+    assert.equal((await request(`/admin/attendance?event=3&session_id=${session}&sort=invalid`)).status,400);
+  } finally {
+    await scoped(3,async()=>{
+      if(session){await q('DELETE FROM attendance WHERE session_id=$1',[session]);await q('DELETE FROM sessions WHERE id=$1',[session]);}
+      await q('DELETE FROM people WHERE id=ANY($1::int[])',[people]);
+      await q('DELETE FROM venues WHERE id=ANY($1::int[])',[venues]);
+    });
+  }
+});
+
 test('reporting defaults a missing dataset to the selected event for admin and LO', async () => {
   const loToken = signAdmin({ role: 'lo', username: 'lo-sama', accounts: [{ event: 3, id: 1 }] });
   for (const token of [admin, loToken]) {
