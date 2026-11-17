@@ -36,6 +36,8 @@ export async function getPublicReporting(dataset) {
 }
 
 export async function getReporting(dataset, user) {
+  // Older clients may omit the dataset; the event context still selects the activity.
+  if (dataset == null || dataset === '') dataset = 'current';
   if (dataset === 'k3' || eventId()===2) {
     const stored = eventId()===2 ? (await q('SELECT data FROM assignment_roster WHERE id=1')).rows[0]?.data?.archive : null;
     const data = stored || archive;

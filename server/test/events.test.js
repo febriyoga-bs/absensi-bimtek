@@ -340,6 +340,21 @@ test('warm metadata requests reuse the event list and do not query unrelated ses
   } finally { rawPool.query = original; }
 });
 
+test('reporting defaults a missing dataset to the selected event for admin and LO', async () => {
+  const loToken = signAdmin({ role: 'lo', username: 'lo-sama', accounts: [{ event: 3, id: 1 }] });
+  for (const token of [admin, loToken]) {
+    for (const suffix of ['', '&dataset=']) {
+      const response = await request(`/admin/reporting?event=3${suffix}`, { token });
+      assert.equal(response.status, 200, await response.clone().text());
+      assert.equal((await response.json()).title, 'BIMTEK Tahap 3');
+    }
+    assert.equal((await request('/admin/reporting?event=3&dataset=unknown', { token })).status, 400);
+  }
+  const fourth = await request('/admin/reporting?event=4');
+  assert.equal(fourth.status, 200);
+  assert.equal((await fourth.json()).title, 'BIMTEK Tahap 4');
+});
+
 test('aggregated reporting preserves dates, arrival status and event isolation', async () => {
   await scoped(3, async () => {
     const data = { lo: [{name:'LO Tahap 3',venue:'Venue Tahap 3',account_id:1,venue_id:1}], facilitators: [],
