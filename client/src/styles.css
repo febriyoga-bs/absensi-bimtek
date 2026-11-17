@@ -286,6 +286,9 @@ select:disabled { background-color: var(--surface-2); color: var(--muted); curso
 /* Capture */
 .capture { display: grid; gap: 14px; }
 .lo-self-attendance { max-width: 520px; }
+.lo-self-history { display: grid; gap: 16px; margin-top: 24px; }
+.lo-self-history h3 { margin: 0; }
+.lo-self-photo { max-height: 480px; object-fit: contain; border-radius: 12px; background: #0b1220; }
 .person { display: flex; align-items: center; gap: 12px; }
 .person__text { display: grid; min-width: 0; flex: 1; }
 .person__text b { font-size: 16px; } .person__text small { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

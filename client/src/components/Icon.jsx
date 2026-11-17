@@ -27,6 +27,7 @@ const P = {
   building: <><path d="M4 21V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v16" /><path d="M15 9h4a1 1 0 0 1 1 1v11M2 21h20" /><path d="M8 8h3M8 12h3M8 16h3" /></>,
   download: <><path d="M12 4v11m-5-5 5 5 5-5" /><path d="M4 20h16" /></>,
   plus: <path d="M12 5v14M5 12h14" />,
+  trash: <><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" /></>,
   signal: <><path d="M4 20v-3M9 20v-7M14 20V9M19 20V4" /></>,
   info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7.5v.5" /></>,
 };

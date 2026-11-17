@@ -206,21 +206,22 @@ export default function Records() {
                   rows: [['Waktu', fmtDT(r.created_at) + ' WIB'], ['Venue', r.venue_name], ['Jarak ke venue', dist(r.distance_m)],
                     ['Akurasi GPS', `±${Math.round(r.accuracy_m)} m`], ['Status', ST_LABEL[r.status]]],
                 })}><Icon name="pin" size={14} />Lihat di peta</button></>}
-                {r.flags.some((f) => f.code !== 'qr_lo') && (
+                {!/^(lo(?:\s|$)|liaison officer$)/i.test(String(r.position || '').trim()) && r.flags.some((f) => f.code !== 'qr_lo') && (
                   <ul className="flags">
                     {r.flags.filter((f) => f.code !== 'qr_lo').map((f, i) => <li key={i} title={f.detail}>{FLAG_LABEL[f.code] || f.code}<br /><small>{f.detail}</small></li>)}
                   </ul>
                 )}
                 {r.participant_note && <div className="rec__note small"><b>Catatan</b><div>{r.participant_note}</div></div>}
                 <div className="row">
-                  {r.can_edit_note && <button type="button" className="btn btn--sm" disabled={loading}
+                  {r.can_edit_note && r.role !== 'panitia' && <button type="button" className="btn btn--sm" disabled={loading}
                     onClick={() => { setNoteNotice(''); setNoteTarget(r); }}>Ubah catatan</button>}
                   <span className={`st st--${r.status}`}>{ST_LABEL[r.status]}</span>
                   {r.status !== 'berhalangan' && r.can_verify !== false && <>
                     {r.status !== 'valid' && <button className="btn btn--sm btn--ok" onClick={() => setStatus(r.id, 'valid')}>Sahkan</button>}
                     {r.status !== 'ditolak' && <button className="btn btn--sm btn--danger" onClick={() => setStatus(r.id, 'ditolak')}>Tolak</button>}
                   </>}
-                  {r.can_delete && <button type="button" className="btn btn--sm btn--danger" disabled={loading} onClick={() => openDeleteDialog(r)}>Hapus absensi</button>}
+                  {r.can_delete && <button type="button" className="btn btn--sm btn--danger" disabled={loading}
+                    aria-label={`Hapus absensi ${personName(r.name)}`} title="Hapus absensi" onClick={() => openDeleteDialog(r)}><Icon name="trash" size={16} /></button>}
                 </div>
               </div>
             </div>

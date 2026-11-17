@@ -21,7 +21,7 @@ export const signAdmin = (payload = { role: 'admin' }) =>
 export async function requireAdmin(req, res, next) {
   const header = req.headers.authorization || '';
   // ?t= dipakai untuk <img src> dan tautan unduh CSV
-  const queryAllowed = req.method === 'GET' && (/^\/photo\/\d+$/.test(req.path) || req.path === '/export');
+  const queryAllowed = req.method === 'GET' && (/^\/photo\/\d+$/.test(req.path) || /^\/lo\/attendance\/\d+\/photo$/.test(req.path) || req.path === '/export');
   const token = header.startsWith('Bearer ') ? header.slice(7) : queryAllowed ? req.query.t : undefined;
   let p;
   try {

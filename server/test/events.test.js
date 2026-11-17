@@ -144,6 +144,11 @@ test('LO token is resolved by username and challenge tokens stay event-bound', a
 
 test('LO self attendance falls back to an open test session and prechecks its location', async () => {
   let venue, account, testSession, officialSession;
+  const photoDir = await mkdtemp(join(tmpdir(), 'lo-self-photo-'));
+  const photoPath = join(photoDir, 'self.jpg');
+  const photoBytes = Buffer.from([255, 216, 255, 217]);
+  await writeFile(photoPath, photoBytes);
+  const previousUploadDir = process.env.UPLOAD_DIR;
   try {
     await scoped(3, async () => {
       venue = (await q("INSERT INTO venues (name,lat,lng,active) VALUES ('LO trial venue',-6,106,true) RETURNING id")).rows[0].id;
@@ -162,13 +167,61 @@ test('LO self attendance falls back to an open test session and prechecks its lo
     const official = await (await request('/lo/challenge?event=3', { method: 'POST', token })).json();
     assert.equal(official.session.is_test, false);
     assert.equal((await scoped(3, () => verifyChallenge(official.token))).s, officialSession);
-  } finally {
+    const empty = await (await request('/lo/attendance?event=3', { token })).json();
+    assert.deepEqual(empty.records, []);
+    assert.equal(empty.recorded, false);
+    let attendance;
     await scoped(3, async () => {
+      const person = (await q("SELECT id FROM people WHERE code='lo-trial'")).rows[0];
+      attendance = (await q("INSERT INTO attendance(person_id,session_id,venue_id,photo_path,status) VALUES($1,$2,$3,$4,'valid') RETURNING id", [person.id,officialSession,venue,photoPath])).rows[0].id;
+    });
+    const saved = await (await request('/lo/attendance?event=3', { token })).json();
+    assert.equal(saved.recorded, true);
+    assert.equal(saved.records.length, 1);
+    assert.equal(saved.records[0].name, 'LO Trial');
+    assert.equal(saved.records[0].has_photo, true);
+    assert.equal(saved.records[0].is_test, false);
+    assert.equal(saved.records[0].photo_path, undefined);
+    const photo = await request(`/lo/attendance/${attendance}/photo?event=3&t=${encodeURIComponent(token)}`, { token: null });
+    assert.equal(photo.status, 200);
+    assert.deepEqual(Buffer.from(await photo.arrayBuffer()), photoBytes);
+    assert.equal((await request('/lo/attendance/1/photo?event=3', { token })).status, 404);
+    assert.equal((await request(`/lo/attendance/${attendance}/photo?event=3`, { token: null })).status, 401);
+    assert.equal((await request('/lo/attendance?event=4', { token })).status, 403);
+    assert.equal((await request('/lo/challenge?event=3', { method: 'POST', token })).status, 409);
+    await scoped(3, () => q("UPDATE attendance SET status='ditolak' WHERE id=$1", [attendance]));
+    const rejected = await (await request('/lo/attendance?event=3', { token })).json();
+    assert.equal(rejected.recorded, false);
+    assert.equal(rejected.retry, true);
+    const retryResponse = await request('/lo/challenge?event=3', { method: 'POST', token });
+    assert.equal(retryResponse.status, 200);
+    const retryChallenge = await retryResponse.json();
+    const invalid = await request('/lo/attendance?event=3', { method: 'POST', token, body: { token: retryChallenge.token, photo: 'invalid' } });
+    assert.equal(invalid.status, 400);
+    assert.equal((await (await request('/lo/attendance?event=3', { token })).json()).records[0].status, 'ditolak');
+    process.env.UPLOAD_DIR = photoDir;
+    const newPhoto = Buffer.alloc(4500, 1); newPhoto[0] = 255; newPhoto[1] = 216;
+    const retryBody = { token: retryChallenge.token, photo: `data:image/jpeg;base64,${newPhoto.toString('base64')}`,
+      samples: [{ lat: -6.000001, lng: 106.000001, accuracy: 5, altitude: 10, at: Date.now(), ts: Date.now() }] };
+    const submissions = await Promise.all([1,2].map(() => request('/lo/attendance?event=3', { method: 'POST', token, body: retryBody })));
+    assert.deepEqual(submissions.map((r) => r.status).sort(), [200,409]);
+    const updated = await (await request('/lo/attendance?event=3', { token })).json();
+    assert.equal(updated.records.length, 1);
+    assert.equal(updated.records[0].id, attendance);
+    assert.notEqual(updated.records[0].status, 'ditolak');
+    assert.equal(updated.recorded, true);
+    assert.equal(updated.retry, false);
+    assert.equal((await request('/lo/challenge?event=3', { method: 'POST', token })).status, 409);
+  } finally {
+    if (previousUploadDir === undefined) delete process.env.UPLOAD_DIR; else process.env.UPLOAD_DIR = previousUploadDir;
+    await scoped(3, async () => {
+      await q('DELETE FROM attendance WHERE session_id=ANY($1::int[])', [[testSession, officialSession].filter(Boolean)]);
       await q('DELETE FROM sessions WHERE id=ANY($1::int[])', [[testSession, officialSession].filter(Boolean)]);
       if (account) await q('DELETE FROM lo_accounts WHERE id=$1', [account]);
       await q("DELETE FROM people WHERE code='lo-trial'");
       if (venue) await q('DELETE FROM venues WHERE id=$1', [venue]);
     });
+    await rm(photoDir, { recursive: true, force: true });
   }
 });
 

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
-import { savePhoto, deletePhoto } from '../storage.js';
+import { savePhoto, deletePhoto, readPhoto } from '../storage.js';
 import { q, getSettings } from '../db.js';
 import { ah, HttpError, haversine, clientIp } from '../util.js';
 import { requireAdmin, requireLo, signChallenge, verifyChallenge } from '../auth.js';
@@ -246,6 +246,30 @@ async function getLoProfile(user) {
   return resolveLoProfile(user, q);
 }
 
+r.get('/lo/attendance', requireAdmin, requireLo, ah(async (req, res) => {
+  const person = await getLoProfile(req.user);
+  if (!person) throw new HttpError(404, 'Profil absensi LO belum terhubung. Hubungi Admin Utama.');
+  const session = await activeSession(person.role, person.venue_id, true);
+  const { rows } = await q(`SELECT a.id,a.session_id,a.status,a.created_at AS at,a.distance_m,
+    a.photo_path IS NOT NULL AS has_photo,p.name,v.name AS venue,s.name AS session,s.type AS session_type,s.is_test
+    FROM attendance a JOIN people p ON p.id=a.person_id JOIN sessions s ON s.id=a.session_id
+    JOIN venues v ON v.id=a.venue_id WHERE a.person_id=$1 ORDER BY a.created_at DESC,a.id DESC`, [person.id]);
+  res.set('Cache-Control', 'no-store');
+  res.json({ records: rows, current_session_id: session?.id || null,
+    recorded: rows.some((row) => row.session_id === session?.id && row.status !== 'ditolak'),
+    retry: rows.some((row) => row.session_id === session?.id && row.status === 'ditolak') });
+}));
+
+r.get('/lo/attendance/:id/photo', requireAdmin, requireLo, ah(async (req, res) => {
+  if (!/^\d{1,10}$/.test(req.params.id) || Number(req.params.id) > 2147483647) throw new HttpError(404, 'Foto tidak ditemukan.');
+  const person = await getLoProfile(req.user);
+  if (!person) throw new HttpError(404, 'Foto tidak ditemukan.');
+  const { rows: [record] } = await q('SELECT photo_path FROM attendance WHERE id=$1 AND person_id=$2', [req.params.id, person.id]);
+  if (!record?.photo_path) throw new HttpError(404, 'Foto tidak ditemukan.');
+  res.set('Cache-Control', 'no-store');
+  res.type('image/jpeg').send(await readPhoto(record.photo_path));
+}));
+
 r.post('/lo/challenge', ipLimiter, requireAdmin, requireLo, ah(async (req, res) => {
   const person = await getLoProfile(req.user);
   if (!person) throw new HttpError(404, 'Profil absensi LO belum terhubung. Hubungi Admin Utama.');
@@ -261,7 +285,7 @@ async function buildChallenge(person, loAccount) {
 
   const done = await q('SELECT created_at, status FROM attendance WHERE person_id=$1 AND session_id=$2',
     [person.id, session.id]);
-  if (done.rows[0]) {
+  if (done.rows[0] && !(loAccount && done.rows[0].status === 'ditolak')) {
     throw new HttpError(409, alreadyRecorded(done.rows[0].status), { at: done.rows[0].created_at, status: done.rows[0].status });
   }
 
@@ -372,7 +396,7 @@ const recordAttendance = ah(async (req, res) => {
        WHERE person_id=$1 AND created_at > now() - interval '10 minutes'`, [person.id]),
     q('SELECT status FROM attendance WHERE person_id=$1 AND session_id=$2', [person.id, session.id]),
   ]);
-  if (already) throw new HttpError(409, alreadyRecorded(already.status));
+  if (already && !(ch.lo != null && already.status === 'ditolak')) throw new HttpError(409, alreadyRecorded(already.status));
   if (fails.n >= MAX_FAILED_PER_PERSON) {
     throw new HttpError(429, 'Terlalu banyak percobaan gagal. Tunggu 10 menit atau hubungi panitia.');
   }
@@ -443,7 +467,13 @@ const recordAttendance = ah(async (req, res) => {
        risk_score, flags, samples, device_id, ip, user_agent, client_time)
      SELECT $1,s.id,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16 FROM sessions s
      WHERE s.id=$2 AND (NOT s.is_test OR $17::boolean)
-     ON CONFLICT (person_id, session_id) DO NOTHING RETURNING id, created_at`,
+     ON CONFLICT (person_id, session_id) DO UPDATE SET
+       venue_id=EXCLUDED.venue_id,photo_path=EXCLUDED.photo_path,lat=EXCLUDED.lat,lng=EXCLUDED.lng,
+       accuracy_m=EXCLUDED.accuracy_m,distance_m=EXCLUDED.distance_m,status=EXCLUDED.status,
+       risk_score=EXCLUDED.risk_score,flags=EXCLUDED.flags,samples=EXCLUDED.samples,
+       device_id=EXCLUDED.device_id,ip=EXCLUDED.ip,user_agent=EXCLUDED.user_agent,
+       client_time=EXCLUDED.client_time,created_at=EXCLUDED.created_at,method='selfie',scanned_by=NULL
+     WHERE attendance.status='ditolak' AND $17::boolean RETURNING id, created_at`,
     [person.id, session.id, loc.venue.id, file, loc.lat, loc.lng, loc.accuracy, loc.distance, status, score,
       JSON.stringify(flags), JSON.stringify(compactSamples(samples)), dev, ip, ua,
       clientTime && !isNaN(new Date(clientTime)) ? new Date(clientTime) : null, ch.lo != null]
