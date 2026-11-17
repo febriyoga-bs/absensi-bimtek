@@ -16,6 +16,7 @@ import WhatsAppLink from '../../components/WhatsAppLink.jsx';
 import './Reporting.css';
 import AttendanceRanking from './AttendanceRanking.jsx';
 import { sortTableRows } from '../../lib/tableSort.js';
+import { rankVenues } from '../../lib/venueRanking.js';
 
 const labels = {
   belum_kirim: 'Belum kirim', menunggu_reviu: 'Menunggu reviu', ditolak: 'Ditolak',
@@ -28,7 +29,7 @@ const reportStatuses = ['belum_kirim', 'menunggu_reviu', 'ditolak', 'diterima', 
 const datasetNames = new Proxy({ current: 'BIMTEK TAHAP 3', k3: 'BIMTEK TAHAP 2' }, {
   get(target, key) { return key === 'current' ? (selectedEvent()?.name || target.current).toUpperCase() : target[key]; },
 });
-const views = { schools: 'Sekolah', facilitators: 'Fasilitator', ranking: 'Peringkat LO', regions: 'Wilayah' };
+const views = { schools: 'Sekolah', facilitators: 'Fasilitator', ranking: 'Peringkat LO', venues: 'Peringkat Venue', regions: 'Wilayah' };
 const PAGE_SIZE = 10;
 const UNASSIGNED = 'binaan-tidak-terpetakan';
 const nf = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 });
@@ -114,6 +115,18 @@ function ReportingRanking({ rows, movement, movementLabel, own }) {
         </small>}
       </li>)}
     </ol> : <p className="muted">Tidak ada LO yang cocok dengan filter.</p>}
+  </section>;
+}
+
+function ReportingVenueRanking({ rows }) {
+  return <section className="reporting-ranking" aria-label="Daftar peringkat venue" tabIndex={0}>
+    {rows.length ? <ol>{rows.map((row) => <li key={row.name}>
+      <div className="reporting-ranking-name"><b>{row.rank ?? '—'}. {row.name}</b>
+        <strong>{row.known ? `${nf.format(row.ratio)}%` : 'Belum ada data'}</strong></div>
+      {row.known > 0 && <progress aria-label={`Capaian ${row.name}`} value={row.ratio} max={100} />}
+      <p>Total {nf.format(row.sent)}/{nf.format(row.total)} sudah kirim · {nf.format(row.accepted)} diterima · {nf.format(row.pending)} menunggu reviu</p>
+      {row.known < row.total && <small className="muted">Data monitoring tersedia untuk {nf.format(row.known)} dari {nf.format(row.total)} sekolah</small>}
+    </li>)}</ol> : <p className="muted">Tidak ada venue yang cocok dengan pencarian.</p>}
   </section>;
 }
 
@@ -496,7 +509,8 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
           value={baseline} onChange={(e) => setCustomBaseline(e.target.value)} /></FilterField>}
       </div>
       {view === 'ranking' && !attendanceRanking && <p className="muted small">Capaian dihitung dari laporan yang sudah dikirim dibanding seluruh sekolah binaan. LO tanpa data monitoring belum masuk peringkat.</p>}
-      {view === 'ranking' ? (attendanceRanking && current && !publicView ? <AttendanceRanking venue={venue} query={query} /> : <ReportingRanking rows={ranking} movement={movement} movementLabel={movementLabel} own={own} />)
+      {view === 'venues' && <p className="muted small">Perbandingan seluruh venue pada tahap ini, tanpa filter venue atau LO. Urutan berdasarkan persentase sekolah yang sudah mengirim laporan; jika sama, persentase diterima lalu jumlah kiriman. Venue tanpa data monitoring belum masuk peringkat.</p>}
+      {view === 'venues' ? <ReportingVenueRanking rows={rankVenues(data.schools, data.venues).filter((row) => matches([row.name], query))} /> : view === 'ranking' ? (attendanceRanking && current && !publicView ? <AttendanceRanking venue={venue} query={query} /> : <ReportingRanking rows={ranking} movement={movement} movementLabel={movementLabel} own={own} />)
         : <ReportingTable pageSize={publicView ? 5 : PAGE_SIZE} key={JSON.stringify([view, venue, lo, status, attendance, checkInFilters, term, threshold])}
           headers={headers} rows={rows} fullWidthColumn={current && view === 'schools' ? 'Kehadiran di venue' : undefined} />}
       {detail && <section ref={facilitatorDetail} tabIndex={-1} className="card reporting-detail" aria-label={`Sekolah binaan ${personName(selectedFacilitator.name)}`}>

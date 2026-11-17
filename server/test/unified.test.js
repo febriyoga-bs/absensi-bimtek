@@ -7,6 +7,7 @@ import { setUnifiedStorage,eventSql } from '../src/unifiedStorage.js';
 import { unifyMigration } from '../src/unifyMigration.js';
 import { hashPassword,signAdmin } from '../src/auth.js';
 import app from '../src/app.js';
+import {ensureRosterLoProfiles} from '../src/loProfile.js';
 
 const db=new PGlite();let tail=Promise.resolve(),server,origin,summary;
 rawPool.connect=async()=>{const previous=tail;let release;tail=new Promise(r=>release=r);await previous;
@@ -69,4 +70,14 @@ test('one login exposes all three stage tabs while keeping assignment-only actio
 });
 test('cutover is repeatable without duplicating data',async()=>{
   const c=await rawPool.connect();try{await c.query('BEGIN');assert.equal((await unifyMigration(c)).alreadyUnified,true);await c.query('ROLLBACK');}finally{c.release();}
+});
+
+test('profile backfill is scoped to the selected event in unified storage',async()=>{
+  for(const id of [3,4])await scoped(id,async()=>{
+    assert.equal((await ensureRosterLoProfiles(q)).rows.length,1);
+    assert.equal((await ensureRosterLoProfiles(q)).rows.length,0);
+    const {rows}=await q("SELECT name,venue_id FROM people WHERE code='LO.Test'");
+    assert.deepEqual(rows,[{name:'Shared Person',venue_id:1}]);
+    assert.equal((await q('SELECT photo_path FROM attendance')).rows[0].photo_path,`r2:events/${id}/original.jpg`);
+  });
 });

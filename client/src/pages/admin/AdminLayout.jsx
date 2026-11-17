@@ -8,10 +8,15 @@ import BrandMark from '../../components/BrandMark.jsx';
 import { dashboardMenu } from '../../lib/dashboardMenu.js';
 import EventTabs from '../../components/EventTabs.jsx';
 import { selectedEvent } from '../../event.js';
+import { useEvents } from '../../components/EventScope.jsx';
 
 export default function AdminLayout() {
   const nav = useNavigate();
   const loc = useLocation();
+  const eventScope = useEvents();
+  const activeAttendancePage = loc.pathname === '/admin/absen-saya' || loc.pathname.startsWith('/admin/scan');
+  const needsActiveEvent = activeAttendancePage && eventScope?.event.status !== 'active';
+  const activeEvent = eventScope?.events.find((event) => event.status === 'active');
   const [user, setUser] = useState(adminUser.get());
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButton = useRef(null);
@@ -22,6 +27,9 @@ export default function AdminLayout() {
     api('/admin/me', { admin: true }).then((u) => { adminUser.set(u); setUser(u); }).catch(() => {});
   }, []);
   useEffect(() => { setMenuOpen(false); }, [loc.pathname]);
+  useEffect(() => {
+    if (needsActiveEvent && activeEvent) eventScope.change(String(activeEvent.id));
+  }, [needsActiveEvent, activeEvent?.id]);
 
   if (!adminToken.get()) return <Navigate to="/admin/login" state={{ next: loc.pathname + loc.search }} replace />;
 
@@ -76,9 +84,9 @@ export default function AdminLayout() {
         </nav>
       </aside>
       <section className="admin__main">
-        {loc.pathname !== '/admin/pelaporan' && <EventTabs />}
-        {selectedEvent()?.status === 'archived' && <p className="alert">{selectedEvent().name} sudah diarsipkan. Data hanya dapat dilihat dan diunduh.</p>}
-        <Outlet context={{ user, lo }} />
+        {loc.pathname !== '/admin/pelaporan' && <EventTabs activeOnly={activeAttendancePage} />}
+        {!activeAttendancePage && selectedEvent()?.status === 'archived' && <p className="alert">{selectedEvent().name} sudah diarsipkan. Data hanya dapat dilihat dan diunduh.</p>}
+        {needsActiveEvent ? <p role="status">{activeEvent ? 'Membuka tahap aktif…' : 'Belum ada tahap aktif untuk pencatatan absensi.'}</p> : <Outlet context={{ user, lo }} />}
       </section>
     </div>
   );
