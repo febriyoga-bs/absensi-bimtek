@@ -19,6 +19,7 @@ const spaFallback = () => ({
 
 export default defineConfig({
   plugins: [react(), spaFallback()],
+  build: { target: ['es2020', 'safari15.4', 'ios15.4'] },
   server: {
     host: '127.0.0.1', // gunakan --host secara eksplisit bila perlu akses LAN
     proxy: { '/api': 'http://localhost:3000' },

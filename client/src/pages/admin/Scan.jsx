@@ -76,6 +76,7 @@ export default function Scan() {
   const [tab, setTab] = useState(QR_SCAN_ENABLED && lo ? 'qr' : 'sekolah');
   const organizationTab = tab === 'dinas' || tab === 'bpmp';
   const organizationHiddenColumns = ['LO bertugas', 'Fasilitator', 'Status Laporan 50%'];
+  const fixedHiddenColumns = organizationTab ? organizationHiddenColumns : tab === 'fasil' ? ['Fasilitator'] : [];
   const [search, setSearch] = useState('');
   const [filterVenue, setFilterVenue] = useState('');
   const [filterArrival, setFilterArrival] = useState('');
@@ -86,7 +87,7 @@ export default function Scan() {
   useEffect(() => {
     try { localStorage.setItem('bimtek-scan-display', JSON.stringify({ showFilters, hiddenColumns })); } catch { /* storage unavailable */ }
   }, [showFilters, hiddenColumns]);
-  const columnHidden = (name) => (organizationTab && organizationHiddenColumns.includes(name)) || hiddenColumns.includes(name);
+  const columnHidden = (name) => fixedHiddenColumns.includes(name) || hiddenColumns.includes(name);
   const [filterFacilitator, setFilterFacilitator] = useState('');
   const [filterAttendance, setFilterAttendance] = useState('');
   const [sort, setSort] = useState('name');
@@ -280,9 +281,9 @@ export default function Scan() {
                 {showFilters ? 'Sembunyikan filter' : 'Tampilkan filter'}{activeFilterCount > 0 ? ` (${activeFilterCount} aktif)` : ''}
               </button>
               <details className="scan-column-picker">
-                <summary className="btn btn--sm">Atur kolom ({visibleCount}/{headers.length - (organizationTab ? organizationHiddenColumns.length : 0)})</summary>
+                <summary className="btn btn--sm">Atur kolom ({visibleCount}/{headers.length - fixedHiddenColumns.length})</summary>
                 <div className="scan-column-options">
-                  {headers.filter((name) => !organizationTab || !organizationHiddenColumns.includes(name)).map((name) => <label className="check" key={name}>
+                  {headers.filter((name) => !fixedHiddenColumns.includes(name)).map((name) => <label className="check" key={name}>
                     <input type="checkbox" checked={!columnHidden(name)} disabled={name === 'Peserta' || name === 'Tindakan'}
                       onChange={(event) => setHiddenColumns((current) => event.target.checked ? current.filter((item) => item !== name) : [...current, name])} />
                     <span>{name}{name === 'Peserta' || name === 'Tindakan' ? ' (tetap)' : ''}</span>
@@ -417,7 +418,9 @@ export default function Scan() {
                             : <span className="muted">{tab === 'sekolah' ? 'Belum terpetakan' : '—'}</span>}
                         </td>
                         <td role="cell" data-label="Status Laporan 50%" hidden={columnHidden('Status Laporan 50%')} className="small">
-                          {p.school_reports?.length ? p.school_reports.map((report) => <div key={report.npsn}>
+                          {tab === 'fasil' ? <>
+                            <b>{(p.school_reports || []).filter((report) => ['menunggu_reviu', 'ditolak', 'diterima', 'sudah_direviu'].includes(report.status)).length}/{p.school_reports?.length || 0}</b> sekolah sudah kirim
+                          </> : p.school_reports?.length ? p.school_reports.map((report) => <div key={report.npsn}>
                             {p.school_reports.length > 1 && <div className="muted small">{report.name} · {report.npsn}</div>}
                             <span className={`tag ${report.status === 'diterima' ? 'tag--open' : report.status === 'menunggu_reviu' ? 'tag--venue' : 'tag--off'}`}>
                               {report.status === 'belum_kirim' && report.progress != null && Number(report.progress) >= 50

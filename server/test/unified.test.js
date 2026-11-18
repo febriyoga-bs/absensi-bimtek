@@ -74,20 +74,22 @@ test('one login exposes all three stage tabs while keeping assignment-only actio
 });
 test('test session recaps stay separate from official attendance and validate scope',async()=>{
   const token=signAdmin({role:'admin'}),headers={Authorization:`Bearer ${token}`};
+  let testId;
   await scoped(4,async()=>{
-    await q("INSERT INTO sessions(name,role,starts_at,ends_at,is_test) VALUES('Test recap','semua','2026-11-17T01:00:00Z','2026-11-17T09:00:00Z',true)");
-    await q("INSERT INTO people(code,name,role,position,venue_id) VALUES('TEST-P2','Only test','peserta','Bendahara',1)");
-    await q("INSERT INTO attendance(person_id,session_id,venue_id,status) VALUES(2,2,1,'review')");
+    const {rows:[session]}=await q("INSERT INTO sessions(name,role,starts_at,ends_at,is_test) VALUES('Test recap','semua','2026-11-17T01:00:00Z','2026-11-17T09:00:00Z',true) RETURNING id");
+    testId=session.id;
+    const {rows:[person]}=await q("INSERT INTO people(code,name,role,position,venue_id) VALUES('TEST-P2','Only test','peserta','Bendahara',1) RETURNING id");
+    await q("INSERT INTO attendance(person_id,session_id,venue_id,status) VALUES($1,$2,1,'review')",[person.id,testId]);
   });
   const read=async(path)=>{const response=await fetch(origin+path,{headers});assert.equal(response.status,200);return response.json();};
   const official=await read('/api/admin/venue-attendance?event=4');
-  const testing=await read('/api/admin/venue-attendance?event=4&test_session_id=2');
+  const testing=await read(`/api/admin/venue-attendance?event=4&test_session_id=${testId}`);
   assert.equal(official[0].bendahara.attended,1);assert.equal(testing[0].bendahara.attended,1);
-  const detail=await read('/api/admin/venue-attendance/1/bendahara?event=4&test_session_id=2');
+  const detail=await read(`/api/admin/venue-attendance/1/bendahara?event=4&test_session_id=${testId}`);
   assert.equal(detail.find(row=>row.name==='Only test').people[0].status,'review');
   assert.equal(detail.find(row=>row.name==='Person 4').people[0].status,null);
   const tests=await read('/api/admin/sessions?event=4&test_only=1');assert.equal(tests.length,1);assert.equal(tests[0].is_test,true);
-  for(const suffix of ['event=4&test_session_id=1','event=3&test_session_id=2']){
+  for(const suffix of ['event=4&test_session_id=1',`event=3&test_session_id=${testId}`]){
     assert.equal((await fetch(origin+'/api/admin/venue-attendance?'+suffix,{headers})).status,404);
   }
 });

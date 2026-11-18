@@ -732,7 +732,9 @@ r.get('/scan/participants', ah(async (req, res) => {
           FROM school_facilitators school LEFT JOIN school_reporting report ON report.npsn=school.npsn
           LEFT JOIN school_progress_report pr ON pr.npsn=school.npsn
           WHERE school.venue=p.venue_name
-            AND school.npsn=ANY(string_to_array(replace(p.npsn,' ',''),';'))),'[]'::jsonb) AS school_reports,
+            AND ${category === 'fasil'
+              ? `${nameKeySql('school.facilitator')}=${nameKeySql('p.name')}`
+              : "school.npsn=ANY(string_to_array(replace(p.npsn,' ',''),';'))"}),'[]'::jsonb) AS school_reports,
         CASE WHEN s.id IS NOT NULL THEN json_build_object('id',s.id,'name',s.name,'type',s.type,'starts_at',s.starts_at,'is_test',s.is_test) END AS session,
         CASE WHEN a.id IS NOT NULL THEN json_build_object('id',a.id,'at',a.created_at,'status',a.status,'method',a.method,
           'participant_note',CASE WHEN p.can_check_in THEN a.participant_note END,

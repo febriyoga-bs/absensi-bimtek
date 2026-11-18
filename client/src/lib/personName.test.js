@@ -1,6 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { personName } from './personName.js';
+import { readFileSync } from 'node:fs';
+
+test('name formatter loads without regex lookbehind required by Safari 16.4', () => {
+  const source = readFileSync(new URL('./personName.js', import.meta.url), 'utf8');
+  assert.ok(!source.includes('(?<!') && !source.includes('(?<='));
+  assert.equal(personName('Prof. Dr. Ir. ANI S.Pd., M.Pd.'), 'Prof. Dr. Ir. Ani S.Pd., M.Pd.');
+  assert.equal(personName('BAS.PDAN'), 'Bas.pdan');
+});
 test('formats multiple academic degrees and preserves professional title distinctions', () => {
   assert.equal(personName('BUDI, S.t., M.ars., A.md.T.'), 'Budi, S.T., M.Ars., A.Md.T.');
   assert.equal(personName('ANI, S. KOM., M.si., Ph.d.'), 'Ani, S.Kom., M.Si., Ph.D.');

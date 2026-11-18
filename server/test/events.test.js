@@ -351,6 +351,35 @@ test('warm metadata requests reuse the event list and do not query unrelated ses
   } finally { rawPool.query = original; }
 });
 
+test('facilitator directory includes reports for their assigned schools at the same venue', async () => {
+  let prior,person;
+  try {
+    await scoped(3,async()=>{
+      prior=(await q('SELECT data FROM assignment_roster WHERE id=1')).rows[0];
+      const data={lo:[],attendance_assignments:{},schools:[
+        {npsn:'12345678',name:'Kirim',venue:'Venue Tahap 3',facilitator:'Fasil Uji'},
+        {npsn:'87654321',name:'Belum',venue:'Venue Tahap 3',facilitator:'Fasil Uji'},
+        {npsn:'99999999',name:'Lain venue',venue:'Venue lain',facilitator:'Fasil Uji'},
+      ]};
+      await q('INSERT INTO assignment_roster(id,data) VALUES(1,$1) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data',[JSON.stringify(data)]);
+      person=(await q("INSERT INTO people(code,name,role,position,venue_id) VALUES('fasil-report-test','Fasil Uji','peserta','Fasilitator Pelaporan',1) RETURNING id")).rows[0].id;
+    });
+    const response=await request('/admin/scan/participants?event=3&category=fasil&q=Fasil%20Uji');
+    assert.equal(response.status,200,await response.clone().text());
+    const data=await response.json();assert.equal(data.rows.length,1);
+    const reports=data.rows[0].school_reports;
+    assert.equal(reports.length,2);
+    assert.equal(reports.filter(r=>['menunggu_reviu','ditolak','diterima','sudah_direviu'].includes(r.status)).length,1);
+    assert(!reports.some(r=>r.npsn==='99999999'));
+  }finally{
+    await scoped(3,async()=>{
+      if(person)await q('DELETE FROM people WHERE id=$1',[person]);
+      if(prior)await q('UPDATE assignment_roster SET data=$1 WHERE id=1',[JSON.stringify(prior.data)]);
+      else await q('DELETE FROM assignment_roster WHERE id=1');
+    });
+  }
+});
+
 test('attendance sorting applies before pagination and rejects unsupported orders', async () => {
   let session, people = [], venues = [];
   try {
