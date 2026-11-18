@@ -5,6 +5,11 @@ import { HttpError } from './util.js';
 import { reportingDates, reportingDays } from './reportingDays.js';
 import { importProgressCsv, progressStatusSql, currentProgressSql } from './progressImport.js';
 import { currentEvent, eventId } from './eventContext.js';
+import { createAsyncCache } from './asyncCache.js';
+
+// Assignment metadata is shared, while contacts and each user's permissions remain fresh.
+const rosterCache = createAsyncCache({ ttl: 15000, maxEntries: 8 });
+export const invalidateReportingRoster = () => rosterCache.clear();
 
 // Arsip statis dari Pantau Pelaporan LO · Bimtek K3.html. Hanya data yang dipakai dasbor.
 const archive = JSON.parse(readFileSync(new URL('./reportingK3.json', import.meta.url), 'utf8'));
@@ -47,7 +52,7 @@ export async function getReporting(dataset, user) {
   }
   if (dataset !== 'current') throw new HttpError(400, 'Kegiatan pelaporan tidak valid.');
   const [{ rows: [roster] }, { rows: records }, { rows: contacts }] = await Promise.all([
-    q("SELECT data->'lo' AS lo, data->'facilitators' AS facilitators, data->'schools' AS schools FROM assignment_roster WHERE id=1"),
+    rosterCache.get(String(eventId()), () => q("SELECT data->'lo' AS lo, data->'facilitators' AS facilitators, data->'schools' AS schools FROM assignment_roster WHERE id=1")),
     q(`WITH presence AS MATERIALIZED (
          SELECT a.person_id,a.venue_id,
            array_agg(DISTINCT to_char(s.starts_at AT TIME ZONE 'Asia/Jakarta','YYYY-MM-DD'))

@@ -8,6 +8,7 @@ import { signAdmin, signChallenge, verifyChallenge, hashPassword } from '../src/
 import app from '../src/app.js';
 import { invalidateEventMetadata } from '../src/events.js';
 import { invalidateIdentityLinks } from '../src/loIdentity.js';
+import { invalidateReportingRoster } from '../src/reporting.js';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -60,6 +61,7 @@ before(async () => {
   origin = `http://127.0.0.1:${server.address().port}`;
 });
 beforeEach(async () => {
+  invalidateReportingRoster();
   invalidateEventMetadata();
   await rawPool.query("UPDATE public.bimtek_events SET status='archived'; UPDATE public.bimtek_events SET status='active' WHERE id=3; UPDATE public.bimtek_events SET status='draft' WHERE id=4");
 });
@@ -313,7 +315,7 @@ test('one LO session switches assigned events while keeping each venue scoped', 
     body: { username: 'lo-shared-login', password: 'shared-test-password' } });
   assert.equal(response.status, 200);
   const login = await response.json();
-  assert.equal(login.event.id, 4);
+  assert.equal(login.event.id, 3); // Active stage wins over a saved selection.
   assert.deepEqual(login.user.events.map((event) => event.id), [3, 4]);
   for (const id of [3, 4]) {
     const me = await request(`/admin/me?event=${id}`, { token: login.token });
@@ -349,6 +351,25 @@ test('warm metadata requests reuse the event list and do not query unrelated ses
     assert.equal(reads, first);
     assert.equal(first, 1);
   } finally { rawPool.query = original; }
+});
+
+test('scan candidate pruning preserves owner mapping and excludes unknown owners', async () => {
+  let prior;
+  try {
+    await scoped(3, async()=>{
+      prior=(await q('SELECT data FROM assignment_roster WHERE id=1')).rows[0];
+      const data={schools:[],attendance_assignments:{'1':[{code:'B-12345678',name:'Peserta Tahap 3',position:'Bendahara',npsn:'12345678',venue_id:1}]}};
+      await q('INSERT INTO assignment_roster(id,data) VALUES(1,$1) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data',[JSON.stringify(data)]);
+    });
+    const token=signAdmin({role:'lo',username:'lo-sama',accounts:[{event:3,id:1}]});
+    const response=await request('/admin/scan/participants?event=3&category=sekolah&lo_id=1',{token});
+    assert.equal(response.status,200,await response.clone().text());
+    const data=await response.json();assert.equal(data.rows.length,1);assert.equal(data.rows[0].name,'Peserta Tahap 3');assert.equal(data.rows[0].can_check_in,true);
+    const empty=await request('/admin/scan/participants?event=3&category=sekolah&lo_id=999999',{token});
+    assert.equal(empty.status,200);assert.equal((await empty.json()).rows.length,0);
+  }finally{
+    await scoped(3,()=>prior?q('UPDATE assignment_roster SET data=$1 WHERE id=1',[JSON.stringify(prior.data)]):q('DELETE FROM assignment_roster WHERE id=1'));
+  }
 });
 
 test('facilitator directory includes reports for their assigned schools at the same venue', async () => {
@@ -521,7 +542,7 @@ test('an explicit identity merge updates old sessions and new logins without mat
   const after=await request('/admin/me?event=4',{token});
   assert.equal(after.status,200);assert.equal((await after.json()).no_assignment,undefined);
   const login=await request('/admin/login?event=4',{method:'POST',token:null,body:{username:'merged-3',password:'password-3'}});
-  assert.equal(login.status,200);const data=await login.json();assert.equal(data.event.id,4);
+  assert.equal(login.status,200);const data=await login.json();assert.equal(data.event.id,3);
   assert.equal((await request('/admin/me?event=3',{token:data.token})).status,200);
   assert.equal((await request('/admin/login?event=4',{method:'POST',token:null,body:{username:'merged-3',password:'wrong'}})).status,401);
   await scoped(4,()=>q('UPDATE lo_accounts SET active=false WHERE id=$1',[ids[4]]));

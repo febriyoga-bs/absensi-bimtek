@@ -649,6 +649,12 @@ r.get('/scan/participants', ah(async (req, res) => {
   const { rows: [list] } = await q(
     `WITH active_owners AS MATERIALIZED (
       SELECT id,name,venue_id FROM lo_accounts WHERE active
+    ), candidate_people AS MATERIALIZED (
+      SELECT p.* FROM people p
+      WHERE p.role='peserta' AND p.archived_at IS NULL AND (${scanCategories[category]})
+        AND ($7::text='' OR lower(trim(p.position))=$7)
+        AND ($2::int IS NULL OR p.venue_id=$2)
+        AND ($10::int IS NULL OR p.venue_id=(SELECT venue_id FROM active_owners WHERE id=$10))
     ), mappings AS MATERIALIZED (
       SELECT l.id AS account_id,l.name AS lo_name,m.venue_id,lower(m.code) AS code,
         lower(trim(m.position)) AS position,${nameKeySql('m.name')} AS name_key,
@@ -659,15 +665,16 @@ r.get('/scan/participants', ah(async (req, res) => {
       CROSS JOIN LATERAL jsonb_to_recordset(entries.value)
         AS m(code text,name text,position text,npsn text,venue_id int)
       WHERE roster.id=1 AND m.venue_id=l.venue_id
+        AND m.venue_id IN (SELECT venue_id FROM candidate_people)
     ), assigned_people AS MATERIALIZED (
       SELECT DISTINCT p.id,m.account_id,m.lo_name
-      FROM people p JOIN mappings m ON p.venue_id=m.venue_id
+      FROM candidate_people p JOIN mappings m ON p.venue_id=m.venue_id
         AND lower(trim(p.position))=m.position AND ${nameKeySql('p.name')}=m.name_key
         AND (lower(p.code)=m.code OR (m.school_ids IS NOT NULL
           AND m.school_ids && string_to_array(replace(p.npsn,' ',''),';')))
       WHERE p.role='peserta' AND p.archived_at IS NULL
       UNION
-      SELECT p.id,l.id,l.name FROM people p JOIN active_owners l ON p.venue_id=l.venue_id
+      SELECT p.id,l.id,l.name FROM candidate_people p JOIN active_owners l ON p.venue_id=l.venue_id
       WHERE p.role='peserta' AND p.archived_at IS NULL AND lower(trim(p.position)) IN ('dinas pendidikan','bb/bpmp')
     ), assignments AS MATERIALIZED (
       SELECT id,jsonb_agg(lo_name ORDER BY lo_name) AS assigned_los,
@@ -684,7 +691,7 @@ r.get('/scan/participants', ah(async (req, res) => {
         selected_session.id AS selected_session_id,selected_session.name AS selected_session_name,selected_session.status AS selected_status,
         COALESCE(assignment.assigned_los,'[]'::jsonb) AS assigned_los,
         ($5::int IS NULL OR (p.venue_id=$6::int AND COALESCE(assignment.owned,false))) AS can_check_in
-      FROM people p LEFT JOIN venues v ON v.id=p.venue_id
+      FROM candidate_people p LEFT JOIN venues v ON v.id=p.venue_id
       LEFT JOIN venue_arrival_recap arrival ON arrival.venue_id=p.venue_id
       LEFT JOIN assignments assignment ON assignment.id=p.id
       LEFT JOIN LATERAL (
