@@ -1157,11 +1157,12 @@ r.delete('/attendance/:id', ah(async (req, res) => {
   const { rows: [deleted] } = await q(
     `DELETE FROM attendance a USING people p
      WHERE a.id=$1 AND p.id=a.person_id AND ${canDeleteAttendance('$2', '$3')}
-     RETURNING a.photo_path`,
+     RETURNING a.photo_path,a.photo_history`,
     [id, req.user.lo, req.user.venue]
   );
   if (!deleted) throw new HttpError(404, 'Absensi tidak ditemukan atau tidak dapat Anda hapus.');
   await deletePhoto(deleted.photo_path);
+  for (const version of deleted.photo_history) await deletePhoto(version.photo_path);
   res.sendStatus(204);
 }));
 

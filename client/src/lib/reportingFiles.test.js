@@ -1,8 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readMonitoringCsv } from './reportingFiles.js';
+import { readMonitoringCsv, parseArrivalSheets } from './reportingFiles.js';
 
 const csvFile = (text) => ({ size: new TextEncoder().encode(text).length, text: async () => text });
+
+test('arrival parser skips new sections without losing regional rows or duplicate hotels', () => {
+  const details = [['Regional / Hotel','Role','Nama','Instansi','Kedatangan'],['Lumire Jakarta','Sekolah','A','SD A','Selesai']];
+  const header = ['No','Regional / Hotel'];
+  const data = (n,arrived=0) => [1,'Lumire Jakarta',n,0,0,0,0,`${arrived} (0%)`,0];
+  const result = parseArrivalSheets(details,[['Sekolah'],header,['Jakarta'],data(250,200),data(54),['Perencana'],header,data(999),['Pengawas'],header,data(100,75),['Dinas Pendidikan'],header,data(34,20)]);
+  assert.deepEqual(result.summary.map(r=>[r.position,r.invited]),[['Bendahara',250],['Bendahara',54],['Pengawas',100],['Dinas Pendidikan',34]]);
+  assert.equal(result.summary[0].arrived,200);
+});
 
 test('progress import reports stages and sends only required columns', async () => {
   const stages = [];

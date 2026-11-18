@@ -9,6 +9,7 @@ import { eventContext } from './eventContext.js';
 import { unifiedStorage } from './unifiedStorage.js';
 import { ensureRosterLoProfiles } from './loProfile.js';
 import { ensureRosterFacilitatorProfiles } from './facilitatorProfile.js';
+import { ensureOrganizationProfiles } from './organizationProfile.js';
 import { hashPassword } from './auth.js';
 
 const venues = {
@@ -89,6 +90,7 @@ try {
   await client.query('INSERT INTO assignment_roster (id,data) VALUES (1,$1) ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data', [JSON.stringify({ ...roster, lo, facilitators, attendance_assignments })]);
   await ensureRosterLoProfiles(client.query.bind(client));
   await ensureRosterFacilitatorProfiles(client.query.bind(client));
+  await ensureOrganizationProfiles(client.query.bind(client));
   if (args['dry-run']) { await client.query('ROLLBACK'); console.log(`Simulasi siap: ${lo.length} akun LO, ${credentials.length} akun baru.`); }
   else {
     await client.query('COMMIT');

@@ -45,16 +45,25 @@ export async function readArrivalWorkbook(file) {
   let rows;
   try { rows = await readSheet(file, 'Detail Peserta'); }
   catch { throw new Error('Excel tidak bisa dibaca. Pastikan file .xlsx memiliki sheet Detail Peserta.'); }
-  const details = pickColumns(rows, ['regional / hotel', 'role', 'nama', 'instansi', 'kedatangan']);
   let summaryRows;
   try { summaryRows = await readSheet(file, 'Ringkasan'); }
   catch { throw new Error('Sheet Ringkasan diperlukan sebagai acuan jumlah undangan dan pengawas terdaftar.'); }
+  return parseArrivalSheets(rows, summaryRows);
+}
+
+export function parseArrivalSheets(rows, summaryRows) {
+  const details = pickColumns(rows, ['regional / hotel', 'role', 'nama', 'instansi', 'kedatangan']);
   const summary = [];
   let position = null;
-  for (const row of summaryRows) {
+  for (const [index, row] of summaryRows.entries()) {
     const section = asText(row[0]);
     if (['Sekolah', 'Dinas Pendidikan', 'Pengawas'].includes(section)) {
       position = section === 'Sekolah' ? 'Bendahara' : section;
+      continue;
+    }
+    // A section title is followed by its table header; region labels are not.
+    if (typeof row[0] === 'string' && normalized(summaryRows[index + 1]?.[0]) === 'no') {
+      position = null;
       continue;
     }
     if (!position || typeof row[0] !== 'number' || !asText(row[1])) continue;

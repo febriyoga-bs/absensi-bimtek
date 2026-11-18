@@ -4,7 +4,17 @@ import { eventVenueScope } from './eventVenues.js';
 
 const key = (value) => String(value ?? '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 const schoolKey = (value) => key(String(value ?? '').toLowerCase().replace(/\bsd\s*n(?=\s|\d|[.-])/g, 'sd negeri '));
-const aliases = { hotelatriatangerang: 'atriatangerang', mercurebatavia: 'mercurejakartabatavia', sahidrayajogja: 'sahidjayajogja' };
+const aliases = {
+  hotelatriatangerang: 'atriatangerang', holidayinn: 'holidayinnjakarta',
+  mercurebatavia: 'mercurebataviajakarta', mercurejakartabatavia: 'mercurebataviajakarta',
+  harrisgubengsby: 'harrisgubengsurabaya', wyndhamhotelsurabaya: 'windhamsurabaya',
+  claro: 'claromakassar', fourpointsbysheratonmakassar: 'fourpointmakassar',
+  sahidrayajogja: 'sahidjayajogja',
+};
+export const arrivalVenueKey = (value) => {
+  const name = key(String(value ?? '').split(/\s+[-–—]\s+/).at(-1));
+  return aliases[name] || name;
+};
 const roles = {
   sekolah: 'bendahara', bendahara: 'bendahara', pengawas: 'pengawas', dinaspendidikan: 'dinaspendidikan',
   fasil: 'fasilitator', fasilitator: 'fasilitator', bbpmp: 'bbpmp', bpmp: 'bbpmp',
@@ -94,10 +104,9 @@ export async function importArrivalRecap(rows, summary = null) {
     q(`SELECT id, venue_id, position, name, institution FROM people
        WHERE role='peserta' AND archived_at IS NULL AND venue_id IS NOT NULL`),
   ]);
-  const byVenue = new Map(venues.map((v) => [key(v.name), v]));
+  const byVenue = new Map(venues.map((v) => [arrivalVenueKey(v.name), v]));
   const resolveVenue = (hotel) => {
-    const hotelKey = key(hotel.split(/\s+[-–—]\s+/).at(-1));
-    return byVenue.get(aliases[hotelKey] || hotelKey);
+    return byVenue.get(arrivalVenueKey(hotel));
   };
   const summaries = new Map();
   const warnings = [];
@@ -109,8 +118,12 @@ export async function importArrivalRecap(rows, summary = null) {
       const venue = resolveVenue(row.hotel);
       if (!venue) throw new HttpError(400, `Venue Ringkasan tidak ditemukan: ${row.hotel}`);
       const entries = summaries.get(venue.id) || [];
-      if (entries.some((entry) => entry.position === row.position)) throw new HttpError(400, 'Peran Ringkasan ganda pada venue yang sama.');
-      entries.push({ position: row.position, invited: row.invited, arrived: row.arrived - row.queued, queued: row.queued });
+      const existing = entries.find((entry) => entry.position === row.position);
+      if (existing) {
+        existing.invited += row.invited;
+        existing.arrived += row.arrived - row.queued;
+        existing.queued += row.queued;
+      } else entries.push({ position: row.position, invited: row.invited, arrived: row.arrived - row.queued, queued: row.queued });
       summaries.set(venue.id, entries);
     }
   }
@@ -139,7 +152,7 @@ export async function importArrivalRecap(rows, summary = null) {
       name, institution, position: sourcePositions[role] || rawRole,
       arrival_status: arrival || null,
     });
-    if (!arrival) continue;
+    if (!arrival && !['dinaspendidikan', 'bbpmp'].includes(role)) continue;
     const identity = ['bendahara', 'dinaspendidikan', 'bbpmp'].includes(role) ? schoolKey(institution) : key(name);
     let matches = index.get(`${venue.id}:${role}:${identity}`) || [];
     if (matches.length > 1 && institution) matches = matches.filter((p) =>

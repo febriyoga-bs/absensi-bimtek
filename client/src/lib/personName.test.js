@@ -1,6 +1,23 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { personName } from './personName.js';
+test('formats multiple academic degrees and preserves professional title distinctions', () => {
+  assert.equal(personName('BUDI, S.t., M.ars., A.md.T.'), 'Budi, S.T., M.Ars., A.Md.T.');
+  assert.equal(personName('ANI, S. KOM., M.si., Ph.d.'), 'Ani, S.Kom., M.Si., Ph.D.');
+  assert.equal(personName('Prof. Dr. Ir. BUDI, M.eng.'), 'Prof. Dr. Ir. Budi, M.Eng.');
+  assert.equal(personName('dr. ANI'), 'dr. Ani');
+  assert.equal(personName('drg. ANI'), 'drg. Ani');
+  assert.equal(personName('sri komala'), 'Sri Komala');
+});
+test('formats S.Si and S.Pd degrees in personal names', () => {
+  assert.equal(personName('ANI, S.si'), 'Ani, S.Si');
+  assert.equal(personName('BUDI S.pd'), 'Budi S.Pd');
+  assert.equal(personName('CITRA, S. PD., S.SI'), 'Citra, S.Pd., S.Si');
+});
+test('preserves BB/BPMP capitalization', () => {
+  assert.equal(personName('Bb/bpmp'), 'BB/BPMP');
+  assert.equal(personName('BB/BPMP JAWA TIMUR'), 'BB/BPMP Jawa Timur');
+});
 
 test('formats personal names while preserving the LO abbreviation', () => {
   assert.equal(personName('adinda saphira rizky'), 'Adinda Saphira Rizky');

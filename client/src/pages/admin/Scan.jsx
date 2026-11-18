@@ -74,6 +74,8 @@ export default function Scan() {
   const [history, setHistory] = useState([]);
   const [manual, setManual] = useState('');
   const [tab, setTab] = useState(QR_SCAN_ENABLED && lo ? 'qr' : 'sekolah');
+  const organizationTab = tab === 'dinas' || tab === 'bpmp';
+  const organizationHiddenColumns = ['LO bertugas', 'Fasilitator', 'Status Laporan 50%'];
   const [search, setSearch] = useState('');
   const [filterVenue, setFilterVenue] = useState('');
   const [filterArrival, setFilterArrival] = useState('');
@@ -84,7 +86,7 @@ export default function Scan() {
   useEffect(() => {
     try { localStorage.setItem('bimtek-scan-display', JSON.stringify({ showFilters, hiddenColumns })); } catch { /* storage unavailable */ }
   }, [showFilters, hiddenColumns]);
-  const columnHidden = (name) => hiddenColumns.includes(name);
+  const columnHidden = (name) => (organizationTab && organizationHiddenColumns.includes(name)) || hiddenColumns.includes(name);
   const [filterFacilitator, setFilterFacilitator] = useState('');
   const [filterAttendance, setFilterAttendance] = useState('');
   const [sort, setSort] = useState('name');
@@ -146,7 +148,7 @@ export default function Scan() {
     setLoading(true);
     setListError('');
     const params = new URLSearchParams({ category: tab, q: search.trim(), page, venue_id: filterVenue, arrival: filterArrival,
-      lo_id: filterLo, position: tab === 'sekolah' ? filterPosition : '', attendance: filterAttendance, facilitator: tab === 'sekolah' ? filterFacilitator : '', sort, direction });
+      lo_id: organizationTab ? '' : filterLo, position: tab === 'sekolah' ? filterPosition : '', attendance: filterAttendance, facilitator: tab === 'sekolah' ? filterFacilitator : '', sort: organizationTab && sort === 'lo' ? 'name' : sort, direction });
     if (testSessionId) params.set('session_id', testSessionId);
     const timer = setTimeout(() => {
       api(`/admin/scan/participants?${params}`, { admin: true })
@@ -241,11 +243,10 @@ export default function Scan() {
 
   const K = result && KIND[result.kind];
   const pages = list ? Math.ceil(list.total / list.limit) : 0;
-  const organizationTab = tab === 'dinas' || tab === 'bpmp';
   const headers = lo ? [...directoryHeaders, 'Tindakan'] : directoryHeaders;
   const visibleCount = headers.filter((name) => !columnHidden(name)).length;
   const tableWidth = headers.reduce((width, name, index) => width + (columnHidden(name) ? 0 : columnWidths[index]), 0);
-  const activeFilterCount = [search.trim(), filterVenue, filterArrival, filterLo, filterAttendance,
+  const activeFilterCount = [search.trim(), filterVenue, filterArrival, !organizationTab && filterLo, filterAttendance,
     tab === 'sekolah' && filterFacilitator, tab === 'sekolah' && filterPosition, testSessionId].filter(Boolean).length;
 
   return (
@@ -279,9 +280,9 @@ export default function Scan() {
                 {showFilters ? 'Sembunyikan filter' : 'Tampilkan filter'}{activeFilterCount > 0 ? ` (${activeFilterCount} aktif)` : ''}
               </button>
               <details className="scan-column-picker">
-                <summary className="btn btn--sm">Atur kolom ({visibleCount}/{headers.length})</summary>
+                <summary className="btn btn--sm">Atur kolom ({visibleCount}/{headers.length - (organizationTab ? organizationHiddenColumns.length : 0)})</summary>
                 <div className="scan-column-options">
-                  {headers.map((name) => <label className="check" key={name}>
+                  {headers.filter((name) => !organizationTab || !organizationHiddenColumns.includes(name)).map((name) => <label className="check" key={name}>
                     <input type="checkbox" checked={!columnHidden(name)} disabled={name === 'Peserta' || name === 'Tindakan'}
                       onChange={(event) => setHiddenColumns((current) => event.target.checked ? current.filter((item) => item !== name) : [...current, name])} />
                     <span>{name}{name === 'Peserta' || name === 'Tindakan' ? ' (tetap)' : ''}</span>
@@ -310,7 +311,7 @@ export default function Scan() {
                 <option value="">Semua venue</option>
                 {list?.venues.map((venue) => <option key={venue.id} value={venue.id}>{venue.name}</option>)}
               </select></label>
-              <label><span>LO bertugas</span><select aria-label="Filter LO bertugas" value={filterLo} onChange={(e) => {
+              {!organizationTab && <label><span>LO bertugas</span><select aria-label="Filter LO bertugas" value={filterLo} onChange={(e) => {
                 setLoading(true); setFilterLo(e.target.value); setPage(1);
               }}>
                 <option value="">Semua LO bertugas</option>
@@ -318,7 +319,7 @@ export default function Scan() {
                 {filterLo && filterLo !== 'mine' && !list?.owners?.some((owner) => String(owner.id) === filterLo) &&
                   <option value={filterLo}>LO dipilih (di luar venue)</option>}
                 {list?.owners?.filter((owner) => owner.id !== list.current_lo_id).map((owner) => <option key={owner.id} value={owner.id}>{personName(owner.name)}</option>)}
-              </select></label>
+              </select></label>}
               {tab === 'sekolah' && <label><span>Jabatan peserta</span><select aria-label="Filter jabatan peserta" value={filterPosition}
                 onChange={(e) => { setLoading(true); setFilterPosition(e.target.value); setPage(1); }}>
                 <option value="">Bendahara &amp; Pengawas</option>
@@ -393,10 +394,10 @@ export default function Scan() {
                     return (
                       <tr key={p.id} role="row">
                         <td role="cell"><b>{p.representative ? personName(p.representative.name) : personName(p.name)}</b>
-                          {p.representative && <><span className="tag tag--venue">Mewakili</span>
+                          {p.representative && tab !== 'dinas' && <><span className="tag tag--venue">Mewakili</span>
                             <div className="muted small">Mewakili {personName(p.name)}</div></>}
                           {!p.representative && <WhatsAppLink name={p.name} phone={p.phone} />}
-                          <div className="muted small">{[p.position, p.code].filter(Boolean).join(' · ')}</div></td>
+                          <div className="muted small">{[p.position, !organizationTab && p.code].filter(Boolean).join(' · ')}</div></td>
                         <td role="cell" data-label="Sekolah / Instansi" hidden={columnHidden('Sekolah / Instansi')} className="cell-clamp">{p.institution || '—'}
                           {p.npsn && <div className="muted small">NPSN {p.npsn}</div>}
                         </td>

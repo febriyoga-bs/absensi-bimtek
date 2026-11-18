@@ -123,8 +123,8 @@ function ReportingVenueRanking({ rows }) {
     {rows.length ? <ol>{rows.map((row) => <li key={row.name}>
       <div className="reporting-ranking-name"><b>{row.rank ?? '—'}. {row.name}</b>
         <strong>{row.known ? `${nf.format(row.ratio)}%` : 'Belum ada data'}</strong></div>
-      {row.known > 0 && <progress aria-label={`Capaian ${row.name}`} value={row.ratio} max={100} />}
-      <p>Total {nf.format(row.sent)}/{nf.format(row.total)} sudah kirim · {nf.format(row.accepted)} diterima · {nf.format(row.pending)} menunggu reviu</p>
+      {row.known > 0 && <progress aria-label={`Persentase pergerakan ${row.name}`} value={row.ratio} max={100} />}
+      <p>Pergerakan +{nf.format(row.change)}/{nf.format(row.total)} sekolah · Total {nf.format(row.sent)} sudah kirim · {nf.format(row.accepted)} diterima · {nf.format(row.pending)} menunggu reviu</p>
       {row.known < row.total && <small className="muted">Data monitoring tersedia untuk {nf.format(row.known)} dari {nf.format(row.total)} sekolah</small>}
     </li>)}</ol> : <p className="muted">Tidak ada venue yang cocok dengan pencarian.</p>}
   </section>;
@@ -505,12 +505,12 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
         {view === 'facilitators' && <FilterField label="Ambang tunggakan"><select aria-label="Ambang tunggakan" value={threshold} onChange={(e) => setThreshold(Number(e.target.value))}>
           {[1, 2, 3, 7].map((day) => <option key={day} value={day}>Lewat {day} hari</option>)}
         </select></FilterField>}
-        {view === 'ranking' && !attendanceRanking && movement && <FilterField label="Tanggal acuan pergerakan kiriman"><input type="date" aria-label="Tanggal acuan pergerakan kiriman"
+        {(view === 'venues' || (view === 'ranking' && !attendanceRanking && movement)) && <FilterField label="Tanggal acuan pergerakan kiriman"><input type="date" aria-label="Tanggal acuan pergerakan kiriman"
           value={baseline} onChange={(e) => setCustomBaseline(e.target.value)} /></FilterField>}
       </div>
       {view === 'ranking' && !attendanceRanking && <p className="muted small">Capaian dihitung dari laporan yang sudah dikirim dibanding seluruh sekolah binaan. LO tanpa data monitoring belum masuk peringkat.</p>}
-      {view === 'venues' && <p className="muted small">Perbandingan seluruh venue pada tahap ini, tanpa filter venue atau LO. Urutan berdasarkan persentase sekolah yang sudah mengirim laporan; jika sama, persentase diterima lalu jumlah kiriman. Venue tanpa data monitoring belum masuk peringkat.</p>}
-      {view === 'venues' ? <ReportingVenueRanking rows={rankVenues(data.schools, data.venues).filter((row) => matches([row.name], query))} /> : view === 'ranking' ? (attendanceRanking && current && !publicView ? <AttendanceRanking venue={venue} query={query} /> : <ReportingRanking rows={ranking} movement={movement} movementLabel={movementLabel} own={own} />)
+      {view === 'venues' && <p className="muted small">Perbandingan seluruh venue pada tahap ini, tanpa filter venue atau LO. Peringkat berdasarkan jumlah sekolah yang mengirim sejak tanggal acuan dibagi seluruh sekolah venue (persentase pergerakan). Jika sama, persentase total kiriman lalu persentase diterima. Kiriman tanpa tanggal tidak dihitung sebagai pergerakan. Venue tanpa data monitoring belum masuk peringkat.</p>}
+      {view === 'venues' ? <ReportingVenueRanking rows={rankVenues(data.schools, data.venues, baseline).filter((row) => matches([row.name], query))} /> : view === 'ranking' ? (attendanceRanking && current && !publicView ? <AttendanceRanking venue={venue} query={query} /> : <ReportingRanking rows={ranking} movement={movement} movementLabel={movementLabel} own={own} />)
         : <ReportingTable pageSize={publicView ? 5 : PAGE_SIZE} key={JSON.stringify([view, venue, lo, status, attendance, checkInFilters, term, threshold])}
           headers={headers} rows={rows} fullWidthColumn={current && view === 'schools' ? 'Kehadiran di venue' : undefined} />}
       {detail && <section ref={facilitatorDetail} tabIndex={-1} className="card reporting-detail" aria-label={`Sekolah binaan ${personName(selectedFacilitator.name)}`}>
