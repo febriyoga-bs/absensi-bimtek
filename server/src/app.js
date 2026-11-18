@@ -39,7 +39,10 @@ app.use((err, req, res, next) => {
     return res.status(err.status).json({ error: err.message, ...(err.extra || {}) });
   }
   if (err.status === 502 || err.status === 503 || err.status === 504) return res.status(err.status).json({ error: err.message });
-  console.error('Request failed', { method: req.method, path: req.path, code: err.code || err.name });
+  // Keep the cause in server logs; never send connection details to the client.
+  const message = String(err.message || 'Unknown error')
+    .replace(/postgres(?:ql)?:\/\/[^\s]+/gi, '[database URL redacted]');
+  console.error('Request failed', { method: req.method, path: req.path, code: err.code || err.name, message });
   res.status(500).json({ error: 'Terjadi kesalahan server' });
 });
 
