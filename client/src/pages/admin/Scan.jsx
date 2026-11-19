@@ -547,7 +547,7 @@ export default function Scan() {
 }
 
 /** Kamera untuk memotret peserta yang diabsenkan LO (default kamera belakang, bisa dibalik). */
-function LoShot({ target, user, busy, onSend, onClose }) {
+export function LoShot({ target, user, busy, onSend, onClose }) {
   const camRef = useRef(null);
   const [facing, setFacing] = useState('environment');
   const [photo, setPhoto] = useState(null);

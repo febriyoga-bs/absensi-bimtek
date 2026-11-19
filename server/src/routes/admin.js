@@ -1134,6 +1134,7 @@ r.get('/attendance', ah(async (req, res) => {
     photo_url: photo_path ? await photoUrl(photo_path) : null, has_photo: !!photo_path })));
   res.json({
     rows: ownOnly ? out.map(({ ip, device_id, user_agent, ...row }) => ({ ...row,
+      can_retry: row.status === 'ditolak' && row.role === 'peserta' && row.can_edit_note,
       can_verify: row.role === 'peserta' && row.status !== 'berhalangan',
       can_delete: row.role === 'peserta', can_edit_note: row.role === 'peserta' && row.status !== 'berhalangan' })) : out,
     recorders: ownOnly ? [] : recorders,

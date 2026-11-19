@@ -1,6 +1,6 @@
 import { personName } from '../../lib/personName.js';
 import FilterField from '../../components/FilterField.jsx';
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
 import { api, adminUrl } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
@@ -12,6 +12,7 @@ import AttendanceDownloadDialog from './AttendanceDownloadDialog.jsx';
 
 const ST_LABEL = { valid: 'Valid', review: 'Perlu dicek', ditolak: 'Ditolak', berhalangan: 'Mundur/Berhalangan Hadir' };
 const PAGE = 48;
+const RetryPhoto = lazy(() => import('./Scan.jsx').then((module) => ({ default: module.LoShot })));
 const DELETE_CONFIRMATION = 'saya ingin menghapus absen ini';
 const dist = (m) => (m == null ? '-' : m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`);
 
@@ -21,7 +22,9 @@ export default function Records() {
   const [venues, setVenues] = useState([]);
   const [recorders, setRecorders] = useState([]);
   const [downloadOpen, setDownloadOpen] = useState(false);
-  const { lo } = useOutletContext() || {};
+  const { lo, user } = useOutletContext() || {};
+  const [retryTarget, setRetryTarget] = useState(null);
+  const [retryBusy, setRetryBusy] = useState(false);
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [counts, setCounts] = useState(null);
@@ -115,6 +118,18 @@ export default function Records() {
       const old = rows.find((x) => x.id === id)?.status;
       return old && old !== st ? { ...c, [old]: c[old] - 1, [st]: c[st] + 1 } : c;
     });
+  }
+
+  async function retryAttendance(photo, note) {
+    if (retryBusy || !retryTarget) return;
+    setRetryBusy(true);
+    try {
+      await api('/admin/scan', { method: 'POST', admin: true,
+        body: { code: retryTarget.code, session_id: retryTarget.sessionId, photo, note } });
+      setRetryTarget(null); setNoteNotice('Absen ulang berhasil disimpan.'); load();
+      return { kind: 'ok' };
+    } catch (error) { return { kind: 'err', msg: error.message }; }
+    finally { setRetryBusy(false); }
   }
 
   function openDeleteDialog(record) {
@@ -246,6 +261,10 @@ export default function Records() {
                   {r.can_edit_note && r.role !== 'panitia' && <button type="button" className="btn btn--sm" disabled={loading}
                     onClick={() => { setNoteNotice(''); setNoteTarget(r); }}>Ubah catatan</button>}
                   <span className={`st st--${r.status}`}>{ST_LABEL[r.status]}</span>
+                  {lo && r.status === 'ditolak' && r.can_retry && <button type="button" className="btn btn--sm btn--primary"
+                    disabled={loading || !selectedSession?.is_open} title={selectedSession?.is_open ? 'Ambil foto baru untuk absen ulang' : 'Sesi absensi sudah ditutup'}
+                    onClick={() => setRetryTarget({ code: r.code, name: personName(r.name), position: r.position, school: r.institution,
+                      sessionId: Number(sid), sessionName: sessionTitle(selectedSession), isTest: selectedSession?.is_test })}>Absen ulang</button>}
                   {r.status !== 'berhalangan' && r.can_verify !== false && <>
                     {!lo && r.status !== 'valid' && <button className="btn btn--sm btn--ok" onClick={() => setStatus(r.id, 'valid')}>Sahkan</button>}
                     {r.status !== 'ditolak' && <button className="btn btn--sm btn--danger" onClick={() => setStatus(r.id, 'ditolak')}>Tolak</button>}
@@ -293,6 +312,8 @@ export default function Records() {
         </>
       )}
 
+      {retryTarget && <Suspense fallback={<p role="status">Memuat kamera…</p>}><RetryPhoto target={retryTarget} user={user} busy={retryBusy}
+        onSend={retryAttendance} onClose={() => { if (!retryBusy) setRetryTarget(null); }} /></Suspense>}
       {downloadOpen && <AttendanceDownloadDialog sessions={sessions} venues={venues} lo={lo}
         initial={{ session_id: String(sid), venue_id: venue, recorded_by: recordedBy, position, status, q: search }} onClose={() => setDownloadOpen(false)} />}
       <dialog ref={deleteDialog} className="assignment-dialog" aria-labelledby="delete-attendance-title"
