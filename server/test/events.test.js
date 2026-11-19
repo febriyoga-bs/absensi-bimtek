@@ -682,6 +682,33 @@ test('venue recaps and details use arrival invitations, retain unknown source pa
   }
 });
 
+test('session status details paginate and enforce the LO venue scope', async () => {
+  let sessionId, otherVenueId;
+  await scoped(3,async()=>{
+    otherVenueId=(await q("INSERT INTO venues(name,lat,lng) VALUES('Status other venue',-6,106) RETURNING id")).rows[0].id;
+    sessionId=(await q("INSERT INTO sessions(name,role,starts_at,ends_at) VALUES('Status details test','semua',now()-interval '1 hour',now()+interval '1 hour') RETURNING id")).rows[0].id;
+    for(const venueId of [1,otherVenueId]){
+      const person=(await q("INSERT INTO people(code,name,role,venue_id) VALUES($1,$2,'peserta',$3) RETURNING id",[`status-person-${venueId}`,`Status Person ${venueId}`,venueId])).rows[0];
+      await q("INSERT INTO attendance(person_id,session_id,venue_id,status,photo_path) VALUES($1,$2,$3,'valid','status.jpg')",[person.id,sessionId,venueId]);
+      await q("INSERT INTO attempt_logs(person_id,session_id,venue_id,reasons) VALUES($1,$2,$3,'[\"outside_radius\"]')",[person.id,sessionId,venueId]);
+    }
+  });
+  const token=signAdmin({role:'lo',username:'lo-sama',accounts:[{event:3,id:1}]});
+  const path=`/admin/sessions/${sessionId}/status-details?event=3`;
+  const all=await (await request(`${path}&status=valid&limit=1`)).json();
+  assert.equal(all.total,2);assert.equal(all.rows.length,1);
+  const next=await (await request(`${path}&status=valid&limit=1&offset=1`)).json();
+  assert.notEqual(next.rows[0].id,all.rows[0].id);
+  for(const status of ['valid','blocked']){
+    const own=await (await request(`${path}&status=${status}&venue_id=${otherVenueId}`,{token})).json();
+    assert.equal(own.total,1);assert.equal(own.rows[0].name,'Status Person 1');
+    assert.equal(Object.hasOwn(own.rows[0],'ip'),false);
+  }
+  assert.equal((await request(`${path}&status=unknown`)).status,400);
+  const otherStage=await (await request(`/admin/sessions/${sessionId}/status-details?event=4&status=valid`)).json();
+  assert.equal(otherStage.total,0);
+});
+
 test('verification returns the representative and searches both attendee and original names', async () => {
   await scoped(3, async () => {
     const {rows:[person]} = await q(`INSERT INTO people(code,name,role,position,venue_id)

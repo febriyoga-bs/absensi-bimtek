@@ -990,6 +990,36 @@ for (const [directory, position] of [
 }
 
 /* ---------- Absensi ---------- */
+// Read-only venue recap: LO can inspect the venue totals without gaining
+// verification, editing, or deletion privileges over another LO's records.
+r.get('/sessions/:id/status-details', ah(async (req, res) => {
+  const sessionId = Number(req.params.id);
+  const status = req.query.status;
+  if (!Number.isSafeInteger(sessionId) || sessionId < 1 || sessionId > 2147483647
+    || !['valid','review','ditolak','berhalangan','blocked'].includes(status)) {
+    throw new HttpError(400, 'Sesi atau status absensi tidak valid.');
+  }
+  if (req.user.no_assignment) throw new HttpError(403, 'Belum ada penugasan pada tahap ini.');
+  const venueId = scopeVenue(req);
+  const limit = finiteInteger(req.query.limit, 50, 1, 100);
+  const offset = finiteInteger(req.query.offset, 0, 0, 1000000);
+  const blocked = status === 'blocked';
+  const table = blocked ? 'attempt_logs' : 'attendance';
+  const where = `a.session_id=$1 AND ($2::int IS NULL OR a.venue_id=$2)${blocked ? '' : ' AND a.status=$3'}`;
+  const params = blocked ? [sessionId, venueId] : [sessionId, venueId, status];
+  const [{ rows }, { rows: [summary] }] = await Promise.all([
+    q(`SELECT a.id,a.created_at,${blocked ? 'a.reasons' : 'a.flags,a.scanned_by,a.participant_note'},
+       p.name,p.code,p.position,p.institution,v.name AS venue_name,
+       arrival.representatives->p.id::text AS representative
+       FROM ${table} a LEFT JOIN people p ON p.id=a.person_id LEFT JOIN venues v ON v.id=a.venue_id
+       LEFT JOIN venue_arrival_recap arrival ON arrival.venue_id=a.venue_id
+       WHERE ${where} ORDER BY a.created_at DESC,a.id DESC LIMIT $${params.length+1} OFFSET $${params.length+2}`,
+    [...params, limit, offset]),
+    q(`SELECT count(*)::int AS total FROM ${table} a WHERE ${where}`, params),
+  ]);
+  res.json({ rows, total: summary.total, limit, offset });
+}));
+
 r.get('/reporting/attendance-ranking', ah(async (req, res) => {
   const sessionId = req.query.session_id == null || req.query.session_id === '' ? null : Number(req.query.session_id);
   if (sessionId !== null && (!Number.isInteger(sessionId) || sessionId < 1 || sessionId > 2147483647)) {

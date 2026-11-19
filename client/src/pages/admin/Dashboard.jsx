@@ -1,11 +1,13 @@
 import FilterField from '../../components/FilterField.jsx';
 import { useEffect, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
-import { api, adminUrl } from '../../api.js';
+import { api } from '../../api.js';
 import FontIcon from '../../components/FontIcon.jsx';
 import { checkInDayLabel, fmtDT, sessionTitle } from './shared.js';
 import { Skel, SkelCards } from '../../components/Skeleton.jsx';
 import AttendanceDetailDialog from './AttendanceDetailDialog.jsx';
+import AttendanceDownloadDialog from './AttendanceDownloadDialog.jsx';
+import SessionStatusDialog from './SessionStatusDialog.jsx';
 import { venueAttendanceGroups as venueGroups } from '../../lib/venueAttendanceGroups.js';
 import { useEvents } from '../../components/EventScope.jsx';
 
@@ -71,6 +73,8 @@ export default function Dashboard() {
   const [sessionsError, setSessionsError] = useState(false);
   const [revision, setRevision] = useState(0);
   const [details, setDetails] = useState(null);
+  const [statusSelection, setStatusSelection] = useState(null);
+  const [downloadInitial, setDownloadInitial] = useState(null);
   const [hiddenGroups, setHiddenGroups] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('bimtek-venue-hidden-groups') || '[]');
@@ -125,7 +129,6 @@ export default function Dashboard() {
   const open = sessions.filter((s) => s.is_open);
   const sum = (k) => open.reduce((a, s) => a + s[k], 0);
   const activeVenues = venues?.filter((v) => v.active).length ?? 0;
-  const venueQs = (sid) => `/export?session_id=${sid}${!lo && venueId ? `&venue_id=${venueId}` : ''}`;
   const shownVenues = (venueAttendance || []).filter((venue) => !venueId || String(venue.id) === venueId);
   const selectedDay = days.find((item) => item.date === day);
 
@@ -165,7 +168,7 @@ export default function Dashboard() {
       <div className="kpis">
         <div className="kpi"><span className="kpi__icon"><FontIcon name="calendar-days" /></span><span><b>{loading ? <Skel w={40} h={26} /> : open.length}</b><small>Sesi sedang dibuka</small></span></div>
         <div className="kpi"><span className="kpi__icon"><FontIcon name="circle-check" /></span><span><b>{loading ? <Skel w={56} h={26} /> : number.format(sum('valid') + sum('review') + sum('rejected') + sum('unavailable'))}</b><small>Total catatan absensi di sesi aktif</small>
-          {!loading && <small>Sudah hadir: {number.format(sum('valid') + sum('review'))}</small>}</span></div>
+          {!loading && <small style={{ display: 'block' }}>Sudah hadir: {number.format(sum('valid') + sum('review'))}</small>}</span></div>
         <div className="kpi"><span className="kpi__icon"><FontIcon name="triangle-exclamation" /></span><span><b>{loading ? <Skel w={40} h={26} /> : sum('review')}</b><small>Perlu dicek</small></span></div>
         {lo
           ? <div className="kpi"><span className="kpi__icon"><FontIcon name="location-dot" /></span><span><b style={{ fontSize: 16 }}>{user?.venue?.name}</b><small>Venue Anda</small></span></div>
@@ -175,7 +178,7 @@ export default function Dashboard() {
       <div className={`dashboard-overview${lo || venueId ? ' dashboard-overview--single' : ''}`}>
       <section className="dashboard-sessions" aria-labelledby="dashboard-sessions-title">
       <h3 id="dashboard-sessions-title">Absensi per sesi</h3>
-      <p className="muted small">Total catatan mencakup Valid, Perlu dicek, Ditolak, dan Berhalangan. Sudah hadir mencakup Valid dan Perlu dicek.</p>
+      <p className="muted small">Progres target dihitung dari seluruh catatan: Valid, Perlu dicek, Ditolak, dan Berhalangan. Sudah hadir mencakup Valid dan Perlu dicek.</p>
       {sessionsError && <p className="alert alert--warn" role="status">Rekap sesi gagal diperbarui. Klik Muat ulang untuk mencoba lagi.</p>}
       {loading && !sessionsError && <div className="stats"><SkelCards n={3} h={170} /></div>}
       {!loading && !sessions.length && <p className="muted">Belum ada sesi{!lo && <> — <Link to="/admin/sesi">buat sesi</Link></>}.</p>}
@@ -183,7 +186,10 @@ export default function Dashboard() {
         {sessions.map((s) => {
           const checkedIn = s.valid + s.review;
           const totalRecords = checkedIn + s.rejected + s.unavailable;
-          const pct = s.expected ? Math.round((checkedIn / s.expected) * 100) : 0;
+          const targetVenues = shownVenues.filter((venue) => !s.venue_ids?.length || s.venue_ids.includes(venue.id));
+          const expected = venueAttendance ? targetVenues.reduce((total, venue) => total
+            + venueGroups.reduce((count, [key]) => count + venue[key].total, 0), 0) : null;
+          const pct = expected ? Math.round((totalRecords / expected) * 100) : 0;
           return (
             <div key={s.id} className={`stat ${s.is_open ? 'stat--open' : ''}`}>
               <div className="stat__head">
@@ -194,13 +200,19 @@ export default function Dashboard() {
               <div className="chips"><span className={`tag tag--${s.role}`}>{s.role}</span>
                 {!s.check_in_day && <span className="tag tag--type">{s.type}</span>}</div>
               <div className="stat__big">{number.format(totalRecords)}<small> total catatan absensi</small></div>
-              <div className="muted small">Sudah hadir: <b>{number.format(checkedIn)}</b> / {number.format(s.expected)} target ({pct}%)</div>
-              <div className="bar"><span style={{ width: `${Math.min(pct, 100)}%` }} /></div>
-              <dl className="dashboard-statuses">
+              <div className="muted small">Tercatat: <b>{number.format(totalRecords)}</b> / {expected === null ? '…' : number.format(expected)} target dari ringkasan venue{expected !== null && ` (${pct}%)`}</div>
+              {expected !== null && <div className="bar" role="progressbar" aria-label="Progres pencatatan absensi" aria-valuemin={0} aria-valuemax={expected || 1} aria-valuenow={Math.min(totalRecords, expected || 1)} aria-valuetext={`${number.format(totalRecords)} dari ${number.format(expected)} target tercatat (${pct}%)`}><span style={{ width: `${Math.min(pct, 100)}%` }} /></div>}
+              <div className="muted small">Sudah hadir: <b>{number.format(checkedIn)}</b></div>
+              <div className="dashboard-statuses">
                 {sessionStatuses.filter(([key]) => key !== 'unavailable' || s.unavailable > 0).map(([key, label, icon]) => (
-                  <div key={key} data-status={key}><dt><FontIcon name={icon} /> {label}</dt><dd>{number.format(s[key])}</dd></div>
+                  <button type="button" key={key} data-status={key} aria-haspopup="dialog"
+                    aria-label={`Lihat rincian ${label}: ${number.format(s[key])} catatan`}
+                    onClick={() => setStatusSelection({ session: s, status: ({ rejected: 'ditolak', unavailable: 'berhalangan' })[key] || key,
+                      label, venueId: lo ? '' : venueId, venueName: lo ? user?.venue?.name : venues?.find((venue) => String(venue.id) === venueId)?.name })}>
+                    <span><FontIcon name={icon} /> {label}</span><b>{number.format(s[key])}</b>
+                  </button>
                 ))}
-              </dl>
+              </div>
               {!lo && s.by_venue.length > 0 && (
                 <div className="chips">
                   {s.by_venue.map((v) => <span key={v.name} className="tag tag--venue">{v.name}: {v.n}</span>)}
@@ -208,7 +220,8 @@ export default function Dashboard() {
               )}
               <div className="row">
                 <Link className="btn btn--sm" to={`/admin/absensi?sesi=${s.id}${s.review ? '&status=review' : ''}`}><FontIcon name="list-check" />Verifikasi</Link>
-                <a className="btn btn--sm" href={adminUrl(venueQs(s.id))}><FontIcon name="download" />Unduh CSV</a>
+                <button type="button" className="btn btn--sm" onClick={() => setDownloadInitial({ session_id: String(s.id),
+                  venue_id: lo ? '' : venueId, recorded_by: '', position: '', status: '', q: '' })}><FontIcon name="download" />Unduh</button>
               </div>
             </div>
           );
@@ -241,6 +254,9 @@ export default function Dashboard() {
       </section>
       </div>
       <AttendanceDetailDialog details={details} onClose={() => setDetails(null)} />
+      {statusSelection && <SessionStatusDialog selection={statusSelection} onClose={() => setStatusSelection(null)} />}
+      {downloadInitial && <AttendanceDownloadDialog sessions={sessions} venues={venues || []} lo={lo}
+        initial={downloadInitial} onClose={() => setDownloadInitial(null)} />}
     </div>
   );
 }

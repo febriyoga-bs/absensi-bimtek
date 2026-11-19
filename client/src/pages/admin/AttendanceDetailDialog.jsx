@@ -29,7 +29,7 @@ function AssignmentSchools({ entry }) {
 
 export default function AttendanceDetailDialog({ details, onClose }) {
   const [detailResult, setDetailResult] = useState(null);
-  const [showAll, setShowAll] = useState(false);
+  const [attendanceFilter, setAttendanceFilter] = useState('checked_in');
   const dialog = useRef(null);
 
   useEffect(() => {
@@ -37,7 +37,7 @@ export default function AttendanceDetailDialog({ details, onClose }) {
     if (!dialog.current.open) dialog.current.showModal();
     let current = true;
     setDetailResult(null);
-    setShowAll(false);
+    setAttendanceFilter('checked_in');
     api(details.path, { admin: true })
       .then((entries) => { if (current) setDetailResult({ entries }); })
       .catch(() => { if (current) setDetailResult({ error: true }); });
@@ -47,7 +47,10 @@ export default function AttendanceDetailDialog({ details, onClose }) {
   const detailEntries = detailResult?.entries ?? details?.entries;
   const checkedIn = details?.filterByCheckIn ? detailEntries?.filter((entry) =>
     entry.people?.some((person) => person.status === 'valid' || person.status === 'review')) : null;
-  const shownEntries = details?.filterByCheckIn && !showAll ? checkedIn : detailEntries;
+  const notCheckedIn = details?.filterByCheckIn ? detailEntries?.filter((entry) =>
+    !entry.people?.some((person) => person.status === 'valid' || person.status === 'review')) : null;
+  const shownEntries = !details?.filterByCheckIn || attendanceFilter === 'all' ? detailEntries
+    : attendanceFilter === 'not_checked_in' ? notCheckedIn : checkedIn;
   return (
       <dialog ref={dialog} className="assignment-dialog" aria-labelledby="assignment-detail-title"
         onClose={onClose}>
@@ -68,10 +71,13 @@ export default function AttendanceDetailDialog({ details, onClose }) {
             {' '}Status absensi ditautkan hanya jika profil cocok; entri yang belum cocok tetap ditampilkan.
           </p>}
           {details.filterByCheckIn && detailEntries && <div className="assignment-tabs attendance-detail-tabs" role="group" aria-label="Tampilan daftar absensi">
-            <button type="button" aria-pressed={!showAll} className={!showAll ? 'on' : ''} onClick={() => setShowAll(false)}>
+            <button type="button" aria-pressed={attendanceFilter === 'checked_in'} className={attendanceFilter === 'checked_in' ? 'on' : ''} onClick={() => setAttendanceFilter('checked_in')}>
               Sudah absen <span>{number.format(checkedIn.length)}</span>
             </button>
-            <button type="button" aria-pressed={showAll} className={showAll ? 'on' : ''} onClick={() => setShowAll(true)}>
+            <button type="button" aria-pressed={attendanceFilter === 'not_checked_in'} className={attendanceFilter === 'not_checked_in' ? 'on' : ''} onClick={() => setAttendanceFilter('not_checked_in')}>
+              Belum absen <span>{number.format(notCheckedIn.length)}</span>
+            </button>
+            <button type="button" aria-pressed={attendanceFilter === 'all'} className={attendanceFilter === 'all' ? 'on' : ''} onClick={() => setAttendanceFilter('all')}>
               Semua peserta <span>{number.format(detailEntries.length)}</span>
             </button>
           </div>}
@@ -110,8 +116,8 @@ export default function AttendanceDetailDialog({ details, onClose }) {
               </li>
             ))}
           </ol>}
-          {shownEntries?.length === 0 && <p className="muted">{details.filterByCheckIn && !showAll
-            ? 'Belum ada yang absen pada cakupan ini.'
+          {shownEntries?.length === 0 && <p className="muted">{details.filterByCheckIn && attendanceFilter !== 'all'
+            ? attendanceFilter === 'not_checked_in' ? 'Semua peserta pada daftar ini sudah absen.' : 'Belum ada yang absen pada cakupan ini.'
             : `Tidak ada ${details.label.toLowerCase()} untuk ditampilkan.`}</p>}
         </>}
       </dialog>
