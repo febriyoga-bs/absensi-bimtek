@@ -164,7 +164,8 @@ export default function Dashboard() {
 
       <div className="kpis">
         <div className="kpi"><span className="kpi__icon"><FontIcon name="calendar-days" /></span><span><b>{loading ? <Skel w={40} h={26} /> : open.length}</b><small>Sesi sedang dibuka</small></span></div>
-        <div className="kpi"><span className="kpi__icon"><FontIcon name="circle-check" /></span><span><b>{loading ? <Skel w={56} h={26} /> : sum('valid') + sum('review')}</b><small>Sudah absen di sesi aktif</small></span></div>
+        <div className="kpi"><span className="kpi__icon"><FontIcon name="circle-check" /></span><span><b>{loading ? <Skel w={56} h={26} /> : number.format(sum('valid') + sum('review') + sum('rejected') + sum('unavailable'))}</b><small>Total catatan absensi di sesi aktif</small>
+          {!loading && <small>Sudah hadir: {number.format(sum('valid') + sum('review'))}</small>}</span></div>
         <div className="kpi"><span className="kpi__icon"><FontIcon name="triangle-exclamation" /></span><span><b>{loading ? <Skel w={40} h={26} /> : sum('review')}</b><small>Perlu dicek</small></span></div>
         {lo
           ? <div className="kpi"><span className="kpi__icon"><FontIcon name="location-dot" /></span><span><b style={{ fontSize: 16 }}>{user?.venue?.name}</b><small>Venue Anda</small></span></div>
@@ -174,13 +175,14 @@ export default function Dashboard() {
       <div className={`dashboard-overview${lo || venueId ? ' dashboard-overview--single' : ''}`}>
       <section className="dashboard-sessions" aria-labelledby="dashboard-sessions-title">
       <h3 id="dashboard-sessions-title">Absensi per sesi</h3>
-      <p className="muted small">Lihat jumlah yang sudah absen dibandingkan target tiap sesi.</p>
+      <p className="muted small">Total catatan mencakup Valid, Perlu dicek, Ditolak, dan Berhalangan. Sudah hadir mencakup Valid dan Perlu dicek.</p>
       {sessionsError && <p className="alert alert--warn" role="status">Rekap sesi gagal diperbarui. Klik Muat ulang untuk mencoba lagi.</p>}
       {loading && !sessionsError && <div className="stats"><SkelCards n={3} h={170} /></div>}
       {!loading && !sessions.length && <p className="muted">Belum ada sesi{!lo && <> — <Link to="/admin/sesi">buat sesi</Link></>}.</p>}
       <div className="stats">
         {sessions.map((s) => {
           const checkedIn = s.valid + s.review;
+          const totalRecords = checkedIn + s.rejected + s.unavailable;
           const pct = s.expected ? Math.round((checkedIn / s.expected) * 100) : 0;
           return (
             <div key={s.id} className={`stat ${s.is_open ? 'stat--open' : ''}`}>
@@ -191,7 +193,8 @@ export default function Dashboard() {
               <div className="muted small"><FontIcon name="clock" /> {fmtDT(s.starts_at)} – {fmtDT(s.ends_at)} WIB</div>
               <div className="chips"><span className={`tag tag--${s.role}`}>{s.role}</span>
                 {!s.check_in_day && <span className="tag tag--type">{s.type}</span>}</div>
-              <div className="stat__big">{number.format(checkedIn)}<small> / {number.format(s.expected)} sudah absen</small><strong>{pct}%</strong></div>
+              <div className="stat__big">{number.format(totalRecords)}<small> total catatan absensi</small></div>
+              <div className="muted small">Sudah hadir: <b>{number.format(checkedIn)}</b> / {number.format(s.expected)} target ({pct}%)</div>
               <div className="bar"><span style={{ width: `${Math.min(pct, 100)}%` }} /></div>
               <dl className="dashboard-statuses">
                 {sessionStatuses.filter(([key]) => key !== 'unavailable' || s.unavailable > 0).map(([key, label, icon]) => (

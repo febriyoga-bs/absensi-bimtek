@@ -12,6 +12,7 @@ import AttendanceDownloadDialog from './AttendanceDownloadDialog.jsx';
 
 const ST_LABEL = { valid: 'Valid', review: 'Perlu dicek', ditolak: 'Ditolak', berhalangan: 'Mundur/Berhalangan Hadir' };
 const PAGE = 48;
+const number = new Intl.NumberFormat('id-ID');
 const RetryPhoto = lazy(() => import('./Scan.jsx').then((module) => ({ default: module.LoShot })));
 const DELETE_CONFIRMATION = 'saya ingin menghapus absen ini';
 const dist = (m) => (m == null ? '-' : m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`);
@@ -211,7 +212,7 @@ export default function Records() {
       </div>
       {loadError && <p className="alert alert--err" role="alert">{loadError}</p>}
       <div className="tabs">
-        <button className={tab === 'absen' ? 'on' : ''} onClick={() => setTab('absen')}>Absensi masuk ({loading ? '…' : total})</button>
+        <button className={tab === 'absen' ? 'on' : ''} onClick={() => setTab('absen')}>Catatan absensi ({loading ? '…' : number.format(total)})</button>
         {!lo && <button className={tab === 'blok' ? 'on' : ''} onClick={() => setTab('blok')}>Percobaan diblokir ({attempts.length})</button>}
       </div>
 

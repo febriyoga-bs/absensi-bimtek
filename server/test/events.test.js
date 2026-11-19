@@ -686,8 +686,8 @@ test('verification returns the representative and searches both attendee and ori
   await scoped(3, async () => {
     const {rows:[person]} = await q(`INSERT INTO people(code,name,role,position,venue_id)
       VALUES('representative-test','Original Representative Test','peserta','Pengawas',1) RETURNING id`);
-    await q(`INSERT INTO attendance(person_id,session_id,venue_id,status) VALUES($1,1,1,'valid')`,[person.id]);
-    await q(`INSERT INTO venue_arrival_recap(venue_id,representatives) VALUES(1,$1::jsonb)
+    await q(`INSERT INTO attendance(person_id,session_id,venue_id,status,photo_path) VALUES($1,1,1,'valid','representative-test.jpg')`,[person.id]);
+    await q(`INSERT INTO venue_arrival_recap(venue_id,marks,representatives) VALUES(1,'{}',$1::jsonb)
       ON CONFLICT(venue_id) DO UPDATE SET representatives=EXCLUDED.representatives`,
       [JSON.stringify({[person.id]:{name:'Replacement Representative Test',original_name:person.name}})]);
   });
