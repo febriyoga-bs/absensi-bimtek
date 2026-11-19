@@ -80,7 +80,9 @@ export default function Scan() {
   const [search, setSearch] = useState('');
   const [filterVenue, setFilterVenue] = useState('');
   const [filterArrival, setFilterArrival] = useState('');
-  const [filterLo, setFilterLo] = useState(lo ? 'mine' : '');
+  const [selectedLo, setFilterLo] = useState(null);
+  // Derive the default after account metadata arrives; an explicit empty value means all.
+  const filterLo = selectedLo ?? (lo ? 'mine' : '');
   const [filterPosition, setFilterPosition] = useState('');
   const [showFilters, setShowFilters] = useState(() => savedDisplay().showFilters);
   const [hiddenColumns, setHiddenColumns] = useState(() => savedDisplay().hiddenColumns);

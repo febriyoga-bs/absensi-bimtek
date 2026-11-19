@@ -365,6 +365,9 @@ test('scan candidate pruning preserves owner mapping and excludes unknown owners
     const response=await request('/admin/scan/participants?event=3&category=sekolah&lo_id=1',{token});
     assert.equal(response.status,200,await response.clone().text());
     const data=await response.json();assert.equal(data.rows.length,1);assert.equal(data.rows[0].name,'Peserta Tahap 3');assert.equal(data.rows[0].can_check_in,true);
+    const defaultResponse=await request('/admin/scan/participants?event=3&category=sekolah',{token});
+    assert.equal(defaultResponse.status,200);
+    assert.deepEqual((await defaultResponse.json()).rows.map(row=>row.id),data.rows.map(row=>row.id));
     const empty=await request('/admin/scan/participants?event=3&category=sekolah&lo_id=999999',{token});
     assert.equal(empty.status,200);assert.equal((await empty.json()).rows.length,0);
   }finally{

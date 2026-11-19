@@ -615,7 +615,7 @@ r.get('/scan/participants', ah(async (req, res) => {
   }
   const limit = 30;
   const term = String(req.query.q || '').trim().slice(0, 150);
-  const ownerId = req.query.lo_id === 'mine' && req.user.role === 'lo' ? req.user.lo
+  const ownerId = (req.query.lo_id === 'mine' || req.query.lo_id == null) && req.user.role === 'lo' ? req.user.lo
     : req.query.lo_id == null || req.query.lo_id === '' ? null : Number(req.query.lo_id);
   const positionFilter = req.query.position || '';
   if (!['', 'bendahara', 'pengawas'].includes(positionFilter) || (positionFilter && category !== 'sekolah')) {
