@@ -583,6 +583,12 @@ const assignedToLo = (account, venue, includeOrganizations = false) => `(${accou
       ))
   )))`;
 const canCheckInForLo = (account, venue) => assignedToLo(account, venue, true);
+const recordedByLo = (account, venue) => `(${account}::int IS NULL OR (
+  p.role='peserta' AND a.venue_id=${venue}::int AND a.method IN ('manual','qr')
+  AND EXISTS (SELECT 1 FROM lo_accounts own WHERE own.id=${account}::int AND own.active
+    AND own.venue_id=${venue}::int AND a.scanned_by='LO '||own.name
+    AND NOT EXISTS (SELECT 1 FROM lo_accounts other WHERE other.id<>own.id
+      AND other.venue_id=own.venue_id AND other.name=own.name))))`;
 
 const canDeleteAttendance = (account, venue) => `(${account}::int IS NULL OR (
   a.venue_id=${venue}::int AND (
@@ -1127,7 +1133,9 @@ r.get('/attendance', ah(async (req, res) => {
     photo_history: photo_history.map(({photo_path,...version}) => ({...version,has_photo:!!photo_path})),
     photo_url: photo_path ? await photoUrl(photo_path) : null, has_photo: !!photo_path })));
   res.json({
-    rows: ownOnly ? out.map(({ ip, device_id, user_agent, ...row }) => ({ ...row, can_verify: false, can_delete: false, can_edit_note: false })) : out,
+    rows: ownOnly ? out.map(({ ip, device_id, user_agent, ...row }) => ({ ...row,
+      can_verify: row.role === 'peserta' && row.status !== 'berhalangan',
+      can_delete: row.role === 'peserta', can_edit_note: row.role === 'peserta' && row.status !== 'berhalangan' })) : out,
     recorders: ownOnly ? [] : recorders,
     total: status ? c[status] : c.total,
     counts: c,
@@ -1150,19 +1158,20 @@ r.patch('/attendance/:id/note', ah(async (req, res) => {
   const { rows: [updated] } = await q(
     `UPDATE attendance a SET participant_note=$1 FROM people p
      WHERE a.id=$2 AND p.id=a.person_id AND a.status<>'berhalangan'
-       AND ($3::int IS NULL OR a.venue_id=$4::int) AND ${canCheckInForLo('$3', '$4')}
+       AND ${recordedByLo('$3', '$4')}
      RETURNING a.id, a.participant_note`, [note, id, req.user.lo, req.user.venue]);
   if (!updated) throw new HttpError(404, 'Absensi tidak ditemukan atau catatannya tidak dapat Anda ubah.');
   res.json(updated);
 }));
 
-r.patch('/attendance/:id', requireSuper, ah(async (req, res) => {
+r.patch('/attendance/:id', ah(async (req, res) => {
+  if (req.user.role === 'lo' && req.body?.status !== 'ditolak') throw new HttpError(403, 'LO hanya dapat menolak absensi yang dicatatnya sendiri.');
   if (!['valid', 'review', 'ditolak'].includes(req.body?.status)) throw new HttpError(400, 'Status tidak valid');
   await assertOwnAttendance(req, req.params.id);
   const { rows } = await q(
     `UPDATE attendance a SET status=$1 FROM people p
      WHERE a.id=$2 AND p.id=a.person_id AND a.status<>'berhalangan'
-       AND ($3::int IS NULL OR a.venue_id=$4::int) AND ${assignedToLo('$3', '$4')}
+       AND ${recordedByLo('$3', '$4')}
      RETURNING a.id, a.status`, [req.body.status, req.params.id, req.user.lo, req.user.venue]);
   if (!rows.length) throw new HttpError(409, 'Status ini hanya dapat diubah untuk absensi peserta yang dapat Anda verifikasi.');
   res.json(rows[0]);
@@ -1177,7 +1186,7 @@ r.delete('/attendance/:id', ah(async (req, res) => {
 
   const { rows: [deleted] } = await q(
     `DELETE FROM attendance a USING people p
-     WHERE a.id=$1 AND p.id=a.person_id AND ${canDeleteAttendance('$2', '$3')}
+     WHERE a.id=$1 AND p.id=a.person_id AND ${recordedByLo('$2', '$3')}
      RETURNING a.photo_path,a.photo_history`,
     [id, req.user.lo, req.user.venue]
   );

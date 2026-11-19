@@ -534,12 +534,12 @@ test('verification and arrival recap APIs are restricted to the main admin', asy
     assert.equal(denied.status, 403);
     assert.equal((await request(path)).status, 200);
   }
-  assert.equal((await request('/admin/attendance/1?event=3', {method:'PATCH',token,body:{status:'ditolak'}})).status, 403);
+  assert.equal((await request('/admin/attendance/1?event=3', {method:'PATCH',token,body:{status:'ditolak'}})).status, 409);
   assert.equal((await request('/admin/venue-attendance?event=3', {token})).status, 200);
 });
 
-test('LO verification lists only their own recorded attendance and cannot change its status',async()=>{
-  let session,people=[];
+test('LO can edit notes, reject and delete only their own participant records',async()=>{
+  let session,people=[],ownId;
   const token=signAdmin({role:'lo',username:'lo-sama',accounts:[{event:3,id:1}]});
   try{
     await scoped(3,async()=>{
@@ -551,10 +551,20 @@ test('LO verification lists only their own recorded attendance and cannot change
       const response=await request(`/admin/attendance?event=3&session_id=${session}${suffix}`,{token});
       assert.equal(response.status,200,await response.clone().text());const data=await response.json();
       assert.equal(data.total,1);assert.equal(data.counts.total,1);assert.equal(data.rows[0].name,'Own recorded');
-      assert.deepEqual(data.recorders,[]);assert.equal(data.rows[0].can_verify,false);assert.equal(data.rows[0].can_delete,false);assert.equal(data.rows[0].can_edit_note,false);assert.ok(!('ip' in data.rows[0]));
-      assert.equal((await request(`/admin/attendance/${data.rows[0].id}?event=3`,{method:'PATCH',token,body:{status:'ditolak'}})).status,403);
+      assert.deepEqual(data.recorders,[]);assert.equal(data.rows[0].can_verify,true);assert.equal(data.rows[0].can_delete,true);assert.equal(data.rows[0].can_edit_note,true);assert.ok(!('ip' in data.rows[0]));
+      ownId=data.rows[0].id;
     }
     const all=await (await request(`/admin/attendance?event=3&session_id=${session}`)).json();assert.equal(all.total,3);
+    for(const row of all.rows.filter(row=>row.id!==ownId)) {
+      assert.equal((await request(`/admin/attendance/${row.id}/note?event=3`,{method:'PATCH',token,body:{note:'Not allowed'}})).status,404);
+      assert.equal((await request(`/admin/attendance/${row.id}?event=3`,{method:'PATCH',token,body:{status:'ditolak'}})).status,409);
+      assert.equal((await request(`/admin/attendance/${row.id}?event=3`,{method:'DELETE',token,body:{confirmation:'saya ingin menghapus absen ini'}})).status,404);
+    }
+    assert.equal((await request(`/admin/attendance/${ownId}/note?event=3`,{method:'PATCH',token,body:{note:'Catatan diperbarui'}})).status,200);
+    assert.equal((await request(`/admin/attendance/${ownId}?event=3`,{method:'PATCH',token,body:{status:'valid'}})).status,403);
+    assert.equal((await request(`/admin/attendance/${ownId}?event=3`,{method:'PATCH',token,body:{status:'ditolak'}})).status,200);
+    assert.equal((await request(`/admin/attendance/${ownId}?event=3`,{method:'DELETE',token,body:{confirmation:'salah'}})).status,400);
+    assert.equal((await request(`/admin/attendance/${ownId}?event=3`,{method:'DELETE',token,body:{confirmation:'saya ingin menghapus absen ini'}})).status,204);
   }finally{await scoped(3,async()=>{if(session){await q('DELETE FROM attendance WHERE session_id=$1',[session]);await q('DELETE FROM sessions WHERE id=$1',[session]);}await q('DELETE FROM people WHERE id=ANY($1::int[])',[people]);});}
 });
 

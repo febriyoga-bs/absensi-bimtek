@@ -148,7 +148,7 @@ export default function Records() {
   return (
     <>
       <div className="page-head"><div><h2>Verifikasi Absensi</h2>
-        <p className="muted">{lo ? 'Lihat absensi peserta yang Anda catat sendiri. Halaman ini hanya untuk melihat.' : 'Absen bertanda kuning terdeteksi mencurigakan. Periksa fotonya, lalu sahkan atau tolak.'}</p></div></div>
+        <p className="muted">{lo ? 'Kelola catatan, tolak, atau hapus absensi peserta yang Anda catat sendiri.' : 'Absen bertanda kuning terdeteksi mencurigakan. Periksa fotonya, lalu sahkan atau tolak.'}</p></div></div>
       <div className="toolbar">
         {!lo && <FilterField label="Cari nama / NPSN"><input type="search" aria-label="Cari nama atau NPSN" placeholder="Nama peserta atau NPSN" maxLength={150}
           value={searchInput} onChange={(e) => setSearchInput(e.target.value)} /></FilterField>}
@@ -247,7 +247,7 @@ export default function Records() {
                     onClick={() => { setNoteNotice(''); setNoteTarget(r); }}>Ubah catatan</button>}
                   <span className={`st st--${r.status}`}>{ST_LABEL[r.status]}</span>
                   {r.status !== 'berhalangan' && r.can_verify !== false && <>
-                    {r.status !== 'valid' && <button className="btn btn--sm btn--ok" onClick={() => setStatus(r.id, 'valid')}>Sahkan</button>}
+                    {!lo && r.status !== 'valid' && <button className="btn btn--sm btn--ok" onClick={() => setStatus(r.id, 'valid')}>Sahkan</button>}
                     {r.status !== 'ditolak' && <button className="btn btn--sm btn--danger" onClick={() => setStatus(r.id, 'ditolak')}>Tolak</button>}
                   </>}
                   {r.can_delete && <button type="button" className="btn btn--sm btn--danger" disabled={loading}
