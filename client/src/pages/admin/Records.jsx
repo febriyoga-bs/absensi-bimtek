@@ -230,6 +230,13 @@ export default function Records() {
                     onClick={() => setZoom(r.photo_url || adminUrl(`/photo/${r.id}`))} />}
               </div>
               <div className="rec__body">
+                <div className="rec__status-bar">
+                  <span>Status absensi</span>
+                  <span className={`rec__status-chip rec__status-chip--${r.status}`}>
+                    <Icon name={r.status === 'valid' ? 'check' : r.status === 'ditolak' ? 'x' : r.status === 'review' ? 'alert' : 'clock'} size={15} />
+                    {ST_LABEL[r.status] || r.status}
+                  </span>
+                </div>
                 {r.method === 'manual' && r.has_photo && <span className="rec__by"><Icon name="users" size={13} /> Diabsenkan {personName(r.scanned_by) || 'LO'}</span>}
                 <div className="rec__name">{personName(r.name)} <span className={`tag tag--${r.role}`}>{r.role}</span></div>
                 <div className="muted small">{r.code} · {r.institution || '-'}</div>
@@ -260,7 +267,6 @@ export default function Records() {
                 <div className="row">
                   {r.can_edit_note && r.role !== 'panitia' && <button type="button" className="btn btn--sm" disabled={loading}
                     onClick={() => { setNoteNotice(''); setNoteTarget(r); }}>Ubah catatan</button>}
-                  <span className={`st st--${r.status}`}>{ST_LABEL[r.status]}</span>
                   {lo && r.status === 'ditolak' && r.can_retry && <button type="button" className="btn btn--sm btn--primary"
                     disabled={loading || !selectedSession?.is_open} title={selectedSession?.is_open ? 'Ambil foto baru untuk absen ulang' : 'Sesi absensi sudah ditutup'}
                     onClick={() => setRetryTarget({ code: r.code, name: personName(r.name), position: r.position, school: r.institution,

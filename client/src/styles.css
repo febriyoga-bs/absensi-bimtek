@@ -519,7 +519,15 @@ select:disabled { background-color: var(--surface-2); color: var(--muted); curso
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 600px), 1fr)); gap: 14px; }
 .rec { background: #fff; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--line);
   display: grid; grid-template-columns: 320px 1fr; }
-.rec--review { border-color: #f0c27a; box-shadow: 0 0 0 3px var(--warn-soft); } .rec--ditolak { opacity: .6; }
+.rec--review { border-color: #f0c27a; box-shadow: 0 0 0 3px var(--warn-soft); }
+.rec--ditolak { border-color: var(--err); }
+.rec__status-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;
+  padding-bottom: 10px; margin-bottom: 6px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.rec__status-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 800; line-height: 1.4; background: var(--surface-2); color: var(--text); }
+.rec__status-chip--valid { background: var(--ok-soft); color: var(--ok); }
+.rec__status-chip--ditolak { background: var(--err-soft); color: var(--err); }
+.rec__status-chip--review { background: var(--warn-soft); color: var(--warn); }
 .rec img { width: 100%; height: 100%; min-height: 210px; max-height: 340px; object-fit: contain; cursor: zoom-in; background: #0b1220; display: block; }
 .rec__body { padding: 14px 16px; display: grid; gap: 4px; align-content: start; min-width: 0; }
 .rec__geo { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
