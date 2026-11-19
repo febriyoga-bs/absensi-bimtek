@@ -183,7 +183,7 @@ export default function Scan() {
     setPending(target.code);
     const r = await submit({ code: target.code, session_id: target.sessionId, photo, note });
     setPending(null);
-    if (r.kind !== 'err') {
+    if (r.kind === 'ok') {
       setShot(null);
       setRevision((value) => value + 1);
     }
@@ -459,11 +459,11 @@ export default function Scan() {
                             onClick={() => { setNoteNotice(''); setNoteTarget({ ...p.unavailable_record, name: p.name }); }}>Ubah alasan</button>}
                           {p.attended?.can_edit_note && <button type="button" className="btn btn--sm"
                             onClick={() => { setNoteNotice(''); setNoteTarget({ ...p.attended, name: p.name }); }}>Ubah catatan</button>}
-                          {p.can_check_in && !p.attended ? (
+                          {p.can_check_in && (!p.attended || p.attended.status === 'ditolak') ? (
                             <div className="row scan__row-actions">
                               <button className="btn btn--sm btn--primary" disabled={!p.session || !!pending}
-                                onClick={() => absenkan(p)}>{pending === p.code ? <Spinner size={13} /> : 'Absenkan'}</button>
-                              {!p.unavailable && <button className="btn btn--sm btn--danger scan__unavailable" disabled={!p.session || !!pending}
+                                onClick={() => absenkan(p)}>{pending === p.code ? <Spinner size={13} /> : p.attended?.status === 'ditolak' ? 'Absen ulang' : 'Absenkan'}</button>
+                              {!p.unavailable && !p.attended && <button className="btn btn--sm btn--danger scan__unavailable" disabled={!p.session || !!pending}
                                 onClick={() => { setUnavailableError(''); setUnavailableReason(''); setUnavailableTarget(p); }}>Mundur/Berhalangan Hadir</button>}
                             </div>
                           ) : <span className="muted small">{p.can_check_in ? '—' : organizationTab ? 'Di luar venue' : 'Di luar binaan'}</span>}
@@ -600,7 +600,7 @@ export function LoShot({ target, user, busy, onSend, onClose }) {
     if (!photo || !note.trim() || busy) return;
     setErr(null);
     const r = await onSend(photo, note.trim());
-    if (r?.kind === 'err') {
+    if (r?.kind === 'err' || r?.kind === 'dup') {
       setErr(r.msg);
       if (r.msg.startsWith('Foto peserta wajib')) setPhoto(null);
     }

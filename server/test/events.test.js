@@ -610,6 +610,49 @@ test('unavailable attendance requires a reason, preserves it in lists and export
   }
 });
 
+test('LO retries rejected attendance with a fresh photo once, preserving the previous record and enforcing session/assignment', async () => {
+  let prior,session,person,attendance;
+  const photoDir=await mkdtemp(join(tmpdir(),'lo-participant-retry-'));
+  const previousUploadDir=process.env.UPLOAD_DIR;
+  const token=signAdmin({role:'lo',username:'lo-sama',accounts:[{event:3,id:1}]});
+  try {
+    process.env.UPLOAD_DIR=photoDir;
+    const oldPhoto=join(photoDir,'old.jpg');await writeFile(oldPhoto,Buffer.from([255,216,255,217]));
+    await scoped(3,async()=>{
+      prior=(await q('SELECT data FROM assignment_roster WHERE id=1')).rows[0];
+      person=(await q("INSERT INTO people(code,name,role,position,venue_id,npsn) VALUES('retry-participant','Peserta Ulang','peserta','Pengawas',1,'91919191') RETURNING id")).rows[0].id;
+      const data={schools:[],attendance_assignments:{'1':[{code:'retry-participant',name:'Peserta Ulang',position:'Pengawas',npsn:'91919191',venue_id:1}]}};
+      await q('INSERT INTO assignment_roster(id,data) VALUES(1,$1) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data',[JSON.stringify(data)]);
+      session=(await q("INSERT INTO sessions(name,role,starts_at,ends_at,is_test) VALUES('Retry participant','peserta',now()-interval '1 hour',now()+interval '1 hour',true) RETURNING id")).rows[0].id;
+      attendance=(await q("INSERT INTO attendance(person_id,session_id,venue_id,status,method,scanned_by,photo_path,participant_note,lat,lng,risk_score) VALUES($1,$2,1,'ditolak','manual','LO LO Tahap 3',$3,'Catatan lama',-6,106,20) RETURNING id",[person,session,oldPhoto])).rows[0].id;
+    });
+    const bytes=Buffer.alloc(4500,1);bytes[0]=255;bytes[1]=216;
+    const body={code:'retry-participant',session_id:session,note:'Foto dan catatan baru',photo:`data:image/jpeg;base64,${bytes.toString('base64')}`};
+    assert.equal((await request('/admin/scan?event=3',{method:'POST',token,body:{...body,photo:'invalid'}})).status,400);
+    await scoped(3,()=>q("UPDATE sessions SET ends_at=now()-interval '1 minute' WHERE id=$1",[session]));
+    assert.equal((await request('/admin/scan?event=3',{method:'POST',token,body})).status,400);
+    await scoped(3,()=>q("UPDATE sessions SET ends_at=now()+interval '1 hour' WHERE id=$1",[session]));
+    assert.equal((await request('/admin/scan?event=3',{method:'POST',token,body:{...body,code:'B-12345678'}})).status,403);
+    const results=await Promise.all([1,2].map(()=>request('/admin/scan?event=3',{method:'POST',token,body})));
+    assert.deepEqual(results.map(r=>r.status).sort(),[200,409]);
+    const {rows:saved}=await scoped(3,()=>q('SELECT * FROM attendance WHERE person_id=$1 AND session_id=$2',[person,session]));
+    assert.equal(saved.length,1);const row=saved[0];assert.equal(row.id,attendance);assert.equal(row.status,'valid');
+    assert.equal(row.participant_note,'Foto dan catatan baru');assert.notEqual(row.photo_path,oldPhoto);
+    assert.equal(row.photo_history.length,1);assert.equal(row.photo_history[0].status,'ditolak');assert.equal(row.photo_history[0].photo_path,oldPhoto);assert.equal(row.photo_history[0].participant_note,'Catatan lama');
+    assert.equal(row.lat,null);assert.equal(row.lng,null);assert.equal(row.risk_score,0);
+    assert.equal((await request(`/admin/photo/${attendance}?event=3&version=0&bytes=true`)).status,200);
+    assert.equal((await request('/admin/scan?event=3',{method:'POST',token,body})).status,409);
+  } finally {
+    if(previousUploadDir==null)delete process.env.UPLOAD_DIR;else process.env.UPLOAD_DIR=previousUploadDir;
+    await scoped(3,async()=>{
+      if(session){await q('DELETE FROM attendance WHERE session_id=$1',[session]);await q('DELETE FROM sessions WHERE id=$1',[session]);}
+      if(person)await q('DELETE FROM people WHERE id=$1',[person]);
+      await(prior?q('UPDATE assignment_roster SET data=$1 WHERE id=1',[JSON.stringify(prior.data)]):q('DELETE FROM assignment_roster WHERE id=1'));
+    });
+    await rm(photoDir,{recursive:true,force:true});
+  }
+});
+
 test('an explicit identity merge updates old sessions and new logins without matching passwords or names', async () => {
   const ids={};
   for(const event of [3,4])await scoped(event,async()=>{

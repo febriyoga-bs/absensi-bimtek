@@ -863,7 +863,8 @@ r.post('/scan', requireLo, ah(async (req, res) => {
     });
   };
   const existing = await findExisting();
-  if (existing && (unavailable || existing.status !== 'berhalangan' || existing.venue_id !== venueId)) {
+  if (existing && (unavailable || !['berhalangan','ditolak'].includes(existing.status) || existing.venue_id !== venueId
+    || (existing.status === 'ditolak' && (method !== 'manual' || !photo)))) {
     return duplicate(existing);
   }
 
@@ -878,10 +879,16 @@ r.post('/scan', requireLo, ah(async (req, res) => {
      WHERE s.id=$2 AND s.is_test=$13::boolean AND now() BETWEEN s.starts_at AND s.ends_at AND ${sessionApplies('$3::int')}
        AND EXISTS (SELECT 1 FROM people p WHERE p.id=$1 AND p.archived_at IS NULL AND ${canCheckInForLo('$12', '$3')})
      ON CONFLICT (person_id, session_id) DO UPDATE SET
+       photo_history=attendance.photo_history || jsonb_build_array(jsonb_build_object(
+         'photo_path',attendance.photo_path,'at',attendance.created_at,'status',attendance.status,
+         'venue_id',attendance.venue_id,'method',attendance.method,'scanned_by',attendance.scanned_by,
+         'participant_note',attendance.participant_note,'flags',attendance.flags)),
        status=EXCLUDED.status, flags=EXCLUDED.flags, method=EXCLUDED.method, scanned_by=EXCLUDED.scanned_by,
        ip=EXCLUDED.ip, user_agent=EXCLUDED.user_agent, photo_path=EXCLUDED.photo_path,
+       lat=NULL,lng=NULL,accuracy_m=NULL,distance_m=NULL,risk_score=0,samples=NULL,device_id=NULL,client_time=NULL,
        participant_note=EXCLUDED.participant_note, created_at=EXCLUDED.created_at
-     WHERE attendance.status='berhalangan' AND EXCLUDED.status='valid'
+     WHERE (attendance.status='berhalangan' OR (attendance.status='ditolak' AND EXCLUDED.method='manual' AND EXCLUDED.photo_path IS NOT NULL))
+       AND EXCLUDED.status='valid'
        AND attendance.venue_id IS NOT DISTINCT FROM EXCLUDED.venue_id
      RETURNING created_at`,
     [person.id, session.id, venueId, status,
