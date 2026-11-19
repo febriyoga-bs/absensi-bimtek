@@ -54,6 +54,7 @@ export default function Records() {
   const status = lo ? '' : params.get('status') || '';
   const sort = lo ? 'risk' : params.get('sort') || 'risk';
   const position = params.get('position') || '';
+  const role = params.get('role') || '';
   const venue = lo ? '' : params.get('venue') || '';
   const page = Math.max(Number(params.get('hal')) || 1, 1);
   // ganti filter → kembali ke halaman 1
@@ -98,6 +99,7 @@ export default function Records() {
       ...(recordedBy && { recorded_by: recordedBy }),
       ...(search && { q: search }),
       ...(position && { position }),
+      ...(role && { role }),
       ...(status && { status }), ...(venue && { venue_id: venue }),
     });
     setLoading(true); setLoadError('');
@@ -105,10 +107,10 @@ export default function Records() {
       .then((d) => { if (loadRevision.current !== revision) return; setRows(d.rows); setRecorders(d.recorders || []); setTotal(d.total); setCounts(d.counts); window.scrollTo({ top: 0 }); })
       .catch((error) => { if (loadRevision.current === revision) setLoadError(error.message); })
       .finally(() => { if (loadRevision.current === revision) setLoading(false); });
-    if (!lo) api(`/admin/attempts?session_id=${sid}${venue ? `&venue_id=${venue}` : ''}${position ? `&position=${encodeURIComponent(position)}` : ''}`, { admin: true })
+    if (!lo) api(`/admin/attempts?session_id=${sid}${venue ? `&venue_id=${venue}` : ''}${position ? `&position=${encodeURIComponent(position)}` : ''}${role ? `&role=${encodeURIComponent(role)}` : ''}`, { admin: true })
       .then((data) => { if (loadRevision.current === revision) setAttempts(data); }).catch(() => {});
   };
-  useEffect(() => { load(); return () => { loadRevision.current++; }; }, [sid, requestedSid, status, venue, position, recordedBy, search, sort, page, sessions]);
+  useEffect(() => { load(); return () => { loadRevision.current++; }; }, [sid, requestedSid, status, venue, position, role, recordedBy, search, sort, page, sessions]);
 
   async function setStatus(id, st) {
     await api(`/admin/attendance/${id}`, { method: 'PATCH', admin: true, body: { status: st } });
@@ -188,6 +190,11 @@ export default function Records() {
           <option value="bendahara">Bendahara</option>
           <option value="pengawas">Pengawas</option>
           <option value="fasil">Fasilitator</option>
+          <option value="dinas">Dinas Pendidikan</option>
+          <option value="bpmp">BB/BPMP</option>
+        </select></FilterField>
+        <FilterField label="Peserta / Panitia"><select value={role} onChange={(e) => setParam('role', e.target.value)}>
+          <option value="">Peserta dan Panitia</option><option value="peserta">Peserta</option><option value="panitia">Panitia</option>
         </select></FilterField>
         {!lo && <><FilterField label="Status absensi"><select value={status} onChange={(e) => setParam('status', e.target.value)}>
           <option value="">Semua status{counts ? ` (${counts.total})` : ''}</option>
@@ -324,7 +331,7 @@ export default function Records() {
       {retryTarget && <Suspense fallback={<p role="status">Memuat kamera…</p>}><RetryPhoto target={retryTarget} user={user} busy={retryBusy}
         onSend={retryAttendance} onClose={() => { if (!retryBusy) setRetryTarget(null); }} /></Suspense>}
       {downloadOpen && <AttendanceDownloadDialog sessions={sessions} venues={venues} lo={lo}
-        initial={{ session_id: String(sid), venue_id: venue, recorded_by: recordedBy, position, status, q: search }} onClose={() => setDownloadOpen(false)} />}
+        initial={{ session_id: String(sid), venue_id: venue, recorded_by: recordedBy, position, role, status, q: search }} onClose={() => setDownloadOpen(false)} />}
       <dialog ref={deleteDialog} className="assignment-dialog" aria-labelledby="delete-attendance-title"
         aria-describedby="delete-attendance-description" onCancel={(event) => { if (deleting) event.preventDefault(); }}>
         <header><h3 id="delete-attendance-title">Hapus absensi</h3></header>

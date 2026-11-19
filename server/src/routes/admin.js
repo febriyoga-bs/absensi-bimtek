@@ -1092,14 +1092,17 @@ const attendancePositions = {
   bendahara: "lower(trim(p.position))='bendahara'",
   pengawas: "lower(trim(p.position))='pengawas'",
   fasil: "lower(trim(p.position)) ~ '^fasil(itator)?($|[[:space:]])'",
+  dinas: "lower(trim(p.position))='dinas pendidikan'",
+  bpmp: "lower(trim(p.position))='bb/bpmp'",
 };
 function attendancePositionFilter(req) {
   const position = req.query.position;
-  if (!position) return 'true';
-  if (typeof position !== 'string' || !Object.hasOwn(attendancePositions, position)) {
+  const role = req.query.role;
+  if (role && !['peserta', 'panitia'].includes(role)) throw new HttpError(400, 'Filter Peserta/Panitia tidak valid.');
+  if (position && (typeof position !== 'string' || !Object.hasOwn(attendancePositions, position))) {
     throw new HttpError(400, 'Filter jabatan tidak valid.');
   }
-  return attendancePositions[position];
+  return `(${position ? attendancePositions[position] : 'true'}) AND (${role ? `p.role='${role}'` : 'true'})`;
 }
 function attendanceSearch(req) {
   if (req.query.q != null && typeof req.query.q !== 'string') throw new HttpError(400, 'Pencarian tidak valid.');

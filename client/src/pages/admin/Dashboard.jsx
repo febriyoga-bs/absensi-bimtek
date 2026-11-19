@@ -134,7 +134,7 @@ export default function Dashboard() {
 
   return (
     <div className="attendance-dashboard">
-      <div className="page-head">
+      <div className="page-head attendance-dashboard-header">
         <div>
           <h2>Rekap Absensi{lo && user?.venue ? ` — ${user.venue.name}` : ''}</h2>
           <p className="muted">Klik Muat ulang atau reload browser untuk memperbarui data absensi.</p>

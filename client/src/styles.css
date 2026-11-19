@@ -430,6 +430,20 @@ select:disabled { background-color: var(--surface-2); color: var(--muted); curso
 .stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(330px, 100%), 1fr)); gap: 16px; }
 .venue-attendance-section { margin-bottom: 22px; }
 .dashboard-filters select { width: auto; max-width: 100%; }
+.attendance-dashboard-header { align-items: end; flex-wrap: nowrap; }
+.attendance-dashboard-header > :first-child { flex: 1 1 auto; }
+.attendance-dashboard-header > .dashboard-filters { display: flex; flex: 0 1 650px; flex-wrap: nowrap; align-items: end; gap: 10px; min-width: 0; }
+.attendance-dashboard-header .dashboard-filters > .filter-field { flex: 1 1 220px; min-width: 0; }
+.attendance-dashboard-header .dashboard-filters select { width: 100%; }
+.attendance-dashboard-header .dashboard-filters > button { order: 1; flex: 0 0 auto; white-space: nowrap; }
+@media (max-width: 1100px) {
+  .attendance-dashboard-header { flex-wrap: wrap; }
+  .attendance-dashboard-header > .dashboard-filters { flex: 1 1 100%; }
+}
+@media (max-width: 600px) {
+  .attendance-dashboard-header > .dashboard-filters { flex-wrap: wrap; }
+  .attendance-dashboard-header .dashboard-filters > .filter-field { flex: 1 1 100%; }
+}
 .dashboard-overview { display: grid; gap: 26px; }
 .dashboard-overview > section { min-width: 0; margin: 0; }
 .dashboard-overview--single .venue-attendance-grid { grid-template-columns: minmax(0, 1fr); }

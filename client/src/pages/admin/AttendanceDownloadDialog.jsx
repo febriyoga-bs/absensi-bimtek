@@ -48,7 +48,7 @@ export default function AttendanceDownloadDialog({ sessions, venues, lo, initial
       const heading = `Rekap Absensi - ${sessionName} - ${venueName}`;
       if (format === 'pdf') {
         const title = [sessionName, venueName,
-          selected.recorded_by ? personName(selected.recorded_by) : 'Semua LO pencatat', loLabel(selected.position) || 'Semua jabatan', statusLabels[selected.status] || 'Semua status'].filter(Boolean).join(' · ');
+          selected.recorded_by ? personName(selected.recorded_by) : 'Semua LO pencatat', selected.role ? personName(selected.role) : 'Peserta dan Panitia', loLabel(selected.position) || 'Semua jabatan', statusLabels[selected.status] || 'Semua status'].filter(Boolean).join(' · ');
         await printAttendance({ filters: selected, title, heading, onProgress: setProgress });
       } else {
         const query = new URLSearchParams({ ...selected, ...(scope === 'all' ? { include_all: 'true' } : { recorded_only: 'true' }) });
@@ -84,7 +84,8 @@ export default function AttendanceDownloadDialog({ sessions, venues, lo, initial
           {filters.recorded_by && !recorders.includes(filters.recorded_by) && <option value={filters.recorded_by}>{personName(filters.recorded_by)}</option>}
           {recorders.map((name) => <option key={name} value={name}>{personName(name)}</option>)}
         </select></FilterField>
-        <FilterField label="Jabatan"><select value={filters.position} onChange={change('position')}><option value="">Semua jabatan</option><option value="lo">LO</option><option value="bendahara">Bendahara</option><option value="pengawas">Pengawas</option><option value="fasil">Fasilitator</option></select></FilterField>
+        <FilterField label="Peserta / Panitia"><select value={filters.role || ''} onChange={change('role')}><option value="">Peserta dan Panitia</option><option value="peserta">Peserta</option><option value="panitia">Panitia</option></select></FilterField>
+        <FilterField label="Jabatan"><select value={filters.position} onChange={change('position')}><option value="">Semua jabatan</option><option value="lo">LO</option><option value="bendahara">Bendahara</option><option value="pengawas">Pengawas</option><option value="fasil">Fasilitator</option><option value="dinas">Dinas Pendidikan</option><option value="bpmp">BB/BPMP</option></select></FilterField>
         <FilterField label="Status absensi"><select value={filters.status} onChange={change('status')}><option value="">Semua status</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></FilterField>
         {format !== 'pdf' && <FilterField label="Cakupan peserta"><select value={scope} onChange={(event) => setScope(event.target.value)}><option value="recorded">Catatan absensi</option><option value="all">Semua peserta, termasuk belum absen</option></select></FilterField>}
       </fieldset>
