@@ -45,6 +45,7 @@ export function sourceAttendance(source, profiles, position) {
     }
     if (matches.length > 1 && usableSchool) matches = matches.filter(p => (p.institution || '').split(';').some(part => schoolKey(part) === institution));
     if (!matches.length && usableSchool) matches = bySchool.get(institution) || [];
+    const explicit = row.profile_id == null ? [] : candidates.filter(p => p.id === row.profile_id);
     const ids = schoolIds(row.npsn);
     if (ids.length || matches.length !== 1) {
       const schoolMatches = candidates.filter(p => ids.length
@@ -54,6 +55,7 @@ export function sourceAttendance(source, profiles, position) {
       // Never choose arbitrarily between profiles or fall back from a conflicting NPSN.
       matches = similar.length === 1 ? similar : ids.length ? similar : matches;
     }
+    if (explicit.length === 1) matches = explicit;
     return { row, match: matches.length === 1 ? matches[0] : null, ambiguous: matches.length > 1 };
   });
   const occurrences = new Map();

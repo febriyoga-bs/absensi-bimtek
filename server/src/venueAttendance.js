@@ -1,3 +1,4 @@
+import { schoolIdentity, similarSchool } from './schoolIdentity.js';
 import { q } from './db.js';
 import { HttpError } from './util.js';
 import { eventVenueScope } from './eventVenues.js';
@@ -126,7 +127,13 @@ export async function getVenueAttendanceDetails(venueId, group, day = null, test
     group === 'other' ? Promise.resolve([]) : loadVenueAttendanceDetails(venueId, group, day, testSession),
     loadSessionRecords(venueId, day, testSession),
   ]);
-  const actual = records.filter(p => recordGroup(p) === group);
+  const actual = records.filter(p => recordGroup(p) === group).map(p => {
+    const linked = entries.filter(e => e.source_profile_id === p.person_id);
+    const arrived = linked.filter(e => e.people?.some(person => ['selesai','sudah_tiba','sedang_antre'].includes(person.arrival_status)));
+    const candidates = arrived.length ? arrived : linked;
+    const names = [...new Set(candidates.map(e => e.name).filter(name => name && name !== '-' && !/belum ada/i.test(name)))];
+    return names.length === 1 ? {...p,name:names[0]} : p;
+  });
   const recordedIds = new Set(actual.map(p => p.person_id));
   const recordedNames = new Set(actual.flatMap(p => [nameKey(p.name), nameKey(p.original_name)]));
   const recordedSchools = new Set(actual.flatMap(p => String(p.npsn || '').split(';').map(v => v.trim()).filter(Boolean)));
@@ -146,7 +153,7 @@ export async function getVenueAttendanceDetails(venueId, group, day = null, test
     SELECT l.name,NULL,NULL FROM lo_accounts l
     WHERE l.active AND l.venue_id=$1 AND $2 IN ('dinas pendidikan','bb/bpmp')`,
   [venueId, participantPositions[group]]);
-  const { rows: schoolAssignments } = group === 'bendahara' ? await q(`
+  const { rows: schoolAssignments } = ['bendahara','pengawas'].includes(group) ? await q(`
     SELECT s.npsn,s.name AS institution,l.name AS lo_name
     FROM assignment_roster r
     CROSS JOIN LATERAL jsonb_to_recordset(r.data->'schools') AS s(npsn text,name text,venue text,lo text)
@@ -163,13 +170,19 @@ export async function getVenueAttendanceDetails(venueId, group, day = null, test
       const assignedSchools = String(assignment.npsn || '').split(';').map(value => value.trim()).filter(Boolean);
       const sameSchool = schools.some(id => assignedSchools.includes(id));
       if (group === 'bendahara' && sameSchool) return true;
-      return nameKey(assignment.name) === nameKey(entry.name)
+      return [entry.name, entry.original_name].filter(Boolean).some(name => nameKey(assignment.name) === nameKey(name))
         && (!schools.length || !assignedSchools.length || sameSchool);
     });
-    const schoolOwners = schoolAssignments.filter(school => schools.length
+    const institutions = String(entry.institution || '').split(';').filter(Boolean);
+    let schoolOwners = schoolAssignments.filter(school => schools.length
       ? schools.includes(school.npsn)
-      : nameKey(school.institution) && nameKey(school.institution) === nameKey(entry.institution));
-    return { ...entry, assigned_los: [...new Set([...assigned, ...schoolOwners].map(assignment => assignment.lo_name))] };
+      : institutions.some(institution => schoolIdentity(institution) && schoolIdentity(institution) === schoolIdentity(school.institution)));
+    if (!schoolOwners.length) {
+      const similar = schoolAssignments.filter(school => institutions.some(institution => similarSchool(institution,school.institution)));
+      if (new Set(similar.map(school => school.lo_name)).size === 1) schoolOwners = similar;
+    }
+    const owners = schoolOwners.length ? schoolOwners : assigned;
+    return { ...entry, assigned_los: [...new Set(owners.map(assignment => assignment.lo_name))] };
   });
 }
 
@@ -244,7 +257,7 @@ export async function getVenueAttendance(venueId, day = null, testSession = null
   const ids = rosterVenueIds(venues, roster);
   for (const source of sources) {
     const card = cards.get(source.venue_id); if (!card) continue;
-    for (const group of ['bendahara','pengawas','dinas']) {
+    for (const group of ['bendahara','dinas']) {
       const result = sourceAttendance(source,profiles,participantPositions[group]);
       if (result) card[group] = result.count;
     }

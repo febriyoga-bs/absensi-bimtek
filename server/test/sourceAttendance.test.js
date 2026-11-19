@@ -49,3 +49,10 @@ test('explicit unconfirmed source rows are excluded while confirmed pending arri
  const r=sourceAttendance(s,[],'pengawas');
  assert.deepEqual(r.details.map(row=>row.name),['Bersedia','Tiba']);
 });
+
+test('explicit source link accepts representative with different school spelling within the same venue and category',()=>{
+ const s=source([['Ahmad Abdul Azis','SD NEGERI PANJANG III']]);s.detail_rows[0].profile_id=1;
+ const p=profile(1,'Nanil Liana Indah Arera','SD NEGERI PANJANG III KEDUNGADEM');
+ assert.equal(sourceAttendance(s,[p],'pengawas').count.recorded,1);
+ assert.equal(sourceAttendance(s,[{...p,venue_id:2}],'pengawas').count.recorded,0);
+});
