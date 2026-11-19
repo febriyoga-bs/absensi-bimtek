@@ -549,6 +549,7 @@ test('LO can edit notes, reject and delete only their own participant records',a
       session=(await q("INSERT INTO sessions(name,role,starts_at,ends_at) VALUES('Own verification','semua',now(),now()+interval '1 hour') RETURNING id")).rows[0].id;
       people=(await q("INSERT INTO people(code,name,role,position,venue_id) VALUES('own-v1','Own recorded','peserta','Bendahara',1),('own-v2','Other recorder','peserta','Bendahara',1),('own-v3','Self checkin','peserta','Bendahara',1) RETURNING id")).rows.map(p=>p.id);
       await q("INSERT INTO attendance(person_id,session_id,venue_id,status,method,scanned_by,ip) VALUES($1,$4,1,'valid','manual','LO LO Tahap 3','127.0.0.1'),($2,$4,1,'review','manual','LO Other','127.0.0.1'),($3,$4,1,'valid','selfie','LO LO Tahap 3','127.0.0.1')",[...people,session]);
+      await q('UPDATE people SET npsn=$1 WHERE id=ANY($2::int[])',['00112233',people]);
     });
     for(const suffix of ['', '&recorded_by=LO%20Other&venue_id=999']){
       const response=await request(`/admin/attendance?event=3&session_id=${session}${suffix}`,{token});
@@ -556,6 +557,12 @@ test('LO can edit notes, reject and delete only their own participant records',a
       assert.equal(data.total,1);assert.equal(data.counts.total,1);assert.equal(data.rows[0].name,'Own recorded');
       assert.deepEqual(data.recorders,[]);assert.equal(data.rows[0].can_verify,true);assert.equal(data.rows[0].can_delete,true);assert.equal(data.rows[0].can_edit_note,true);assert.ok(!('ip' in data.rows[0]));
       ownId=data.rows[0].id;
+    }
+    for(const [term,expected] of [['OWN REC',1],['00112233',1],['Other recorder',0],['Self checkin',0],['tidak-ditemukan',0]]) {
+      const response=await request(`/admin/attendance?event=3&session_id=${session}&q=${encodeURIComponent(term)}`,{token});
+      assert.equal(response.status,200);const data=await response.json();
+      assert.equal(data.total,expected);assert.equal(data.counts.total,expected);assert.equal(data.rows.length,expected);
+      if(expected)assert.equal(data.rows[0].id,ownId);
     }
     const all=await (await request(`/admin/attendance?event=3&session_id=${session}`)).json();assert.equal(all.total,3);
     for(const row of all.rows.filter(row=>row.id!==ownId)) {

@@ -48,7 +48,7 @@ export default function Records() {
     || sessions.find((session) => session.is_open) || sessions[sessions.length - 1];
   const sid = selectedSession ? String(selectedSession.id) : '';
   const recordedBy = lo ? '' : params.get('recorded_by') || '';
-  const search = lo ? '' : params.get('q') || '';
+  const search = params.get('q') || '';
   const [searchInput, setSearchInput] = useState(search);
   const status = lo ? '' : params.get('status') || '';
   const sort = lo ? 'risk' : params.get('sort') || 'risk';
@@ -165,8 +165,8 @@ export default function Records() {
       <div className="page-head"><div><h2>Verifikasi Absensi</h2>
         <p className="muted">{lo ? 'Kelola catatan, tolak, atau hapus absensi peserta yang Anda catat sendiri.' : 'Absen bertanda kuning terdeteksi mencurigakan. Periksa fotonya, lalu sahkan atau tolak.'}</p></div></div>
       <div className="toolbar">
-        {!lo && <FilterField label="Cari nama / NPSN"><input type="search" aria-label="Cari nama atau NPSN" placeholder="Nama peserta atau NPSN" maxLength={150}
-          value={searchInput} onChange={(e) => setSearchInput(e.target.value)} /></FilterField>}
+        <FilterField label="Cari nama / NPSN"><input type="search" aria-label="Cari nama atau NPSN" placeholder="Nama peserta atau NPSN" maxLength={150}
+          value={searchInput} onChange={(e) => setSearchInput(e.target.value)} /></FilterField>
         <FilterField label="Sesi absensi"><select value={sid} onChange={(e) => setParam('sesi', e.target.value)}>
           {sessions.map((s) => <option key={s.id} value={s.id}>{sessionTitle(s)} ({s.is_test ? 'Uji coba · ' : ''}{s.role})</option>)}
         </select></FilterField>
