@@ -93,7 +93,7 @@ export async function printAttendance({ filters, title, heading = 'Rekap Absensi
       ...textLines(row.institution || '-'), ...textLines(`Venue: ${row.venue_name || '-'}`),
       ...textLines(`${time(row.created_at)} WIB - ${statuses[row.status] || row.status}`),
       ...(row.scanned_by ? textLines(`Dicatat oleh ${personName(row.scanned_by)}`) : []),
-      ...(row.participant_note ? [...textLines('Catatan kendala', true), ...textLines(row.participant_note)] : []),
+      ...(row.participant_note ? [...textLines(row.status === 'berhalangan' ? 'Alasan berhalangan hadir' : 'Catatan kendala', true), ...textLines(row.participant_note)] : []),
       ...(!photo ? textLines('Tidak ada foto') : []) ];
     const count = Math.max(2, Math.floor((cardHeight - (photo ? 28 : 0) - 8) / lineHeight));
     let part = lines;

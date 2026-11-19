@@ -3,6 +3,14 @@ import { parseRows } from './peopleImport.js';
 import { HttpError } from './util.js';
 
 export const currentProgressSql = (report, progress) => `(${progress}.npsn IS NOT NULL AND (${report}.updated_at IS NULL OR ${progress}.updated_at>=${report}.updated_at))`;
+export function periodStatusSql(progress, period) {
+  const fields = period === 'weekly' ? ['L3 Mingguan Terisi','L4 Mingguan Lengkap','R2 Mingguan Direviu','R3 Mingguan Lengkap Direviu']
+    : ['L5 Bulanan Terisi','L6 Bulanan Lengkap','R4 Bulanan Direviu','R5 Bulanan Lengkap Direviu'];
+  const flag = (index) => `lower(trim(COALESCE(${progress}.indicators->>'${fields[index]}',${progress}.indicators->>'${fields[index].toLowerCase()}','')))`;
+  return `CASE WHEN ${flag(3)}='sudah' THEN 'reviewed_complete'
+    WHEN ${flag(2)}='sudah' THEN 'reviewed' WHEN ${flag(1)}='sudah' THEN 'complete'
+    WHEN ${flag(0)}='sudah' THEN 'filled' WHEN ${flag(0)}='belum' THEN 'not_filled' ELSE 'no_data' END`;
+}
 export const progressStatusSql = (report, progress) => `CASE WHEN NOT ${currentProgressSql(report,progress)} THEN COALESCE(${report}.status,'belum_ada_data')
   WHEN NOT ${progress}.sent THEN 'belum_kirim'
   WHEN NOT ${progress}.reviewed THEN 'menunggu_reviu'
@@ -49,10 +57,10 @@ export async function importProgressCsv(csv) {
   ), known AS (
     SELECT DISTINCT s.npsn FROM assignment_roster r CROSS JOIN LATERAL jsonb_to_recordset(r.data->'schools') AS s(npsn text) WHERE r.id=1
   ), saved AS (
-    INSERT INTO school_progress_report(npsn,progress,filled,sent,reviewed,indicators)
+    INSERT INTO school_progress_report AS existing(npsn,progress,filled,sent,reviewed,indicators)
     SELECT i.* FROM incoming i JOIN known k USING(npsn)
     ON CONFLICT(npsn) DO UPDATE SET progress=EXCLUDED.progress,filled=EXCLUDED.filled,sent=EXCLUDED.sent,
-      reviewed=EXCLUDED.reviewed,indicators=EXCLUDED.indicators,updated_at=now()
+      reviewed=EXCLUDED.reviewed,indicators=COALESCE(existing.indicators,'{}'::jsonb)||EXCLUDED.indicators,updated_at=now()
     RETURNING *
   ) SELECT (SELECT count(*)::int FROM saved) AS updated,
     (SELECT count(*)::int FROM incoming i LEFT JOIN known k USING(npsn) WHERE k.npsn IS NULL) AS skipped,

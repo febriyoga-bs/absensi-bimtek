@@ -3,7 +3,7 @@ import { q } from './db.js';
 import { parseRows } from './peopleImport.js';
 import { HttpError } from './util.js';
 import { reportingDates, reportingDays } from './reportingDays.js';
-import { importProgressCsv, progressStatusSql, currentProgressSql } from './progressImport.js';
+import { importProgressCsv, progressStatusSql, currentProgressSql, periodStatusSql } from './progressImport.js';
 import { currentEvent, eventId } from './eventContext.js';
 import { createAsyncCache } from './asyncCache.js';
 
@@ -64,6 +64,7 @@ export async function getReporting(dataset, user) {
          FROM venue_arrival_recap r CROSS JOIN LATERAL jsonb_each_text(r.marks) entry
        )
        SELECT s.npsn, p.provinsi, p.peringkat, ${progressStatusSql('m','pr')} AS status,
+       ${periodStatusSql('pr','weekly')} AS weekly_status, ${periodStatusSql('pr','monthly')} AS monthly_status,
        CASE WHEN ${currentProgressSql('m','pr')} AND NOT pr.sent THEN NULL ELSE to_char(m.submitted_on,'YYYY-MM-DD') END AS submitted_on,
        CASE WHEN ${currentProgressSql('m','pr')} THEN pr.progress ELSE m.progress END::float AS progress,
        GREATEST(m.updated_at,pr.updated_at) AS updated_at,
@@ -118,6 +119,7 @@ export async function getReporting(dataset, user) {
       return { npsn, name, province: report?.provinsi, city, venue, lo, room, rank: Number(report?.peringkat) || null,
         facilitator_id: ids.get(facilitatorKey(row, row.facilitator)),
         status: report?.status || 'belum_ada_data', progress: report?.progress,
+        weekly_status: report?.weekly_status || 'no_data', monthly_status: report?.monthly_status || 'no_data',
         submitted_on: report?.submitted_on, wait_days: report?.wait_days,
         check_in_dates: report?.check_in_dates || [],
         venue_attendance: report?.arrival_status === 'sedang_antre' ? 'sedang_antre'

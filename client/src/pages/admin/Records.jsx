@@ -254,7 +254,7 @@ export default function Records() {
                     {r.flags.filter((f) => f.code !== 'qr_lo').map((f, i) => <li key={i} title={f.detail}>{FLAG_LABEL[f.code] || f.code}<br /><small>{f.detail}</small></li>)}
                   </ul>
                 )}
-                {r.participant_note && <div className="rec__note small"><b>Catatan</b><div>{r.participant_note}</div></div>}
+                {(r.participant_note || r.status === 'berhalangan') && <div className="rec__note small"><b>{r.status === 'berhalangan' ? 'Alasan berhalangan hadir' : 'Catatan'}</b><div>{r.participant_note || 'Belum dicatat'}</div></div>}
                 {!!r.photo_history?.length && <details className="attendance-photo-history">
                   <summary>Riwayat foto ({r.photo_history.length})</summary>
                   {r.photo_history.map((version,index) => <figure key={index}>
@@ -266,7 +266,7 @@ export default function Records() {
                 </details>}
                 <div className="row">
                   {r.can_edit_note && r.role !== 'panitia' && <button type="button" className="btn btn--sm" disabled={loading}
-                    onClick={() => { setNoteNotice(''); setNoteTarget(r); }}>Ubah catatan</button>}
+                    onClick={() => { setNoteNotice(''); setNoteTarget(r); }}>{r.status === 'berhalangan' ? 'Ubah alasan' : 'Ubah catatan'}</button>}
                   {lo && r.status === 'ditolak' && r.can_retry && <button type="button" className="btn btn--sm btn--primary"
                     disabled={loading || !selectedSession?.is_open} title={selectedSession?.is_open ? 'Ambil foto baru untuk absen ulang' : 'Sesi absensi sudah ditutup'}
                     onClick={() => setRetryTarget({ code: r.code, name: personName(r.name), position: r.position, school: r.institution,

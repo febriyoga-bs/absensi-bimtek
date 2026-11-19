@@ -10,6 +10,7 @@ import WhatsAppLink from '../../components/WhatsAppLink.jsx';
 import { formatRoom } from '../../lib/room.js';
 import EditAttendanceNote from './EditAttendanceNote.jsx';
 import { personName } from '../../lib/personName.js';
+import PeriodReportStatus from '../../components/PeriodReportStatus.jsx';
 
 // Absenkan lewat scan QR dinonaktifkan sementara. Ubah ke true untuk memunculkan lagi tab "Scan QR"
 // (server juga perlu QR_SCAN_ENABLED = true di server/src/routes/admin.js).
@@ -42,9 +43,9 @@ const categories = {
   bpmp: { label: 'BB/BPMP', icon: 'building', placeholder: 'Cari nama atau kode BB/BPMP' },
 };
 const number = new Intl.NumberFormat('id-ID');
-const directoryHeaders = ['Peserta', 'Sekolah / Instansi', 'Venue', 'LO bertugas', 'Fasilitator', 'Status Laporan 50%', 'Sesi', 'Kehadiran di venue', 'Status absensi'];
-const sortKeys = ['name','institution','venue','lo','facilitator','report','session','arrival','attendance'];
-const columnWidths = [240,260,190,180,220,240,190,160,160,220];
+const directoryHeaders = ['Peserta', 'Sekolah / Instansi', 'Venue', 'LO bertugas', 'Fasilitator', 'Status Laporan 50%', 'Status Laporan Mingguan', 'Status Laporan Bulanan', 'Sesi', 'Kehadiran di venue', 'Status absensi'];
+const sortKeys = ['name','institution','venue','lo','facilitator','report',null,null,'session','arrival','attendance'];
+const columnWidths = [240,260,190,180,220,240,220,220,190,160,160,220];
 function savedDisplay() {
   try {
     const value = JSON.parse(localStorage.getItem('bimtek-scan-display') || '{}');
@@ -75,7 +76,7 @@ export default function Scan() {
   const [manual, setManual] = useState('');
   const [tab, setTab] = useState(QR_SCAN_ENABLED && lo ? 'qr' : 'sekolah');
   const organizationTab = tab === 'dinas' || tab === 'bpmp';
-  const organizationHiddenColumns = ['LO bertugas', 'Fasilitator', 'Status Laporan 50%'];
+  const organizationHiddenColumns = ['LO bertugas', 'Fasilitator', 'Status Laporan 50%', 'Status Laporan Mingguan', 'Status Laporan Bulanan'];
   const fixedHiddenColumns = organizationTab ? organizationHiddenColumns : tab === 'fasil' ? ['Fasilitator'] : [];
   const [search, setSearch] = useState('');
   const [filterVenue, setFilterVenue] = useState('');
@@ -108,6 +109,7 @@ export default function Scan() {
   const [sessionError, setSessionError] = useState('');
   const [unavailableTarget, setUnavailableTarget] = useState(null);
   const [unavailableError, setUnavailableError] = useState('');
+  const [unavailableReason, setUnavailableReason] = useState('');
   const unavailableDialog = useRef(null);
 
   useEffect(() => {
@@ -194,7 +196,8 @@ export default function Scan() {
     const p = unavailableTarget;
     setUnavailableError('');
     setPending(p.code);
-    const r = await submit({ code: p.code, session_id: p.session.id, unavailable: true });
+    if (!unavailableReason.trim()) { setPending(null); setUnavailableError('Alasan berhalangan hadir wajib diisi.'); return; }
+    const r = await submit({ code: p.code, session_id: p.session.id, unavailable: true, note: unavailableReason.trim() });
     setPending(null);
     if (r.kind === 'err') setUnavailableError(r.msg);
     else {
@@ -430,6 +433,16 @@ export default function Scan() {
                             </span>
                           </div>) : <span className="muted">{tab === 'sekolah' ? 'Belum ada data' : '—'}</span>}
                         </td>
+                        {['Mingguan', 'Bulanan'].map((period) => <td key={period} role="cell" data-label={`Status Laporan ${period}`}
+                          hidden={columnHidden(`Status Laporan ${period}`)} className="small">
+                          {tab === 'fasil' ? <>
+                            <b>{(p.school_reports || []).filter((report) => ['filled','complete','reviewed','reviewed_complete'].includes(report[period === 'Mingguan' ? 'weekly_status' : 'monthly_status'])).length}/{p.school_reports?.length || 0}</b> sekolah terisi
+                            <div className="muted small">{(p.school_reports || []).filter((report) => !report[period === 'Mingguan' ? 'weekly_status' : 'monthly_status'] || report[period === 'Mingguan' ? 'weekly_status' : 'monthly_status'] === 'no_data').length} belum ada data</div>
+                          </> : p.school_reports?.length ? p.school_reports.map((report) => <div key={report.npsn}>
+                            {p.school_reports.length > 1 && <div className="muted small">{report.name} · {report.npsn}</div>}
+                            <PeriodReportStatus status={report[period === 'Mingguan' ? 'weekly_status' : 'monthly_status']} />
+                          </div>) : <PeriodReportStatus />}
+                        </td>)}
                         <td role="cell" data-label="Sesi" hidden={columnHidden('Sesi')} className="small">{sessionTitle(p.session)}
                           {p.session?.is_test && <div><span className="tag tag--venue">Uji coba</span></div>}
                         </td>
@@ -438,8 +451,12 @@ export default function Scan() {
                             {arrival.toUpperCase()}
                           </span>
                         </td>
-                        <td role="cell" data-label="Status absensi" hidden={columnHidden('Status absensi')}><span className={`tag ${style}`}>{status}</span></td>
+                        <td role="cell" data-label="Status absensi" hidden={columnHidden('Status absensi')}><span className={`tag ${style}`}>{status}</span>
+                          {p.unavailable && <div className="small"><b>Alasan:</b> {p.unavailable_record?.participant_note || 'Belum dicatat'}</div>}
+                        </td>
                         {lo && <td role="cell" className="stack-full">
+                          {p.unavailable_record?.can_edit_note && <button type="button" className="btn btn--sm"
+                            onClick={() => { setNoteNotice(''); setNoteTarget({ ...p.unavailable_record, name: p.name }); }}>Ubah alasan</button>}
                           {p.attended?.can_edit_note && <button type="button" className="btn btn--sm"
                             onClick={() => { setNoteNotice(''); setNoteTarget({ ...p.attended, name: p.name }); }}>Ubah catatan</button>}
                           {p.can_check_in && !p.attended ? (
@@ -447,7 +464,7 @@ export default function Scan() {
                               <button className="btn btn--sm btn--primary" disabled={!p.session || !!pending}
                                 onClick={() => absenkan(p)}>{pending === p.code ? <Spinner size={13} /> : 'Absenkan'}</button>
                               {!p.unavailable && <button className="btn btn--sm btn--danger scan__unavailable" disabled={!p.session || !!pending}
-                                onClick={() => { setUnavailableError(''); setUnavailableTarget(p); }}>Mundur/Berhalangan Hadir</button>}
+                                onClick={() => { setUnavailableError(''); setUnavailableReason(''); setUnavailableTarget(p); }}>Mundur/Berhalangan Hadir</button>}
                             </div>
                           ) : <span className="muted small">{p.can_check_in ? '—' : organizationTab ? 'Di luar venue' : 'Di luar binaan'}</span>}
                         </td>}
@@ -532,11 +549,19 @@ export default function Scan() {
             {unavailableTarget.session.is_test && <span className="tag tag--venue">Uji coba</span>}
           </p>
           {unavailableError && <p className="alert alert--err" role="alert">{unavailableError}</p>}
-          <form onSubmit={markUnavailable} className="row">
-            <button type="button" className="btn" autoFocus disabled={!!pending} onClick={() => unavailableDialog.current.close()}>Batal</button>
-            <button type="submit" className="btn btn--danger scan__unavailable" disabled={!!pending}>
+          <form onSubmit={markUnavailable} className="form">
+            <label>Alasan berhalangan hadir
+              <textarea autoFocus rows={4} maxLength={1000} required disabled={!!pending}
+                value={unavailableReason} onChange={(event) => setUnavailableReason(event.target.value)}
+                placeholder="Contoh: sakit atau ada keperluan keluarga" />
+            </label>
+            <span className="muted small">{unavailableReason.length}/1.000 karakter</span>
+            <div className="row">
+            <button type="button" className="btn" disabled={!!pending} onClick={() => unavailableDialog.current.close()}>Batal</button>
+            <button type="submit" className="btn btn--danger scan__unavailable" disabled={!!pending || !unavailableReason.trim()}>
               {pending ? 'Menyimpan…' : 'Tandai berhalangan'}
             </button>
+            </div>
           </form>
         </>}
       </dialog>

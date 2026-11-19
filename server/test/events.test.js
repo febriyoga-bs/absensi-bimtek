@@ -571,6 +571,38 @@ test('LO can edit notes, reject and delete only their own participant records',a
   }finally{await scoped(3,async()=>{if(session){await q('DELETE FROM attendance WHERE session_id=$1',[session]);await q('DELETE FROM sessions WHERE id=$1',[session]);}await q('DELETE FROM people WHERE id=ANY($1::int[])',[people]);});}
 });
 
+test('unavailable attendance requires a reason, preserves it in lists and exports, and restricts edits to the recorder', async () => {
+  let session,person,prior;
+  const token=signAdmin({role:'lo',username:'lo-sama',accounts:[{event:3,id:1}]});
+  try {
+    await scoped(3,async()=>{
+      prior=(await q('SELECT data FROM assignment_roster WHERE id=1')).rows[0];
+      person=(await q("INSERT INTO people(code,name,role,position,venue_id,npsn) VALUES('reason-test','Peserta Alasan','peserta','Bendahara',1,'90909090') RETURNING id")).rows[0].id;
+      const roster={schools:[],attendance_assignments:{'1':[{code:'reason-test',name:'Peserta Alasan',position:'Bendahara',npsn:'90909090',venue_id:1}]}};
+      await q('INSERT INTO assignment_roster(id,data) VALUES(1,$1) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data',[JSON.stringify(roster)]);
+      session=(await q("INSERT INTO sessions(name,role,starts_at,ends_at,is_test) VALUES('Reason test','peserta',now()-interval '1 hour',now()+interval '1 hour',true) RETURNING id")).rows[0].id;
+    });
+    const body={code:'reason-test',session_id:session,unavailable:true};
+    for(const note of [undefined,'  ','x'.repeat(1001),42])assert.equal((await request('/admin/scan?event=3',{method:'POST',token,body:{...body,note}})).status,400);
+    const response=await request('/admin/scan?event=3',{method:'POST',token,body:{...body,note:'  Sakit, perlu istirahat  '}});
+    assert.equal(response.status,200,await response.clone().text());assert.equal((await response.json()).status,'berhalangan');
+    const list=await (await request(`/admin/attendance?event=3&session_id=${session}`,{token})).json();
+    assert.equal(list.rows.length,1);const record=list.rows[0];assert.equal(record.participant_note,'Sakit, perlu istirahat');assert.equal(record.can_edit_note,true);assert.equal(record.has_photo,false);
+    const scan=await (await request(`/admin/scan/participants?event=3&category=sekolah&session_id=${session}`,{token})).json();
+    const row=scan.rows.find(p=>p.id===person);assert.equal(row.unavailable,true);assert.equal(row.attended,null);assert.equal(row.unavailable_record.participant_note,'Sakit, perlu istirahat');
+    assert.equal((await request(`/admin/attendance/${record.id}/note?event=3`,{method:'PATCH',token,body:{note:'Keperluan keluarga'}})).status,200);
+    const exported=await (await request(`/admin/export?event=3&session_id=${session}&recorded_only=true`)).text();assert.ok(exported.includes('Keperluan keluarga'));assert.ok(exported.includes('Alasan berhalangan'));
+    await scoped(3,()=>q("UPDATE attendance SET scanned_by='LO Orang lain' WHERE id=$1",[record.id]));
+    assert.equal((await request(`/admin/attendance/${record.id}/note?event=3`,{method:'PATCH',token,body:{note:'Tidak boleh'}})).status,404);
+  } finally {
+    await scoped(3,async()=>{
+      if(session){await q('DELETE FROM attendance WHERE session_id=$1',[session]);await q('DELETE FROM sessions WHERE id=$1',[session]);}
+      if(person)await q('DELETE FROM people WHERE id=$1',[person]);
+      await (prior?q('UPDATE assignment_roster SET data=$1 WHERE id=1',[JSON.stringify(prior.data)]):q('DELETE FROM assignment_roster WHERE id=1'));
+    });
+  }
+});
+
 test('an explicit identity merge updates old sessions and new logins without matching passwords or names', async () => {
   const ids={};
   for(const event of [3,4])await scoped(event,async()=>{

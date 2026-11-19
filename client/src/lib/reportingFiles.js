@@ -33,7 +33,7 @@ export async function readMonitoringCsv(file, onProgress = () => {}) {
     const required=['npsn','capaian (%)','l7 capaian 50% terisi','l8 capaian 50% terkirim','r6 capaian 50% direviu'];
     const missing = required.filter(name=>!names.includes(name));
     if(missing.length) throw new Error(`Kolom CSV Progres Laporan Sekolah tidak lengkap. Kolom wajib tidak ditemukan: ${missing.join(', ')}. Jika ini file Monitoring, pastikan kolom Status Reviu tersedia.`);
-    const selected=required.map(name=>names.indexOf(name));
+    const selected=[...new Set([...required.map(name=>names.indexOf(name)), ...names.map((name,index)=>/^[plr]\d+\s/.test(name)?index:-1).filter(index=>index>=0)])];
     return Papa.unparse(data.map(row=>selected.map(index=>asText(row[index]))));
   }
   return text;

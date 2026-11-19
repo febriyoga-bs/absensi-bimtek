@@ -53,3 +53,11 @@ test('incomplete progress files fail before upload', async () => {
 test('oversized files fail before reading', async () => {
   await assert.rejects(readMonitoringCsv({ size: 20_000_001, text: () => { throw new Error('must not read'); } }), /maksimal 20 MB/);
 });
+
+test('progress import preserves period indicators and excludes unrelated personal data',async()=>{
+ const text='NPSN,Capaian (%),L7 Capaian 50% Terisi,L8 Capaian 50% Terkirim,R6 Capaian 50% Direviu,L3 Mingguan Terisi,L6 Bulanan Lengkap,R3 Mingguan Lengkap Direviu,NIK Pengawas\n12345678,55,Sudah,Sudah,Belum,Sudah,Belum,Sudah,PRIVATE';
+ const csv=await readMonitoringCsv({size:text.length,text:async()=>text});
+ assert.ok(csv.includes('L3 Mingguan Terisi'));assert.ok(csv.includes('L6 Bulanan Lengkap'));assert.ok(csv.includes('R3 Mingguan Lengkap Direviu'));
+ assert.ok(!csv.includes('PRIVATE'));assert.ok(!csv.includes('NIK Pengawas'));
+});
+

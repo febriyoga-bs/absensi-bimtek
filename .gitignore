@@ -41,6 +41,11 @@ coverage/
 *.local
 *.local.json
 *.local.mjs
+*.local.py
+
+# Hasil audit dan render PDF lokal, bukan bagian fitur aplikasi
+/output/pdf/Ringkasan Ketidaksesuaian*.pdf
+/tmp/pdfs/
 
 # Berkas kerja hasil validasi/impor lokal (data sumber tetap disimpan di luar repo)
 data/*-pemetaan.readiness.json

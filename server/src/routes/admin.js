@@ -13,7 +13,7 @@ import { applyParticipantPlan, getParticipantPlan } from '../participantSync.js'
 import { getVenueAttendance, getVenueAttendanceDetails } from '../venueAttendance.js';
 import { getAssignmentAttendance, getReportingSchoolAttendance } from '../assignmentAttendance.js';
 import { getReporting, importReporting } from '../reporting.js';
-import { progressStatusSql, currentProgressSql } from '../progressImport.js';
+import { progressStatusSql, currentProgressSql, periodStatusSql } from '../progressImport.js';
 import { reportingDates, reportingDays, withReportingDay } from '../reportingDays.js';
 import { getArrivalRecap, getArrivalRecapDetails, importArrivalRecap } from '../arrivalRecap.js';
 import { finiteInteger } from '../security.js';
@@ -741,7 +741,7 @@ r.get('/scan/participants', ah(async (req, res) => {
             AND school.npsn=ANY(string_to_array(replace(p.npsn,' ',''),';'))
         ) names),'[]'::jsonb) AS assigned_facilitators,
         COALESCE((SELECT jsonb_agg(jsonb_build_object('npsn',school.npsn,'name',school.name,
-          'status',${progressStatusSql('report','pr')},'progress',CASE WHEN ${currentProgressSql('report','pr')} THEN pr.progress ELSE report.progress END) ORDER BY school.name,school.npsn)
+          'status',${progressStatusSql('report','pr')},'weekly_status',${periodStatusSql('pr','weekly')},'monthly_status',${periodStatusSql('pr','monthly')},'progress',CASE WHEN ${currentProgressSql('report','pr')} THEN pr.progress ELSE report.progress END) ORDER BY school.name,school.npsn)
           FROM school_facilitators school LEFT JOIN school_reporting report ON report.npsn=school.npsn
           LEFT JOIN school_progress_report pr ON pr.npsn=school.npsn
           WHERE school.venue=p.venue_name
@@ -751,7 +751,7 @@ r.get('/scan/participants', ah(async (req, res) => {
         CASE WHEN s.id IS NOT NULL THEN json_build_object('id',s.id,'name',s.name,'type',s.type,'starts_at',s.starts_at,'is_test',s.is_test) END AS session,
         CASE WHEN a.id IS NOT NULL THEN json_build_object('id',a.id,'at',a.created_at,'status',a.status,'method',a.method,
           'participant_note',CASE WHEN p.can_check_in THEN a.participant_note END,
-          'can_edit_note',a.venue_id=$6::int AND p.can_check_in) END AS recorded
+          'can_edit_note',a.venue_id=$6::int AND p.can_check_in AND ${recordedByLo('$5', '$6')}) END AS recorded
       FROM page_rows p
       LEFT JOIN LATERAL (
         SELECT s.id,s.name,s.type,s.starts_at,s.is_test FROM sessions s
@@ -788,6 +788,7 @@ r.get('/scan/participants', ah(async (req, res) => {
       can_check_in: req.user.role === 'lo' && person.can_check_in,
       phone: person.can_check_in && /^(bendahara|pengawas|fasil(?:itator)?(?:\s|$))/i.test(person.position || '') ? phone : undefined,
       unavailable: recorded?.status === 'berhalangan',
+      unavailable_record: recorded?.status === 'berhalangan' ? recorded : null,
       attended: recorded?.status === 'berhalangan' ? null : recorded,
     })),
   });
@@ -837,6 +838,10 @@ r.post('/scan', requireLo, ah(async (req, res) => {
   const status = unavailable ? 'berhalangan' : 'valid';
   let note = null;
   let photo = null;
+  if (unavailable) {
+    note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
+    if (!note || note.length > 1000) throw new HttpError(400, 'Alasan berhalangan hadir wajib diisi, maksimal 1.000 karakter.', { person: brief });
+  }
   if (method === 'manual' && !unavailable) {
     note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
     if (!note || note.length > 1000) throw new HttpError(400, 'Catatan wajib diisi, maksimal 1.000 karakter.', { person: brief });
@@ -1103,7 +1108,7 @@ r.get('/attendance', ah(async (req, res) => {
               p.name, p.code, p.role, p.institution, p.position, v.name AS venue_name,
               ${assignedToLo('$6', '$2')} AS can_verify,
               ${canDeleteAttendance('$6', '$2')} AS can_delete,
-              (a.status<>'berhalangan' AND ($6::int IS NULL OR a.venue_id=$2::int)
+              (($6::int IS NULL OR a.venue_id=$2::int)
                 AND ${canCheckInForLo('$6', '$2')}) AS can_edit_note
        FROM attendance a JOIN people p ON p.id=a.person_id LEFT JOIN venues v ON v.id=a.venue_id
        WHERE ${where} AND ($3::text IS NULL OR a.status=$3) AND ($7::text='' OR a.scanned_by=$7)
@@ -1136,7 +1141,7 @@ r.get('/attendance', ah(async (req, res) => {
     rows: ownOnly ? out.map(({ ip, device_id, user_agent, ...row }) => ({ ...row,
       can_retry: row.status === 'ditolak' && row.role === 'peserta' && row.can_edit_note,
       can_verify: row.role === 'peserta' && row.status !== 'berhalangan',
-      can_delete: row.role === 'peserta', can_edit_note: row.role === 'peserta' && row.status !== 'berhalangan' })) : out,
+      can_delete: row.role === 'peserta', can_edit_note: row.role === 'peserta' })) : out,
     recorders: ownOnly ? [] : recorders,
     total: status ? c[status] : c.total,
     counts: c,
@@ -1158,7 +1163,7 @@ r.patch('/attendance/:id/note', ah(async (req, res) => {
   if (!note || note.length > 1000) throw new HttpError(400, 'Catatan wajib diisi, maksimal 1.000 karakter.');
   const { rows: [updated] } = await q(
     `UPDATE attendance a SET participant_note=$1 FROM people p
-     WHERE a.id=$2 AND p.id=a.person_id AND a.status<>'berhalangan'
+     WHERE a.id=$2 AND p.id=a.person_id
        AND ${recordedByLo('$3', '$4')}
      RETURNING a.id, a.participant_note`, [note, id, req.user.lo, req.user.venue]);
   if (!updated) throw new HttpError(404, 'Absensi tidak ditemukan atau catatannya tidak dapat Anda ubah.');
@@ -1272,7 +1277,7 @@ r.get('/export', ah(async (req, res) => {
   const fmt = (d) => d ? new Date(d).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) : '';
   const header = ['Nama', 'Peran', 'Instansi / Sekolah', 'Jabatan', 'NPSN', 'Provinsi',
     'Kab/Kota', 'PTN', 'Venue Ditetapkan', 'LO Bertugas', 'Status Absensi', 'Metode',
-    'Waktu (WIB)', 'Venue Absen', 'Catatan', 'Catatan peserta', 'URL Foto'];
+    'Waktu (WIB)', 'Venue Absen', 'Catatan', 'Catatan peserta / Alasan berhalangan', 'URL Foto'];
   const host = req.get('host');
   const origin = /^(?:[\w.-]+|\[[0-9a-f:]+\])(?::\d+)?$/i.test(host || '') ? `${req.secure ? 'https' : 'http'}://${host}` : '';
   const lines = rows.map((x) => [

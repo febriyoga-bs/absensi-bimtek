@@ -1,4 +1,5 @@
 import { personName } from '../../lib/personName.js';
+import PeriodReportStatus, { periodReportLabels } from '../../components/PeriodReportStatus.jsx';
 import { useEvents } from '../../components/EventScope.jsx';
 import FilterField from '../../components/FilterField.jsx';
 import { useEffect, useRef, useState } from 'react';
@@ -305,7 +306,7 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
     .sort((a, b) => (b.wait_days ?? -1) - (a.wait_days ?? -1) || (a.rank || Infinity) - (b.rank || Infinity) || a.name.localeCompare(b.name, 'id'))
     .map((s) => ({ key: s.npsn,
       sortValues: [s.name, [s.venue, s.lo, formatRoom(s.room)].filter(Boolean).join(' '), facilitators.get(s.facilitator_id)?.name,
-        labels[s.status], s.progress, labels[venueStatus(s)],
+        labels[s.status], periodReportLabels[s.weekly_status] || periodReportLabels.no_data, periodReportLabels[s.monthly_status] || periodReportLabels.no_data, s.progress, labels[venueStatus(s)],
         ...(current ? checkInDays.map((day) => labels[checkInStatus(s, day)]) : [labels.tidak_terdata])],
       cells: [
       <>{current && !publicView ? <button type="button" className="reporting-school-link" aria-haspopup="dialog" onClick={() => setSchoolDetails({
@@ -316,10 +317,11 @@ export function ReportingView({ data, dataset, account, canImport, refresh, publ
       facilitators.has(s.facilitator_id) ? <>{personName(facilitators.get(s.facilitator_id).name)}
         <WhatsAppLink name={personName(facilitators.get(s.facilitator_id).name)} phone={facilitators.get(s.facilitator_id).phone} /></> : null,
       <>{reportTag(s.status)}{s.wait_days != null && <div className="muted small">{nf.format(s.wait_days)} hari</div>}</>,
+      <PeriodReportStatus status={s.weekly_status} />, <PeriodReportStatus status={s.monthly_status} />,
       s.progress == null ? '—' : `${nf.format(s.progress)}%`, reportTag(venueStatus(s)),
       ...(current ? checkInDays.map((day) => reportTag(checkInStatus(s, day))) : [reportTag('tidak_terdata')]),
     ] }));
-  const schoolHeaders = ['Sekolah', 'Venue / LO', 'Fasilitator', 'Laporan 50%', 'Progres fisik', 'Kehadiran di venue',
+  const schoolHeaders = ['Sekolah', 'Venue / LO', 'Fasilitator', 'Laporan 50%', 'Status Laporan Mingguan', 'Status Laporan Bulanan', 'Progres fisik', 'Kehadiran di venue',
     ...(current ? checkInDays.map((day) => `${day.label} · ${day.shortDate}`) : ['Absensi'])];
   let headers = schoolHeaders;
   let rows = [];
