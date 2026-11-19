@@ -1,6 +1,7 @@
 import { q } from './db.js';
 import { HttpError } from './util.js';
 import { eventVenueScope } from './eventVenues.js';
+import { sourceAttendance } from './sourceAttendance.js';
 
 const emptyCount = () => ({ total: 0, registered: 0, attended: 0 });
 const nameKey = (name) => String(name || '').normalize('NFKD').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
@@ -61,13 +62,14 @@ const loadRoster = () => q(`SELECT
 const statusOrder = "CASE a.status WHEN 'valid' THEN 0 WHEN 'review' THEN 1 WHEN 'berhalangan' THEN 2 ELSE 3 END";
 
 const loadProfiles = (venueId, day, testSession = null) => q(`WITH profiles AS (
-  SELECT id, code, name, venue_id, CASE
+  SELECT id, code, name, venue_id, institution, position, npsn, ruangan AS room, CASE
     WHEN lower(trim(position)) LIKE 'fasil%' THEN 'fasil'
     WHEN role='panitia' AND (lower(trim(position)) ~ '^lo($|[[:space:]])'
       OR lower(trim(position))='liaison officer') THEN 'lo'
+    WHEN role='peserta' AND lower(trim(position)) IN ('bendahara','pengawas','dinas pendidikan') THEN 'source_participant'
   END AS category FROM people WHERE archived_at IS NULL
 )
-SELECT p.id, p.code, p.name, p.venue_id, p.category, arrival.marks->>p.id::text AS arrival_status, (
+SELECT p.id, p.code, p.name, p.venue_id, p.category, p.institution, p.position, p.npsn, p.room, arrival.marks->>p.id::text AS arrival_status, (
   SELECT COALESCE(jsonb_object_agg(t.venue_id,t.status),'{}')
   FROM (
     SELECT DISTINCT ON (a.venue_id) a.venue_id, a.status FROM attendance a JOIN sessions s ON s.id=a.session_id
@@ -92,8 +94,18 @@ function groupProfiles(roster, profiles, group, ids, venueId) {
   return assignmentProfiles(entries || [], profiles.filter((p) => p.category === group), ids, venueId);
 }
 
+const loadArrivalSources = venueId => q(`SELECT r.venue_id,r.source_summary,r.detail_rows FROM venue_arrival_recap r
+  JOIN venues v ON v.id=r.venue_id WHERE ($1::int IS NULL OR r.venue_id=$1) AND ${eventVenueScope('v')}`, [venueId]);
+
 export async function getVenueAttendanceDetails(venueId, group, day = null, testSession = null) {
   if (Object.hasOwn(participantPositions, group)) {
+    if (group !== 'bpmp') {
+      const { rows: [source] } = await loadArrivalSources(venueId);
+      if (source?.source_summary?.some(row => row.position.toLowerCase() === participantPositions[group])) {
+        const { rows: profiles } = await loadProfiles(venueId,day,testSession);
+        return sourceAttendance(source,profiles,participantPositions[group]).details;
+      }
+    }
     const { rows } = await q(`SELECT p.name, p.institution, p.ruangan AS room, p.npsn, a.status,
         arrival.marks->>p.id::text AS arrival_status
       FROM people p LEFT JOIN venue_arrival_recap arrival ON arrival.venue_id=p.venue_id
@@ -119,7 +131,7 @@ export async function getVenueAttendanceDetails(venueId, group, day = null, test
 }
 
 export async function getVenueAttendance(venueId, day = null, testSession = null) {
-  const [{ rows: venues }, { rows: [roster] }, { rows: profiles }] = await Promise.all([
+  const [{ rows: venues }, { rows: [roster] }, { rows: profiles }, { rows: sources }] = await Promise.all([
     q(`WITH counts AS (
       SELECT p.venue_id, lower(trim(p.position)) AS category, count(*)::int AS total,
         count(*) FILTER (WHERE EXISTS (
@@ -139,6 +151,7 @@ export async function getVenueAttendance(venueId, day = null, testSession = null
     GROUP BY v.id, v.name ORDER BY v.name`, [venueId, Object.values(participantPositions), day, testSession]),
     loadRoster(),
     loadProfiles(venueId, day, testSession),
+    loadArrivalSources(venueId),
   ]);
 
   const cards = new Map(venues.filter(({ id }) => venueId == null || id === venueId).map(({ id, name, counts }) => [id, {
@@ -146,6 +159,13 @@ export async function getVenueAttendance(venueId, day = null, testSession = null
     ...Object.fromEntries(Object.entries(participantPositions).map(([key, position]) => [key, counts[position] ?? emptyCount()])),
   }]));
   const ids = rosterVenueIds(venues, roster);
+  for (const source of sources) {
+    const card = cards.get(source.venue_id); if (!card) continue;
+    for (const group of ['bendahara','pengawas','dinas']) {
+      const result = sourceAttendance(source,profiles,participantPositions[group]);
+      if (result) card[group] = result.count;
+    }
+  }
   for (const group of ['fasil', 'lo']) {
     for (const person of groupProfiles(roster, profiles, group, ids, venueId)) {
       const count = cards.get(person.id)?.[group];

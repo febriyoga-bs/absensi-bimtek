@@ -653,6 +653,35 @@ test('LO retries rejected attendance with a fresh photo once, preserving the pre
   }
 });
 
+test('venue recaps and details use arrival invitations, retain unknown source participants and exclude extra profiles', async()=>{
+  let prior,priorRoster,session;let people=[];
+  try {
+    await scoped(3,async()=>{
+      prior=(await q('SELECT * FROM venue_arrival_recap WHERE venue_id=1')).rows[0];
+      priorRoster=(await q('SELECT data FROM assignment_roster WHERE id=1')).rows[0];
+      await q("INSERT INTO assignment_roster(id,data) VALUES(1,'{\"venues\":[\"Venue Tahap 3\"],\"lo\":[],\"schools\":[],\"facilitators\":[]}') ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data");
+      people=(await q("INSERT INTO people(code,name,role,position,venue_id,institution) VALUES('source-known','Sumber dikenal','peserta','Pengawas',1,'Sekolah Dikenal'),('source-extra','Profil tambahan','peserta','Pengawas',1,'Sekolah Lain') RETURNING id")).rows.map(p=>p.id);
+      session=(await q("INSERT INTO sessions(name,role,starts_at,ends_at,is_test) VALUES('Source population test','peserta',now()-interval '1 hour',now()+interval '1 hour',true) RETURNING id")).rows[0].id;
+      await q("INSERT INTO attendance(person_id,session_id,venue_id,status,method) SELECT unnest($1::int[]),$2,1,'valid','manual'",[people,session]);
+      const detail=[{id:1,position:'Pengawas',name:'Sumber dikenal',institution:'Sekolah Dikenal',arrival_status:'selesai'}, {id:2,position:'Pengawas',name:'Peserta baru',institution:'Sekolah Baru',arrival_status:'selesai'}];
+      await q('INSERT INTO venue_arrival_recap(venue_id,marks,detail_rows,source_summary) VALUES(1,$1,$2,$3) ON CONFLICT(venue_id) DO UPDATE SET detail_rows=EXCLUDED.detail_rows,source_summary=EXCLUDED.source_summary',[JSON.stringify({}),JSON.stringify(detail),JSON.stringify([{position:'Pengawas',invited:413,arrived:384,queued:24}])]);
+    });
+    const rows=await(await request(`/admin/venue-attendance?event=3&test_session_id=${session}`)).json();
+    const count=rows.find(v=>v.id===1).pengawas;assert.equal(count.total,413);assert.equal(count.attended,1);assert.equal(count.registered,1);assert.equal(count.unresolved,1);assert.equal(count.source,'arrival');
+    const details=await(await request(`/admin/venue-attendance/1/pengawas?event=3&test_session_id=${session}`)).json();
+    assert.equal(details.length,2);assert.ok(!details.some(d=>d.name==='Profil tambahan'));assert.equal(details.filter(d=>d.people[0].status==='valid').length,1);
+    assert.equal(details.find(d=>d.name==='Peserta baru').people[0].registered,false);
+    assert.equal((await scoped(3,()=>q('SELECT count(*)::int n FROM attendance WHERE session_id=$1',[session]))).rows[0].n,2);
+  } finally {
+    await scoped(3,async()=>{
+      if(session){await q('DELETE FROM attendance WHERE session_id=$1',[session]);await q('DELETE FROM sessions WHERE id=$1',[session]);}
+      await q('DELETE FROM people WHERE id=ANY($1::int[])',[people]);
+      if(prior)await q('UPDATE venue_arrival_recap SET detail_rows=$1,source_summary=$2 WHERE venue_id=1',[JSON.stringify(prior.detail_rows),JSON.stringify(prior.source_summary)]);else await q('DELETE FROM venue_arrival_recap WHERE venue_id=1');
+      await(priorRoster?q('UPDATE assignment_roster SET data=$1 WHERE id=1',[JSON.stringify(priorRoster.data)]):q('DELETE FROM assignment_roster WHERE id=1'));
+    });
+  }
+});
+
 test('an explicit identity merge updates old sessions and new logins without matching passwords or names', async () => {
   const ids={};
   for(const event of [3,4])await scoped(event,async()=>{

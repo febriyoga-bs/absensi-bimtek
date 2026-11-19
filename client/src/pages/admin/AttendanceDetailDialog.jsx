@@ -62,6 +62,11 @@ export default function AttendanceDetailDialog({ details, onClose }) {
           </header>
           {!detailResult && <p className="muted small" role="status">Memuat status absensi…</p>}
           {detailResult?.error && <p className="alert alert--warn" role="status">Status absensi gagal dimuat. Tutup dan buka kembali daftar untuk mencoba lagi.</p>}
+          {details.sourceTotal != null && detailEntries && <p className="muted small">
+            Acuan undangan sumber kehadiran: {number.format(details.sourceTotal)}.
+            {detailEntries.length !== details.sourceTotal && ` Detail sumber memuat ${number.format(detailEntries.length)} entri; selisih dengan ringkasan sumber perlu diperiksa.`}
+            {' '}Status absensi ditautkan hanya jika profil cocok; entri yang belum cocok tetap ditampilkan.
+          </p>}
           {details.filterByCheckIn && detailEntries && <div className="assignment-tabs attendance-detail-tabs" role="group" aria-label="Tampilan daftar absensi">
             <button type="button" aria-pressed={!showAll} className={!showAll ? 'on' : ''} onClick={() => setShowAll(false)}>
               Sudah absen <span>{number.format(checkedIn.length)}</span>
@@ -79,6 +84,7 @@ export default function AttendanceDetailDialog({ details, onClose }) {
               <li key={entry.npsn || index}>
                 <b>{personName(entry.name)}</b>
                 <AssignmentSchools entry={entry} />
+                {entry.profile_issue && <p className="muted small">{entry.profile_issue}</p>}
                 {entry.people?.map((person) => {
                   const [arrival, arrivalStyle] = arrivalBadge(person.arrival_status);
                   return <div key={`${person.position || ''}:${personName(person.name)}`} className="assignment-person">
