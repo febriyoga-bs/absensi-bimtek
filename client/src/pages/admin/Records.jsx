@@ -44,9 +44,11 @@ export default function Records() {
   const selectedSession = sessions.find((session) => String(session.id) === requestedSid)
     || sessions.find((session) => session.is_open) || sessions[sessions.length - 1];
   const sid = selectedSession ? String(selectedSession.id) : '';
-  const recordedBy = params.get('recorded_by') || '';
-  const status = params.get('status') || '';
-  const sort = params.get('sort') || 'risk';
+  const recordedBy = lo ? '' : params.get('recorded_by') || '';
+  const search = lo ? '' : params.get('q') || '';
+  const [searchInput, setSearchInput] = useState(search);
+  const status = lo ? '' : params.get('status') || '';
+  const sort = lo ? 'risk' : params.get('sort') || 'risk';
   const position = params.get('position') || '';
   const venue = lo ? '' : params.get('venue') || '';
   const page = Math.max(Number(params.get('hal')) || 1, 1);
@@ -57,6 +59,12 @@ export default function Records() {
     return next;
   });
   const pages = Math.max(Math.ceil(total / PAGE), 1);
+  useEffect(() => { setSearchInput(search); }, [search]);
+  useEffect(() => {
+    if (!sid || searchInput.trim() === search) return;
+    const timer = setTimeout(() => setParam('q', searchInput.trim()), 350);
+    return () => clearTimeout(timer);
+  }, [searchInput, search, sid]);
 
   useEffect(() => {
     api('/admin/venues', { admin: true }).then(setVenues).catch((error) => setLoadError(error.message));
@@ -84,6 +92,7 @@ export default function Records() {
     const qs = new URLSearchParams({
       session_id: sid, limit: PAGE, offset: (page - 1) * PAGE, sort,
       ...(recordedBy && { recorded_by: recordedBy }),
+      ...(search && { q: search }),
       ...(position && { position }),
       ...(status && { status }), ...(venue && { venue_id: venue }),
     });
@@ -92,10 +101,10 @@ export default function Records() {
       .then((d) => { if (loadRevision.current !== revision) return; setRows(d.rows); setRecorders(d.recorders || []); setTotal(d.total); setCounts(d.counts); window.scrollTo({ top: 0 }); })
       .catch((error) => { if (loadRevision.current === revision) setLoadError(error.message); })
       .finally(() => { if (loadRevision.current === revision) setLoading(false); });
-    api(`/admin/attempts?session_id=${sid}${venue ? `&venue_id=${venue}` : ''}${position ? `&position=${encodeURIComponent(position)}` : ''}`, { admin: true })
+    if (!lo) api(`/admin/attempts?session_id=${sid}${venue ? `&venue_id=${venue}` : ''}${position ? `&position=${encodeURIComponent(position)}` : ''}`, { admin: true })
       .then((data) => { if (loadRevision.current === revision) setAttempts(data); }).catch(() => {});
   };
-  useEffect(() => { load(); return () => { loadRevision.current++; }; }, [sid, requestedSid, status, venue, position, recordedBy, sort, page, sessions]);
+  useEffect(() => { load(); return () => { loadRevision.current++; }; }, [sid, requestedSid, status, venue, position, recordedBy, search, sort, page, sessions]);
 
   async function setStatus(id, st) {
     await api(`/admin/attendance/${id}`, { method: 'PATCH', admin: true, body: { status: st } });
@@ -139,8 +148,10 @@ export default function Records() {
   return (
     <>
       <div className="page-head"><div><h2>Verifikasi Absensi</h2>
-        <p className="muted">Absen bertanda kuning terdeteksi mencurigakan. Periksa fotonya, lalu sahkan atau tolak.</p></div></div>
+        <p className="muted">{lo ? 'Lihat absensi peserta yang Anda catat sendiri. Halaman ini hanya untuk melihat.' : 'Absen bertanda kuning terdeteksi mencurigakan. Periksa fotonya, lalu sahkan atau tolak.'}</p></div></div>
       <div className="toolbar">
+        {!lo && <FilterField label="Cari nama / NPSN"><input type="search" aria-label="Cari nama atau NPSN" placeholder="Nama peserta atau NPSN" maxLength={150}
+          value={searchInput} onChange={(e) => setSearchInput(e.target.value)} /></FilterField>}
         <FilterField label="Sesi absensi"><select value={sid} onChange={(e) => setParam('sesi', e.target.value)}>
           {sessions.map((s) => <option key={s.id} value={s.id}>{sessionTitle(s)} ({s.is_test ? 'Uji coba · ' : ''}{s.role})</option>)}
         </select></FilterField>
@@ -150,11 +161,11 @@ export default function Records() {
             {venues.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
           </select></FilterField>
         )}
-        <FilterField label="Diabsenkan oleh LO"><select aria-label="Diabsenkan oleh LO" value={recordedBy} onChange={(e) => setParam('recorded_by', e.target.value)}>
+        {!lo && <FilterField label="Diabsenkan oleh LO"><select aria-label="Diabsenkan oleh LO" value={recordedBy} onChange={(e) => setParam('recorded_by', e.target.value)}>
           <option value="">Semua LO pencatat</option>
           {recordedBy && !recorders.includes(recordedBy) && <option value={recordedBy}>{personName(recordedBy)} (tidak ada di sesi/venue ini)</option>}
           {recorders.map((name) => <option key={name} value={name}>{personName(name)}</option>)}
-        </select></FilterField>
+        </select></FilterField>}
         <FilterField label="Filter jabatan"><select aria-label="Filter jabatan" value={position} onChange={(e) => setParam('position', e.target.value)}>
           <option value="">Semua jabatan</option>
           <option value="lo">LO</option>
@@ -162,7 +173,7 @@ export default function Records() {
           <option value="pengawas">Pengawas</option>
           <option value="fasil">Fasilitator</option>
         </select></FilterField>
-        <FilterField label="Status absensi"><select value={status} onChange={(e) => setParam('status', e.target.value)}>
+        {!lo && <><FilterField label="Status absensi"><select value={status} onChange={(e) => setParam('status', e.target.value)}>
           <option value="">Semua status{counts ? ` (${counts.total})` : ''}</option>
           <option value="review">Perlu dicek{counts ? ` (${counts.review})` : ''}</option>
           <option value="valid">Valid{counts ? ` (${counts.valid})` : ''}</option>
@@ -177,16 +188,16 @@ export default function Records() {
           <option value="name_desc">Nama Z–A</option>
           <option value="venue_asc">Venue A–Z</option>
           <option value="venue_desc">Venue Z–A</option>
-        </select></FilterField>
+        </select></FilterField></>}
         <button className="btn btn--sm" onClick={load}><Icon name="refresh" size={15} />Muat ulang</button>
-        {sid && <button type="button" className="btn btn--sm" disabled={loading} onClick={() => setDownloadOpen(true)}>
+        {!lo && sid && <button type="button" className="btn btn--sm" disabled={loading} onClick={() => setDownloadOpen(true)}>
           <Icon name="download" size={15} />Unduh
         </button>}
       </div>
       {loadError && <p className="alert alert--err" role="alert">{loadError}</p>}
       <div className="tabs">
         <button className={tab === 'absen' ? 'on' : ''} onClick={() => setTab('absen')}>Absensi masuk ({loading ? '…' : total})</button>
-        <button className={tab === 'blok' ? 'on' : ''} onClick={() => setTab('blok')}>Percobaan diblokir ({attempts.length})</button>
+        {!lo && <button className={tab === 'blok' ? 'on' : ''} onClick={() => setTab('blok')}>Percobaan diblokir ({attempts.length})</button>}
       </div>
 
       {tab === 'absen' && noteNotice && <p className="alert alert--ok" role="status">{noteNotice}</p>}
@@ -283,7 +294,7 @@ export default function Records() {
       )}
 
       {downloadOpen && <AttendanceDownloadDialog sessions={sessions} venues={venues} lo={lo}
-        initial={{ session_id: String(sid), venue_id: venue, recorded_by: recordedBy, position, status }} onClose={() => setDownloadOpen(false)} />}
+        initial={{ session_id: String(sid), venue_id: venue, recorded_by: recordedBy, position, status, q: search }} onClose={() => setDownloadOpen(false)} />}
       <dialog ref={deleteDialog} className="assignment-dialog" aria-labelledby="delete-attendance-title"
         aria-describedby="delete-attendance-description" onCancel={(event) => { if (deleting) event.preventDefault(); }}>
         <header><h3 id="delete-attendance-title">Hapus absensi</h3></header>

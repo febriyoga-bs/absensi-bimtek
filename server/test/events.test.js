@@ -407,6 +407,7 @@ test('attendance sorting applies before pagination and rejects unsupported order
     await scoped(3, async () => {
       venues = (await q("INSERT INTO venues(name,lat,lng) VALUES('Sort Z',-6,106),('Sort A',-6,106) RETURNING id")).rows.map(v => v.id);
       people = (await q("INSERT INTO people(code,name,role,venue_id) VALUES('sort-a','A Sort','peserta',$1),('sort-b','B Sort','peserta',$2) RETURNING id", venues)).rows.map(p => p.id);
+      await q("UPDATE people SET npsn=CASE WHEN id=$1 THEN '00123456' ELSE '00987654' END WHERE id=ANY($2::int[])",[people[0],people]);
       session = (await q("INSERT INTO sessions(name,role,starts_at,ends_at) VALUES('Sorting test','semua',now(),now()+interval '1 hour') RETURNING id")).rows[0].id;
       await q("INSERT INTO attendance(person_id,session_id,venue_id,status,risk_score,created_at) VALUES($1,$3,$4,'valid',0,now()),($2,$3,$5,'valid',5,now()-interval '1 hour')", [...people,session,...venues]);
     });
@@ -418,6 +419,16 @@ test('attendance sorting applies before pagination and rejects unsupported order
       assert.equal(next.rows.length,1); assert.notEqual(next.rows[0].name,expected);
     }
     assert.equal((await request(`/admin/attendance?event=3&session_id=${session}&sort=invalid`)).status,400);
+    for(const term of ['a sort','00123456']) {
+      const result=await request(`/admin/attendance?event=3&session_id=${session}&q=${encodeURIComponent(term)}&limit=1`);
+      assert.equal(result.status,200,await result.clone().text());
+      const data=await result.json();assert.equal(data.total,1);assert.equal(data.counts.total,1);assert.equal(data.rows[0].name,'A Sort');
+      const csv=await (await request(`/admin/export?event=3&session_id=${session}&q=${encodeURIComponent(term)}`)).text();
+      assert.ok(csv.includes('A Sort'));assert.ok(!csv.includes('B Sort'));
+    }
+    const none=await (await request(`/admin/attendance?event=3&session_id=${session}&q=%25`)).json();assert.equal(none.total,0);
+    const outside=await (await request(`/admin/attendance?event=4&session_id=1&q=00123456`)).json();assert.ok(!outside.rows?.some(row=>row.name==='A Sort'));
+    assert.equal((await request(`/admin/attendance?event=3&session_id=${session}&q[]=bad`)).status,400);
   } finally {
     await scoped(3,async()=>{
       if(session){await q('DELETE FROM attendance WHERE session_id=$1',[session]);await q('DELETE FROM sessions WHERE id=$1',[session]);}
@@ -518,13 +529,33 @@ test('attendance distinguishes an invalid activity/session combination from an e
 test('verification and arrival recap APIs are restricted to the main admin', async () => {
   const token = signAdmin({role:'lo',username:'lo-sama',accounts:[{event:3,id:1}]});
   for (const path of ['/admin/arrival-recap?event=3','/admin/arrival-recap/1/participants?event=3&group=invited',
-    '/admin/attendance?event=3&session_id=1','/admin/attempts?event=3&session_id=1']) {
+    '/admin/attempts?event=3&session_id=1']) {
     const denied = await request(path, {token});
     assert.equal(denied.status, 403);
     assert.equal((await request(path)).status, 200);
   }
   assert.equal((await request('/admin/attendance/1?event=3', {method:'PATCH',token,body:{status:'ditolak'}})).status, 403);
   assert.equal((await request('/admin/venue-attendance?event=3', {token})).status, 200);
+});
+
+test('LO verification lists only their own recorded attendance and cannot change its status',async()=>{
+  let session,people=[];
+  const token=signAdmin({role:'lo',username:'lo-sama',accounts:[{event:3,id:1}]});
+  try{
+    await scoped(3,async()=>{
+      session=(await q("INSERT INTO sessions(name,role,starts_at,ends_at) VALUES('Own verification','semua',now(),now()+interval '1 hour') RETURNING id")).rows[0].id;
+      people=(await q("INSERT INTO people(code,name,role,position,venue_id) VALUES('own-v1','Own recorded','peserta','Bendahara',1),('own-v2','Other recorder','peserta','Bendahara',1),('own-v3','Self checkin','peserta','Bendahara',1) RETURNING id")).rows.map(p=>p.id);
+      await q("INSERT INTO attendance(person_id,session_id,venue_id,status,method,scanned_by,ip) VALUES($1,$4,1,'valid','manual','LO LO Tahap 3','127.0.0.1'),($2,$4,1,'review','manual','LO Other','127.0.0.1'),($3,$4,1,'valid','selfie','LO LO Tahap 3','127.0.0.1')",[...people,session]);
+    });
+    for(const suffix of ['', '&recorded_by=LO%20Other&venue_id=999']){
+      const response=await request(`/admin/attendance?event=3&session_id=${session}${suffix}`,{token});
+      assert.equal(response.status,200,await response.clone().text());const data=await response.json();
+      assert.equal(data.total,1);assert.equal(data.counts.total,1);assert.equal(data.rows[0].name,'Own recorded');
+      assert.deepEqual(data.recorders,[]);assert.equal(data.rows[0].can_verify,false);assert.equal(data.rows[0].can_delete,false);assert.equal(data.rows[0].can_edit_note,false);assert.ok(!('ip' in data.rows[0]));
+      assert.equal((await request(`/admin/attendance/${data.rows[0].id}?event=3`,{method:'PATCH',token,body:{status:'ditolak'}})).status,403);
+    }
+    const all=await (await request(`/admin/attendance?event=3&session_id=${session}`)).json();assert.equal(all.total,3);
+  }finally{await scoped(3,async()=>{if(session){await q('DELETE FROM attendance WHERE session_id=$1',[session]);await q('DELETE FROM sessions WHERE id=$1',[session]);}await q('DELETE FROM people WHERE id=ANY($1::int[])',[people]);});}
 });
 
 test('an explicit identity merge updates old sessions and new logins without matching passwords or names', async () => {

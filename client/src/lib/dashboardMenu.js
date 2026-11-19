@@ -5,7 +5,7 @@ export const dashboardMenu = [
   { to: '/admin/kehadiran', end: true, icon: 'door-open', label: 'Rekap Kehadiran', description: 'Lihat peserta yang sudah tiba atau sedang antre menurut rekap kedatangan.' },
   { to: '/admin/scan', icon: 'user-check', label: 'Absenkan Peserta', adminLabel: 'Daftar Peserta', lo: true, description: 'Catat absensi peserta yang boleh Anda tangani pada sesi aktif.' },
   { to: '/admin/absen-saya', end: true, icon: 'camera', label: 'Absen Saya', lo: true, loOnly: true, description: 'Kirim absensi Anda dengan foto dan lokasi di venue penugasan.' },
-  { to: '/admin/absensi', icon: 'clipboard-check', label: 'Verifikasi Absensi', description: 'Periksa foto, catatan, dan status absensi sesuai hak akses Anda.' },
+  { to: '/admin/absensi', icon: 'clipboard-check', label: 'Verifikasi Absensi', lo: true, description: 'Periksa foto, catatan, dan status absensi sesuai hak akses Anda.' },
   { to: '/admin/sesi', icon: 'calendar-days', label: 'Sesi & Jadwal', description: 'Atur jadwal dan cakupan venue untuk sesi absensi resmi.' },
   { to: '/admin/orang', icon: 'address-book', label: 'Peserta & Panitia', description: 'Kelola profil peserta dan panitia serta sinkronkan pemetaan peserta.' },
   { to: '/admin/venue', icon: 'location-dot', label: 'Venue', description: 'Kelola lokasi kegiatan, status venue, dan radius pemeriksaan lokasi.' },

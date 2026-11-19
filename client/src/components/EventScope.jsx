@@ -11,7 +11,7 @@ export default function EventScope({ children }) {
   useEffect(() => {
     let live = true;
     fetch('/api/events').then(async (response) => {
-      if (!response.ok) throw new Error('Daftar kegiatan belum dapat dimuat. Pastikan migrasi database sudah dijalankan.');
+      if (!response.ok) throw new Error(`Daftar kegiatan belum dapat dimuat (HTTP ${response.status}). Silakan coba lagi sebentar.`);
       return response.json();
     }).then(async (rows) => {
       if (!live) return;

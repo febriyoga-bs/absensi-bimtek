@@ -75,6 +75,7 @@ export default function AttendanceDownloadDialog({ sessions, venues, lo, initial
     <form onSubmit={download}>
       <fieldset disabled={busy} className="download-filter-grid">
         <FilterField label="Tipe unduhan"><select value={format} onChange={(event) => setFormat(event.target.value)}><option value="xlsx">Excel (.xlsx)</option><option value="pdf">PDF</option><option value="csv">CSV</option></select></FilterField>
+        <FilterField label="Cari nama / NPSN"><input type="search" placeholder="Nama peserta atau NPSN" maxLength={150} value={filters.q || ''} onChange={change('q')} /></FilterField>
         <FilterField label="Sesi absensi"><select required value={filters.session_id} onChange={change('session_id')}>
           {sessions.map((session) => <option key={session.id} value={session.id}>{sessionTitle(session)} ({session.role})</option>)}
         </select></FilterField>
