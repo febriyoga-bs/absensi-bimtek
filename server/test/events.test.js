@@ -700,6 +700,15 @@ test('an explicit identity merge updates old sessions and new logins without mat
   assert.equal(login.status,200);const data=await login.json();assert.equal(data.event.id,3);
   assert.equal((await request('/admin/me?event=3',{token:data.token})).status,200);
   assert.equal((await request('/admin/login?event=4',{method:'POST',token:null,body:{username:'merged-3',password:'wrong'}})).status,401);
+  const failedChange=await request('/admin/me/password?event=3',{method:'POST',token,body:{old_password:'wrong',new_password:'linked-new-password'}});
+  assert.equal(failedChange.status,400);
+  const changed=await request('/admin/me/password?event=3',{method:'POST',token,body:{old_password:'password-3',new_password:'linked-new-password'}});
+  assert.equal(changed.status,200);
+  for (const event of [3,4]) {
+    assert.equal((await request('/admin/login',{method:'POST',token:null,body:{username:`merged-${event}`,password:`password-${event}`}})).status,401);
+    assert.equal((await request('/admin/login',{method:'POST',token:null,body:{username:`merged-${event}`,password:'linked-new-password'}})).status,200);
+  }
+  assert.equal((await request('/admin/login',{method:'POST',token:null,body:{username:'lo-sama',password:'test-lo-password'}})).status,200);
   await scoped(4,()=>q('UPDATE lo_accounts SET active=false WHERE id=$1',[ids[4]]));
   assert.equal((await request('/admin/me?event=4',{token:data.token})).status,401);
 });

@@ -5,7 +5,7 @@ import fs from 'fs';
 import { q, getSettings, pool, rawPool } from '../db.js';
 import { ah, HttpError, clientIp } from '../util.js';
 import {
-  requireAdmin, requireLo, requireSuper, signAdmin, checkAdminPassword, hashPassword, verifyPassword,
+  requireAdmin, requireLo, requireSuper, signAdmin, checkAdminPassword, hashPassword,
 } from '../auth.js';
 import { deletePhoto, photoUrl, savePhoto, readPhoto } from '../storage.js';
 import { parsePeople, EXTRA_FIELDS } from '../peopleImport.js';
@@ -19,6 +19,7 @@ import { getArrivalRecap, getArrivalRecapDetails, importArrivalRecap } from '../
 import { finiteInteger } from '../security.js';
 import { eventId } from '../eventContext.js';
 import { loginLo } from '../loLogin.js';
+import { changeLoPassword } from '../loPassword.js';
 import { eventVenueScope } from '../eventVenues.js';
 
 const r = Router();
@@ -135,10 +136,7 @@ r.post('/me/password', passwordChangeLimiter, ah(async (req, res) => {
   if (newPw.length < 8) throw new HttpError(400, 'Password baru minimal 8 karakter.');
   if (newPw.length > 72) throw new HttpError(400, 'Password baru terlalu panjang (maks. 72 karakter).');
   if (newPw === oldPw) throw new HttpError(400, 'Password baru harus berbeda dari password lama.');
-  const { rows: [lo] } = await q('SELECT id, password_hash, active FROM lo_accounts WHERE id=$1', [req.user.lo]);
-  if (!lo || !lo.active) throw new HttpError(401, 'Akun LO tidak aktif. Silakan login ulang.');
-  if (!verifyPassword(oldPw, lo.password_hash)) throw new HttpError(400, 'Password lama salah.');
-  await q('UPDATE lo_accounts SET password_hash=$1 WHERE id=$2', [hashPassword(newPw), lo.id]);
+  await changeLoPassword(req.user.lo, oldPw, newPw);
   res.json({ ok: true });
 }));
 

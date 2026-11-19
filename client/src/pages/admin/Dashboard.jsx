@@ -44,8 +44,6 @@ function VenueAttendanceCard({ venue, day, testSession, onDetails, visibleGroups
               })}>
               <span className="venue-attendance__label">{label} <FontIcon name="chevron-right" /></span>
               <span className="venue-attendance__count"><b>{number.format(attended)}</b> / {number.format(total)} <small>sudah absen</small></span>
-              {venue[key].source === 'arrival' && <small className="muted">Acuan: undangan sumber kehadiran</small>}
-              {venue[key].unresolved > 0 && <small className="muted">{number.format(venue[key].unresolved)} entri sumber belum cocok dengan profil</small>}
               {venue[key].source !== 'arrival' && registered < total && <small className="muted">
                 {registered === 0 ? 'Belum ada profil absensi' : `${number.format(registered)} punya profil absensi`}
               </small>}
