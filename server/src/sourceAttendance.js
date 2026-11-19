@@ -63,7 +63,7 @@ export function sourceAttendance(source, profiles, position) {
     const registered = !!match && !conflict;
     return { name: row.name && row.name !== '-' ? row.name : row.institution || 'Nama belum tersedia',
       institution: row.institution, npsn: registered ? match.npsn : null, room: registered ? match.room : null,
-      source_based: true, profile_issue: conflict ? 'Beberapa peserta sumber menuju profil yang sama'
+      source_profile_id: match?.id ?? null, source_based: true, profile_issue: conflict ? 'Beberapa peserta sumber menuju profil yang sama'
         : ambiguous ? 'Beberapa profil cocok; perlu pastikan identitas' : !registered ? 'Profil belum cocok dengan sumber kehadiran' : null,
       people: [{ name: row.name && row.name !== '-' ? row.name : row.institution || 'Nama belum tersedia', registered,
         status: registered ? match.status_by_venue[source.venue_id] ?? null : null, arrival_status: row.arrival_status }] };

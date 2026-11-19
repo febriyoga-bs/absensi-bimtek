@@ -104,8 +104,18 @@ const recordGroup = p => {
   if (p.role === 'peserta') return Object.entries(participantPositions).find(([, value]) => value === position)?.[0] || 'other';
   return 'other';
 };
-const loadSessionRecords = (venueId, day, testSession) => q(`SELECT a.id,a.venue_id,a.status,p.name,p.institution,p.npsn,p.ruangan AS room,p.role,p.position
+const loadSessionRecords = (venueId, day, testSession) => q(`SELECT a.id,a.person_id,a.venue_id,a.status,
+  CASE WHEN lower(trim(p.position)) IN ('bendahara','pengawas','dinas pendidikan') AND arrival.representatives->p.id::text->>'name' IS NOT NULL
+    THEN arrival.representatives->p.id::text->>'name'
+  WHEN lower(trim(p.name)) IN ('(belum ada di biodata)','belum ada di biodata','(belum ada)','-','') THEN COALESCE((
+    SELECT min(d->>'name') FROM venue_arrival_recap r CROSS JOIN LATERAL jsonb_array_elements(r.detail_rows) d
+    WHERE r.venue_id=a.venue_id AND lower(trim(d->>'position'))=lower(trim(p.position))
+      AND lower(trim(d->>'institution'))=lower(trim(p.institution))
+      AND trim(d->>'name') NOT IN ('','-') AND lower(d->>'name') NOT LIKE '%belum ada%'
+    HAVING count(DISTINCT lower(trim(d->>'name')))=1
+  ),p.name) ELSE p.name END AS name,p.name AS original_name,p.institution,p.npsn,p.ruangan AS room,p.role,p.position
   FROM attendance a JOIN sessions s ON s.id=a.session_id JOIN people p ON p.id=a.person_id
+  LEFT JOIN venue_arrival_recap arrival ON arrival.venue_id=a.venue_id
   WHERE ($1::int IS NULL OR a.venue_id=$1) AND a.status IN ('valid','review','ditolak','berhalangan')
     AND ($2::date IS NULL OR (s.starts_at AT TIME ZONE 'Asia/Jakarta')::date=$2)
     AND (CASE WHEN $3::int IS NULL THEN NOT s.is_test ELSE s.is_test AND s.id=$3 END)
@@ -117,10 +127,11 @@ export async function getVenueAttendanceDetails(venueId, group, day = null, test
     loadSessionRecords(venueId, day, testSession),
   ]);
   const actual = records.filter(p => recordGroup(p) === group);
-  const recordedNames = new Set(actual.map(p => nameKey(p.name)));
+  const recordedIds = new Set(actual.map(p => p.person_id));
+  const recordedNames = new Set(actual.flatMap(p => [nameKey(p.name), nameKey(p.original_name)]));
   const recordedSchools = new Set(actual.flatMap(p => String(p.npsn || '').split(';').map(v => v.trim()).filter(Boolean)));
-  const remaining = entries.filter(e => !recordedNames.has(nameKey(e.name)) && !(group === 'bendahara' && String(e.npsn || '').split(';').some(id => recordedSchools.has(id.trim()))));
-  entries.splice(0, entries.length, ...actual.map(p => ({ name:p.name,institution:p.institution,npsn:p.npsn,room:p.room,
+  const remaining = entries.filter(e => !recordedIds.has(e.source_profile_id) && !recordedNames.has(nameKey(e.name)) && !(group === 'bendahara' && String(e.npsn || '').split(';').some(id => recordedSchools.has(id.trim()))));
+  entries.splice(0, entries.length, ...actual.map(p => ({ name:p.name,original_name:p.original_name !== p.name ? p.original_name : null,institution:p.institution,npsn:p.npsn,room:p.room,
     people:[{name:p.name,registered:true,status:p.status}] })), ...remaining.map(e => ({...e,people:e.people.map(p=>({...p,status:null}))})));
 
   if (!Object.hasOwn(participantPositions, group)) return entries;
@@ -172,7 +183,7 @@ async function loadVenueAttendanceDetails(venueId, group, day = null, testSessio
         return sourceAttendance(source,profiles,participantPositions[group]).details;
       }
     }
-    const { rows } = await q(`SELECT p.name, p.institution, p.ruangan AS room, p.npsn, a.status,
+    const { rows } = await q(`SELECT p.id AS source_profile_id,p.name, p.institution, p.ruangan AS room, p.npsn, a.status,
         arrival.marks->>p.id::text AS arrival_status
       FROM people p LEFT JOIN venue_arrival_recap arrival ON arrival.venue_id=p.venue_id
       LEFT JOIN LATERAL (

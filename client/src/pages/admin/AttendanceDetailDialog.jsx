@@ -100,6 +100,7 @@ export default function AttendanceDetailDialog({ details, onClose }) {
               <li key={entry.npsn || index}>
                 <b>{personName(entry.name)}</b>
                 <AssignmentSchools entry={entry} />
+                {entry.original_name && <div className="muted small">Mewakili: {personName(entry.original_name)}</div>}
                 {entry.assigned_los && <div className="assignment-lo small">
                   <FontIcon name="user-tie" />
                   <span><b>LO bertugas:</b> {entry.assigned_los.length ? entry.assigned_los.map(personName).join(', ') : 'Belum terpetakan'}</span>
