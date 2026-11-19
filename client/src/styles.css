@@ -1026,3 +1026,16 @@ select:disabled { background-color: var(--surface-2); color: var(--muted); curso
 
 .assignment-lo { display: flex; align-items: baseline; gap: 7px; margin-top: 5px; color: #526581; }
 .assignment-lo > .icon { color: #1764cf; flex-shrink: 0; }
+
+/* Session summaries span the content width, with compact desktop columns. */
+.dashboard-sessions .stats,
+.dashboard-overview--single .dashboard-sessions .stats { grid-template-columns: minmax(0, 1fr); }
+.session-row { grid-template-columns: minmax(0, 1fr); align-items: start; gap: 16px; }
+.session-row__identity, .session-row__progress { display: grid; gap: 10px; min-width: 0; }
+.session-row__venues { margin: 0; }
+.session-row__actions { margin: 0; }
+@media (min-width: 1100px) {
+  .session-row { grid-template-columns: minmax(220px, 1fr) minmax(260px, 1.15fr) minmax(260px, 1fr); gap: 18px 24px; }
+  .session-row__venues { grid-column: 1 / -1; }
+  .session-row__actions { grid-column: 1 / -1; justify-content: flex-end; padding-top: 12px; border-top: 1px solid var(--line); }
+}

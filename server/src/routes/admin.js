@@ -489,7 +489,7 @@ r.get('/sessions', ah(async (req, res) => {
        (SELECT count(*) FROM attempt_logs l WHERE l.session_id=s.id AND ($1::int IS NULL OR l.venue_id=$1))::int AS blocked,
        (SELECT COALESCE(json_agg(x ORDER BY x.name), '[]') FROM (
           SELECT v.name, count(*)::int AS n FROM attendance a JOIN venues v ON v.id=a.venue_id
-          WHERE a.session_id=s.id AND a.status IN ('valid','review') AND ($1::int IS NULL OR a.venue_id=$1) GROUP BY v.name) x) AS by_venue,
+          WHERE a.session_id=s.id AND a.status IN ('valid','review','ditolak','berhalangan') AND ($1::int IS NULL OR a.venue_id=$1) GROUP BY v.name) x) AS by_venue,
        now() BETWEEN s.starts_at AND s.ends_at AS is_open
      FROM sessions s
      WHERE ($1::int IS NULL OR cardinality(COALESCE(s.venue_ids,'{}'))=0 OR $1 = ANY(s.venue_ids))

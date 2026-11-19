@@ -101,7 +101,9 @@ export async function importArrivalRecap(rows, summary = null) {
   }
   const [{ rows: venues }, { rows: people }] = await Promise.all([
     q('SELECT id,name FROM venues'),
-    q(`SELECT id, venue_id, position, name, institution FROM people
+    q(`SELECT id, venue_id, position, name, institution,
+       EXISTS(SELECT 1 FROM attendance a WHERE a.person_id=people.id AND a.venue_id=people.venue_id) AS has_attendance
+       FROM people
        WHERE role='peserta' AND archived_at IS NULL AND venue_id IS NOT NULL`),
   ]);
   const byVenue = new Map(venues.map((v) => [arrivalVenueKey(v.name), v]));
@@ -145,7 +147,12 @@ export async function importArrivalRecap(rows, summary = null) {
     if (!venue) throw new HttpError(400, `Venue di Excel tidak ditemukan di aplikasi: ${hotel || '(kosong)'}.`);
     if (!snapshots.has(venue.id)) snapshots.set(venue.id, { venue_id: venue.id, marks: {}, representatives: {}, detail_rows: [] });
     const snapshot = snapshots.get(venue.id);
-    if (key(confirmation) === 'belumkonfirmasi' || (!confirmation && key(rawArrival) === 'belumkonfirmasi')) continue;
+    const unconfirmed = key(confirmation) === 'belumkonfirmasi' || (!confirmation && key(rawArrival) === 'belumkonfirmasi');
+    const recorded = unconfirmed && people.some(p => p.has_attendance && p.venue_id === venue.id
+      && roles[key(p.position)] === roles[key(rawRole)]
+      && (key(p.name) === key(name) || (roles[key(rawRole)] === 'bendahara' && schoolKey(institution)
+        && (p.institution || '').split(';').some(part => schoolKey(part) === schoolKey(institution)))));
+    if (unconfirmed && !recorded) continue;
     const arrival = states[key(rawArrival)];
     const role = roles[key(rawRole)];
     snapshot.detail_rows.push({

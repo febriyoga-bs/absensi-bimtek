@@ -20,7 +20,8 @@ const sessionStatuses = [
 function VenueAttendanceCard({ venue, day, testSession, onDetails, visibleGroups }) {
   const participantGroups = visibleGroups.filter(([key]) => key !== 'lo');
   const total = participantGroups.reduce((sum, [key]) => sum + venue[key].total, 0);
-  const attended = participantGroups.reduce((sum, [key]) => sum + venue[key].recorded, 0);
+  const attended = participantGroups.reduce((sum, [key]) => sum + venue[key].recorded, 0)
+    + (visibleGroups.length === venueGroups.length ? (venue.other?.recorded || 0) : 0);
 
   return (
     <article className="venue-attendance">
@@ -191,7 +192,8 @@ export default function Dashboard() {
             + venueGroups.reduce((count, [key]) => count + venue[key].total, 0), 0) : null;
           const pct = expected ? Math.round((totalRecords / expected) * 100) : 0;
           return (
-            <div key={s.id} className={`stat ${s.is_open ? 'stat--open' : ''}`}>
+            <div key={s.id} className={`stat session-row ${s.is_open ? 'stat--open' : ''}`}>
+              <div className="session-row__identity">
               <div className="stat__head">
                 <h4>{sessionTitle(s)}</h4>
                 {s.is_open && <span className="tag tag--open"><FontIcon name="circle-play" /> Dibuka</span>}
@@ -199,10 +201,13 @@ export default function Dashboard() {
               <div className="muted small"><FontIcon name="clock" /> {fmtDT(s.starts_at)} – {fmtDT(s.ends_at)} WIB</div>
               <div className="chips"><span className={`tag tag--${s.role}`}>{s.role}</span>
                 {!s.check_in_day && <span className="tag tag--type">{s.type}</span>}</div>
+              </div>
+              <div className="session-row__progress">
               <div className="stat__big">{number.format(totalRecords)}<small> total catatan absensi</small></div>
               <div className="muted small">Tercatat: <b>{number.format(totalRecords)}</b> / {expected === null ? '…' : number.format(expected)} target dari ringkasan venue{expected !== null && ` (${pct}%)`}</div>
               {expected !== null && <div className="bar" role="progressbar" aria-label="Progres pencatatan absensi" aria-valuemin={0} aria-valuemax={expected || 1} aria-valuenow={Math.min(totalRecords, expected || 1)} aria-valuetext={`${number.format(totalRecords)} dari ${number.format(expected)} target tercatat (${pct}%)`}><span style={{ width: `${Math.min(pct, 100)}%` }} /></div>}
               <div className="muted small">Sudah hadir: <b>{number.format(checkedIn)}</b></div>
+              </div>
               <div className="dashboard-statuses">
                 {sessionStatuses.filter(([key]) => key !== 'unavailable' || s.unavailable > 0).map(([key, label, icon]) => (
                   <button type="button" key={key} data-status={key} aria-haspopup="dialog"
@@ -214,11 +219,11 @@ export default function Dashboard() {
                 ))}
               </div>
               {!lo && s.by_venue.length > 0 && (
-                <div className="chips">
+                <div className="chips session-row__venues">
                   {s.by_venue.map((v) => <span key={v.name} className="tag tag--venue">{v.name}: {v.n}</span>)}
                 </div>
               )}
-              <div className="row">
+              <div className="row session-row__actions">
                 <Link className="btn btn--sm" to={`/admin/absensi?sesi=${s.id}${s.review ? '&status=review' : ''}`}><FontIcon name="list-check" />Verifikasi</Link>
                 <button type="button" className="btn btn--sm" onClick={() => setDownloadInitial({ session_id: String(s.id),
                   venue_id: lo ? '' : venueId, recorded_by: '', position: '', status: '', q: '' })}><FontIcon name="download" />Unduh</button>
@@ -230,7 +235,7 @@ export default function Dashboard() {
       </section>
       <section className="venue-attendance-section" aria-labelledby="venue-attendance-title">
         <h3 id="venue-attendance-title">Ringkasan per venue</h3>
-        <p className="muted small">{day === null ? 'Menentukan hari absensi…' : selectedTest ? `Ringkasan sesi test: ${sessionTitle(selectedTest)}. Tidak digabung dengan sesi resmi.` : selectedDay ? `Ringkasan ${checkInDayLabel(selectedDay)}.` : 'Gabungan semua sesi resmi.'} Setiap orang dihitung sekali per venue. Catatan hadir maupun berhalangan masuk hitungan.</p>
+        <p className="muted small">{day === null ? 'Menentukan hari absensi…' : selectedTest ? `Ringkasan sesi test: ${sessionTitle(selectedTest)}. Tidak digabung dengan sesi resmi.` : selectedDay ? `Ringkasan ${checkInDayLabel(selectedDay)}.` : 'Gabungan semua sesi resmi.'} Jumlah catatan mengikuti sesi: Valid, Perlu dicek, Ditolak, dan Berhalangan.</p>
         <div className="scan-display-controls">
           <details className="scan-column-picker">
             <summary className="btn btn--sm">Atur jenis peserta ({visibleGroups.length}/{venueGroups.length})</summary>

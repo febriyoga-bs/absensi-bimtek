@@ -653,7 +653,7 @@ test('LO retries rejected attendance with a fresh photo once, preserving the pre
   }
 });
 
-test('venue recaps and details use arrival invitations, retain unknown source participants and exclude extra profiles', async()=>{
+test('venue recaps retain invitation targets while recorded counts and details include every session record', async()=>{
   let prior,priorRoster,session;let people=[];
   try {
     await scoped(3,async()=>{
@@ -667,10 +667,17 @@ test('venue recaps and details use arrival invitations, retain unknown source pa
       await q('INSERT INTO venue_arrival_recap(venue_id,marks,detail_rows,source_summary) VALUES(1,$1,$2,$3) ON CONFLICT(venue_id) DO UPDATE SET detail_rows=EXCLUDED.detail_rows,source_summary=EXCLUDED.source_summary',[JSON.stringify({}),JSON.stringify(detail),JSON.stringify([{position:'Pengawas',invited:413,arrived:384,queued:24}])]);
     });
     const rows=await(await request(`/admin/venue-attendance?event=3&test_session_id=${session}`)).json();
-    const count=rows.find(v=>v.id===1).pengawas;assert.equal(count.total,413);assert.equal(count.attended,1);assert.equal(count.registered,1);assert.equal(count.unresolved,1);assert.equal(count.source,'arrival');
+    const count=rows.find(v=>v.id===1).pengawas;assert.equal(count.recorded,2);assert.equal(count.total,413);assert.equal(count.attended,1);assert.equal(count.registered,1);assert.equal(count.unresolved,1);assert.equal(count.source,'arrival');
     const details=await(await request(`/admin/venue-attendance/1/pengawas?event=3&test_session_id=${session}`)).json();
-    assert.equal(details.length,2);assert.ok(!details.some(d=>d.name==='Profil tambahan'));assert.equal(details.filter(d=>d.people[0].status==='valid').length,1);
+    assert.equal(details.length,3);assert.ok(details.some(d=>d.name==='Profil tambahan'));assert.equal(details.filter(d=>d.people[0].status==='valid').length,count.recorded);
     assert.equal(details.find(d=>d.name==='Peserta baru').people[0].registered,false);
+    await scoped(3,()=>q("UPDATE people SET position='Fasilitator Pelaporan' WHERE id=$1",[people[1]]));
+    const regrouped=await(await request(`/admin/venue-attendance?event=3&test_session_id=${session}`)).json();
+    const venue=regrouped.find(v=>v.id===1);
+    assert.equal(venue.fasil.recorded,1);assert.equal(venue.pengawas.recorded,1);assert.equal(venue.other.recorded,0);
+    const fasilDetails=await(await request(`/admin/venue-attendance/1/fasil?event=3&test_session_id=${session}`)).json();
+    assert.ok(fasilDetails.some(d=>d.name==='Profil tambahan'&&d.people[0].status==='valid'));
+
     assert.equal((await scoped(3,()=>q('SELECT count(*)::int n FROM attendance WHERE session_id=$1',[session]))).rows[0].n,2);
   } finally {
     await scoped(3,async()=>{

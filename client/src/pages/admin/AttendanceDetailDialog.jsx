@@ -13,6 +13,7 @@ function attendanceLabel(person) {
   if (!person.registered) return 'Profil absensi belum tersedia';
   if (person.status === 'valid') return 'Sudah absen';
   if (person.status === 'review') return 'Sudah absen - perlu dicek';
+  if (person.status === 'ditolak') return 'Ditolak';
   if (person.status === 'berhalangan') return 'Mundur/Berhalangan Hadir';
   return 'Belum absen';
 }
@@ -47,9 +48,9 @@ export default function AttendanceDetailDialog({ details, onClose }) {
 
   const detailEntries = detailResult?.entries ?? details?.entries;
   const checkedIn = details?.filterByCheckIn ? detailEntries?.filter((entry) =>
-    entry.people?.some((person) => ['valid', 'review', 'berhalangan'].includes(person.status))) : null;
+    entry.people?.some((person) => ['valid', 'review', 'ditolak', 'berhalangan'].includes(person.status))) : null;
   const notCheckedIn = details?.filterByCheckIn ? detailEntries?.filter((entry) =>
-    !entry.people?.some((person) => ['valid', 'review', 'berhalangan'].includes(person.status))) : null;
+    !entry.people?.some((person) => ['valid', 'review', 'ditolak', 'berhalangan'].includes(person.status))) : null;
   const shownEntries = !details?.filterByCheckIn || attendanceFilter === 'all' ? detailEntries
     : attendanceFilter === 'not_checked_in' ? notCheckedIn : checkedIn;
   return (

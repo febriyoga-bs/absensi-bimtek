@@ -97,8 +97,30 @@ function groupProfiles(roster, profiles, group, ids, venueId) {
 const loadArrivalSources = venueId => q(`SELECT r.venue_id,r.source_summary,r.detail_rows FROM venue_arrival_recap r
   JOIN venues v ON v.id=r.venue_id WHERE ($1::int IS NULL OR r.venue_id=$1) AND ${eventVenueScope('v')}`, [venueId]);
 
+const recordGroup = p => {
+  const position = String(p.position || '').trim().toLowerCase();
+  if (/^fasil/.test(position)) return 'fasil';
+  if (/^lo($|\s)|^liaison officer$/.test(position)) return 'lo';
+  if (p.role === 'peserta') return Object.entries(participantPositions).find(([, value]) => value === position)?.[0] || 'other';
+  return 'other';
+};
+const loadSessionRecords = (venueId, day, testSession) => q(`SELECT a.id,a.venue_id,a.status,p.name,p.institution,p.npsn,p.ruangan AS room,p.role,p.position
+  FROM attendance a JOIN sessions s ON s.id=a.session_id JOIN people p ON p.id=a.person_id
+  WHERE ($1::int IS NULL OR a.venue_id=$1) AND a.status IN ('valid','review','ditolak','berhalangan')
+    AND ($2::date IS NULL OR (s.starts_at AT TIME ZONE 'Asia/Jakarta')::date=$2)
+    AND (CASE WHEN $3::int IS NULL THEN NOT s.is_test ELSE s.is_test AND s.id=$3 END)
+  ORDER BY p.name,a.id`, [venueId,day,testSession]);
+
 export async function getVenueAttendanceDetails(venueId, group, day = null, testSession = null) {
-  const entries = await loadVenueAttendanceDetails(venueId, group, day, testSession);
+  const entries = group === 'other' ? [] : await loadVenueAttendanceDetails(venueId, group, day, testSession);
+  const { rows: records } = await loadSessionRecords(venueId, day, testSession);
+  const actual = records.filter(p => recordGroup(p) === group);
+  const recordedNames = new Set(actual.map(p => nameKey(p.name)));
+  const recordedSchools = new Set(actual.flatMap(p => String(p.npsn || '').split(';').map(v => v.trim()).filter(Boolean)));
+  const remaining = entries.filter(e => !recordedNames.has(nameKey(e.name)) && !(group === 'bendahara' && String(e.npsn || '').split(';').some(id => recordedSchools.has(id.trim()))));
+  entries.splice(0, entries.length, ...actual.map(p => ({ name:p.name,institution:p.institution,npsn:p.npsn,room:p.room,
+    people:[{name:p.name,registered:true,status:p.status}] })), ...remaining.map(e => ({...e,people:e.people.map(p=>({...p,status:null}))})));
+
   if (!Object.hasOwn(participantPositions, group)) return entries;
   const { rows: assignments } = await q(`SELECT DISTINCT l.name AS lo_name,m.name,m.npsn
     FROM assignment_roster r
@@ -222,6 +244,17 @@ export async function getVenueAttendance(venueId, day = null, testSession = null
       if (['valid', 'review', 'berhalangan'].includes(person.status)) count.recorded++;
       if (person.status === 'valid' || person.status === 'review') count.attended++;
     }
+  }
+  const { rows: records } = await loadSessionRecords(venueId, day, testSession);
+  for (const card of cards.values()) {
+    card.other = emptyCount();
+    for (const group of [...Object.keys(participantPositions), 'fasil', 'lo']) card[group].recorded = 0;
+  }
+  for (const record of records) {
+    const card = cards.get(record.venue_id); if (!card) continue;
+    const group = recordGroup(record);
+    card[group].recorded++;
+    if (group === 'other') card.other.total++;
   }
   return [...cards.values()];
 }
