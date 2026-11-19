@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api.js';
 import { personName } from '../../lib/personName.js';
-import { fmtDT, sessionTitle, FLAG_LABEL } from './shared.js';
+import { fmtDT, sessionTitle, attendanceReasonText } from './shared.js';
 
 const number = new Intl.NumberFormat('id-ID');
 const PAGE = 50;
@@ -42,7 +42,7 @@ export default function SessionStatusDialog({ selection, onClose }) {
           <div className="muted small">{row.venue_name} · {fmtDT(row.created_at)} WIB</div>
           {row.scanned_by && <div className="small">Dicatat oleh {personName(row.scanned_by)}</div>}
           {row.participant_note && <p className="small">Catatan: {row.participant_note}</p>}
-          {(row.reasons || row.flags || []).length > 0 && <p className="small">{(row.reasons || row.flags).map((reason) => FLAG_LABEL[reason] || reason).join(' · ')}</p>}
+          {attendanceReasonText(row.reasons || row.flags) && <p className="small">{attendanceReasonText(row.reasons || row.flags)}</p>}
         </li>)}</ol>
         {result.total > PAGE && <div className="row">
           <button className="btn btn--sm" disabled={page === 0} onClick={() => setPage((value) => value - 1)}>Sebelumnya</button>

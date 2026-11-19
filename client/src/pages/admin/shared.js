@@ -32,6 +32,17 @@ export const FLAG_LABEL = {
   sampel_sedikit: 'Sampel GPS sedikit',
 };
 
+export function attendanceReasonText(reasons) {
+  if (!Array.isArray(reasons)) return '';
+  return reasons.map((reason) => {
+    if (typeof reason === 'string') return FLAG_LABEL[reason] || reason;
+    if (!reason || typeof reason !== 'object') return '';
+    const code = typeof reason.code === 'string' ? reason.code : '';
+    const detail = typeof reason.detail === 'string' ? reason.detail.trim() : '';
+    return [FLAG_LABEL[code] || code, detail].filter(Boolean).join(': ');
+  }).filter(Boolean).join(' · ');
+}
+
 /** Date → nilai input datetime-local (waktu lokal browser) */
 export const toLocalInput = (d) => {
   const x = new Date(d);
