@@ -1102,7 +1102,9 @@ r.get('/attendance', ah(async (req, res) => {
   const search = attendanceSearch(req);
   const where = `a.session_id=$1 AND ($2::int IS NULL OR a.venue_id=$2)
     AND EXISTS (SELECT 1 FROM people p WHERE p.id=a.person_id AND ${positionFilter}
-      AND ($8::text='' OR p.name ILIKE $8 OR p.npsn ILIKE $8))
+      AND ($8::text='' OR p.name ILIKE $8 OR p.npsn ILIKE $8 OR EXISTS (
+        SELECT 1 FROM venue_arrival_recap arrival WHERE arrival.venue_id=a.venue_id
+          AND arrival.representatives->p.id::text->>'name' ILIKE $8)))
     AND ($9::int IS NULL OR (a.method IN ('manual','qr') AND NOT EXISTS (
       SELECT 1 FROM lo_accounts other JOIN lo_accounts own ON own.id=$9
       WHERE other.id<>own.id AND other.venue_id=own.venue_id AND other.name=own.name)))`;
@@ -1111,11 +1113,13 @@ r.get('/attendance', ah(async (req, res) => {
       `SELECT a.id, a.status, a.risk_score, a.flags, a.lat, a.lng, a.accuracy_m, a.distance_m,
               a.created_at, a.device_id, a.user_agent, a.ip, a.photo_path, a.photo_history, a.venue_id, a.method, a.scanned_by, a.participant_note,
               p.name, p.code, p.role, p.institution, p.position, v.name AS venue_name,
+              arrival.representatives->p.id::text AS representative,
               ${assignedToLo('$6', '$2')} AS can_verify,
               ${canDeleteAttendance('$6', '$2')} AS can_delete,
               (($6::int IS NULL OR a.venue_id=$2::int)
                 AND ${canCheckInForLo('$6', '$2')}) AS can_edit_note
        FROM attendance a JOIN people p ON p.id=a.person_id LEFT JOIN venues v ON v.id=a.venue_id
+       LEFT JOIN venue_arrival_recap arrival ON arrival.venue_id=a.venue_id
        WHERE ${where} AND ($3::text IS NULL OR a.status=$3) AND ($7::text='' OR a.scanned_by=$7)
        ORDER BY ${attendanceOrders[sort]}
        LIMIT $4 OFFSET $5`,

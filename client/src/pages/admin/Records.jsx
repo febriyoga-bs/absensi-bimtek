@@ -238,7 +238,9 @@ export default function Records() {
                   </span>
                 </div>
                 {r.method === 'manual' && r.has_photo && <span className="rec__by"><Icon name="users" size={13} /> Diabsenkan {personName(r.scanned_by) || 'LO'}</span>}
-                <div className="rec__name">{personName(r.name)} <span className={`tag tag--${r.role}`}>{r.role}</span></div>
+                <div className="rec__name">{personName(r.representative?.name || r.name)} <span className={`tag tag--${r.role}`}>{r.role}</span>
+                  {r.representative?.name && <span className="tag tag--venue">Mewakili</span>}</div>
+                {r.representative?.name && <div className="muted small">Mewakili {personName(r.name)}</div>}
                 <div className="muted small">{r.code} · {r.institution || '-'}</div>
                 {r.venue_name && <div><span className="tag tag--venue">{r.venue_name}</span></div>}
                 {r.lat == null ? <div className="small">{fmtDT(r.created_at)} WIB · {r.status === 'berhalangan' ? 'dicatat oleh' : r.method === 'qr' ? 'dipindai oleh' : 'diabsenkan oleh'} {personName(r.scanned_by) || 'LO'}</div> : <>
@@ -269,7 +271,7 @@ export default function Records() {
                     onClick={() => { setNoteNotice(''); setNoteTarget(r); }}>{r.status === 'berhalangan' ? 'Ubah alasan' : 'Ubah catatan'}</button>}
                   {lo && r.status === 'ditolak' && r.can_retry && <button type="button" className="btn btn--sm btn--primary"
                     disabled={loading || !selectedSession?.is_open} title={selectedSession?.is_open ? 'Ambil foto baru untuk absen ulang' : 'Sesi absensi sudah ditutup'}
-                    onClick={() => setRetryTarget({ code: r.code, name: personName(r.name), position: r.position, school: r.institution,
+                    onClick={() => setRetryTarget({ code: r.code, name: personName(r.representative?.name || r.name), originalName: r.representative?.name ? r.name : null, position: r.position, school: r.institution,
                       sessionId: Number(sid), sessionName: sessionTitle(selectedSession), isTest: selectedSession?.is_test })}>Absen ulang</button>}
                   {r.status !== 'berhalangan' && r.can_verify !== false && <>
                     {!lo && r.status !== 'valid' && <button className="btn btn--sm btn--ok" onClick={() => setStatus(r.id, 'valid')}>Sahkan</button>}

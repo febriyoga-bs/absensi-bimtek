@@ -682,6 +682,26 @@ test('venue recaps and details use arrival invitations, retain unknown source pa
   }
 });
 
+test('verification returns the representative and searches both attendee and original names', async () => {
+  await scoped(3, async () => {
+    const {rows:[person]} = await q(`INSERT INTO people(code,name,role,position,venue_id)
+      VALUES('representative-test','Original Representative Test','peserta','Pengawas',1) RETURNING id`);
+    await q(`INSERT INTO attendance(person_id,session_id,venue_id,status) VALUES($1,1,1,'valid')`,[person.id]);
+    await q(`INSERT INTO venue_arrival_recap(venue_id,representatives) VALUES(1,$1::jsonb)
+      ON CONFLICT(venue_id) DO UPDATE SET representatives=EXCLUDED.representatives`,
+      [JSON.stringify({[person.id]:{name:'Replacement Representative Test',original_name:person.name}})]);
+  });
+  for (const search of ['Original Representative Test','Replacement Representative Test']) {
+    const response=await request(`/admin/attendance?event=3&session_id=1&q=${encodeURIComponent(search)}`);
+    assert.equal(response.status,200);
+    const data=await response.json();
+    assert.equal(data.total,1);
+    assert.equal(data.counts.valid,1);
+    assert.equal(data.rows[0].name,'Original Representative Test');
+    assert.equal(data.rows[0].representative.name,'Replacement Representative Test');
+  }
+});
+
 test('an explicit identity merge updates old sessions and new logins without matching passwords or names', async () => {
   const ids={};
   for(const event of [3,4])await scoped(event,async()=>{
