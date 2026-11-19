@@ -1,6 +1,7 @@
 import { personName } from '../../lib/personName.js';
 import { useEffect, useRef, useState } from 'react';
-import { api } from '../../api.js';
+import { eventPath } from '../../event.js';
+import { api, adminToken } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
 import FontIcon from '../../components/FontIcon.jsx';
 import { formatRoom } from '../../lib/room.js';
@@ -33,15 +34,22 @@ export default function AttendanceDetailDialog({ details, onClose }) {
   const [detailResult, setDetailResult] = useState(null);
   const [attendanceFilter, setAttendanceFilter] = useState('checked_in');
   const dialog = useRef(null);
+  const recentDetails = useRef(new Map());
 
   useEffect(() => {
     if (!details) return;
     if (!dialog.current.open) dialog.current.showModal();
     let current = true;
-    setDetailResult(null);
+    const cacheKey = `${adminToken.get()}:${eventPath(details.path)}`;
+    const cached = recentDetails.current.get(cacheKey);
+    setDetailResult(cached && Date.now() - cached.at < 30_000 ? { entries: cached.entries } : null);
     setAttendanceFilter('checked_in');
     api(details.path, { admin: true })
-      .then((entries) => { if (current) setDetailResult({ entries }); })
+      .then((entries) => {
+        recentDetails.current.set(cacheKey, { entries, at: Date.now() });
+        if (recentDetails.current.size > 24) recentDetails.current.delete(recentDetails.current.keys().next().value);
+        if (current) setDetailResult({ entries });
+      })
       .catch(() => { if (current) setDetailResult({ error: true }); });
     return () => { current = false; };
   }, [details]);

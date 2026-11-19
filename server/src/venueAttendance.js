@@ -112,8 +112,10 @@ const loadSessionRecords = (venueId, day, testSession) => q(`SELECT a.id,a.venue
   ORDER BY p.name,a.id`, [venueId,day,testSession]);
 
 export async function getVenueAttendanceDetails(venueId, group, day = null, testSession = null) {
-  const entries = group === 'other' ? [] : await loadVenueAttendanceDetails(venueId, group, day, testSession);
-  const { rows: records } = await loadSessionRecords(venueId, day, testSession);
+  const [entries, { rows: records }] = await Promise.all([
+    group === 'other' ? Promise.resolve([]) : loadVenueAttendanceDetails(venueId, group, day, testSession),
+    loadSessionRecords(venueId, day, testSession),
+  ]);
   const actual = records.filter(p => recordGroup(p) === group);
   const recordedNames = new Set(actual.map(p => nameKey(p.name)));
   const recordedSchools = new Set(actual.flatMap(p => String(p.npsn || '').split(';').map(v => v.trim()).filter(Boolean)));
@@ -163,9 +165,10 @@ export async function getVenueAttendanceDetails(venueId, group, day = null, test
 async function loadVenueAttendanceDetails(venueId, group, day = null, testSession = null) {
   if (Object.hasOwn(participantPositions, group)) {
     if (group !== 'bpmp') {
-      const { rows: [source] } = await loadArrivalSources(venueId);
+      const [{ rows: [source] }, { rows: profiles }] = await Promise.all([
+        loadArrivalSources(venueId), loadProfiles(venueId, day, testSession),
+      ]);
       if (source?.source_summary?.some(row => row.position.toLowerCase() === participantPositions[group])) {
-        const { rows: profiles } = await loadProfiles(venueId,day,testSession);
         return sourceAttendance(source,profiles,participantPositions[group]).details;
       }
     }
