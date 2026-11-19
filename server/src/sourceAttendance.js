@@ -31,7 +31,7 @@ export function sourceAttendance(source, profiles, position) {
     for (const identity of new Set((p.institution || '').split(';').map(schoolKey))) index(bySchool, identity, p);
   }
   const seen = new Set();
-  const rows = source.detail_rows.filter(row => positionKey(row.position) === positionKey(position)).filter(row => {
+  const rows = source.detail_rows.filter(row => key(row.confirmation_status) !== 'belumkonfirmasi' && key(row.arrival_status) !== 'belumkonfirmasi' && positionKey(row.position) === positionKey(position)).filter(row => {
     const identity = JSON.stringify([key(row.name),schoolKey(row.institution)]);
     if (seen.has(identity)) return false; seen.add(identity); return true;
   }).map(row => {

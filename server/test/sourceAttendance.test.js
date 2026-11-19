@@ -41,3 +41,11 @@ test('without NPSN, normalized school and similar name can link; ambiguous or un
  assert.equal(sourceAttendance(s,[{...p,name:'Peserta Lain'}],'pengawas').count.recorded,0);
  assert.equal(sourceAttendance(s,[{...p,venue_id:2}],'pengawas').count.recorded,0);
 });
+
+test('explicit unconfirmed source rows are excluded while confirmed pending arrivals remain',()=>{
+ const s=source([['Belum','A'],['Bersedia','B'],['Tiba','C']]);
+ s.detail_rows[0].confirmation_status='Belum Konfirmasi';
+ s.detail_rows[1].confirmation_status='Bersedia Hadir';s.detail_rows[1].arrival_status=null;
+ const r=sourceAttendance(s,[],'pengawas');
+ assert.deepEqual(r.details.map(row=>row.name),['Bersedia','Tiba']);
+});

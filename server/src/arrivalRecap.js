@@ -96,7 +96,7 @@ export async function getArrivalRecapDetails(rawVenueId, group) {
 
 export async function importArrivalRecap(rows, summary = null) {
   if (!Array.isArray(rows) || !rows.length || rows.length > 20_000 ||
-    rows.some((row) => !Array.isArray(row) || row.length !== 5 || row.some((value) => typeof value !== 'string' || value.length > 400))) {
+    rows.some((row) => !Array.isArray(row) || ![5, 6].includes(row.length) || row.some((value) => typeof value !== 'string' || value.length > 400))) {
     throw new HttpError(400, 'Data Detail Peserta tidak valid.');
   }
   const [{ rows: venues }, { rows: people }] = await Promise.all([
@@ -140,11 +140,12 @@ export async function importArrivalRecap(rows, summary = null) {
   const snapshots = new Map();
   const proposals = [];
   let unmatched = 0;
-  for (const [hotel, rawRole, name, institution, rawArrival] of rows) {
+  for (const [hotel, rawRole, name, institution, rawArrival, confirmation] of rows) {
     const venue = resolveVenue(hotel);
     if (!venue) throw new HttpError(400, `Venue di Excel tidak ditemukan di aplikasi: ${hotel || '(kosong)'}.`);
     if (!snapshots.has(venue.id)) snapshots.set(venue.id, { venue_id: venue.id, marks: {}, representatives: {}, detail_rows: [] });
     const snapshot = snapshots.get(venue.id);
+    if (key(confirmation) === 'belumkonfirmasi' || (!confirmation && key(rawArrival) === 'belumkonfirmasi')) continue;
     const arrival = states[key(rawArrival)];
     const role = roles[key(rawRole)];
     snapshot.detail_rows.push({

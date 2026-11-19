@@ -53,7 +53,7 @@ export async function readArrivalWorkbook(file) {
 }
 
 export function parseArrivalSheets(rows, summaryRows) {
-  const details = pickColumns(rows, ['regional / hotel', 'role', 'nama', 'instansi', 'kedatangan']);
+  const details = pickColumns(rows, ['regional / hotel', 'role', 'nama', 'instansi', 'kedatangan'], ['konfirmasi']);
   const summary = [];
   let position = null;
   for (const [index, row] of summaryRows.entries()) {
