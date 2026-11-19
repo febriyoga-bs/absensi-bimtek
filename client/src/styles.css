@@ -1023,3 +1023,6 @@ select:disabled { background-color: var(--surface-2); color: var(--muted); curso
 .lo-shot__flip { position: absolute; top: 12px; right: 12px; z-index: 4; border: 0; border-radius: 99px; padding: 6px 10px; font: inherit; font-size: 12px; font-weight: 700;
   color: #fff; background: rgba(0,0,0,.5); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 .rec__by { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: var(--accent); background: var(--accent-soft); padding: 2px 8px; border-radius: 99px; width: fit-content; }
+
+.assignment-lo { display: flex; align-items: baseline; gap: 7px; margin-top: 5px; color: #526581; }
+.assignment-lo > .icon { color: #1764cf; flex-shrink: 0; }

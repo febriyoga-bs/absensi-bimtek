@@ -17,3 +17,27 @@ test('ambiguous school identities cannot transfer attendance; exact name can dis
  const r=sourceAttendance(s,ps,'bendahara');assert.equal(r.count.attended,1);assert.equal(r.count.unresolved,1);
  assert.equal(sourceAttendance({detail_rows:[]},ps,'bendahara'),null);
 });
+
+test('recorded includes attendance and unavailable once, excluding missing and rejected records',()=>{
+ const names=['Hadir','Cek','Berhalangan','Belum','Ditolak'];
+ const statuses=['valid','review','berhalangan',null,'rejected'];
+ const ps=names.map((name,i)=>({...profile(i+1,name,`Sekolah ${i}`),status_by_venue:{1:statuses[i]}}));
+ const r=sourceAttendance(source(names.map((name,i)=>[name,`Sekolah ${i}`])),ps,'pengawas');
+ assert.equal(r.count.total,5);assert.equal(r.count.attended,2);assert.equal(r.count.recorded,3);
+ assert.equal(r.details.find(row=>row.name==='Berhalangan').people[0].status,'berhalangan');
+});
+
+test('same NPSN and similar name links a profile despite school spelling differences',()=>{
+ const s=source([['Sri Rahayu Pm','UPT SPF SD INPRES HARTACO INDAH']]);s.detail_rows[0].npsn='40312039';
+ const ps=[{...profile(1,'SRI RAHAYU PM., S.PD. Gr.','SD INPRES HARTACO INDAH'),npsn:'40312039'}];
+ assert.equal(sourceAttendance(s,ps,'pengawas').count.recorded,1);
+ s.detail_rows[0].npsn='99999999';assert.equal(sourceAttendance(s,ps,'pengawas').count.recorded,0);
+});
+test('without NPSN, normalized school and similar name can link; ambiguous or unrelated names cannot',()=>{
+ const s=source([['Sri Rahayu Pm','UPT SPF SD INPRES HARTACO INDAH']]);
+ const p=profile(1,'SRI RAHAYU PM., S.PD. Gr.','SD INPRES HARTACO INDAH');
+ assert.equal(sourceAttendance(s,[p],'pengawas').count.recorded,1);
+ assert.equal(sourceAttendance(s,[p,{...p,id:2}],'pengawas').count.recorded,0);
+ assert.equal(sourceAttendance(s,[{...p,name:'Peserta Lain'}],'pengawas').count.recorded,0);
+ assert.equal(sourceAttendance(s,[{...p,venue_id:2}],'pengawas').count.recorded,0);
+});

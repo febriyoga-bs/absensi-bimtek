@@ -177,7 +177,10 @@ function ImportReporting({ onSaved }) {
       setFeedback({ result, message: `${nf.format(updated)} sekolah diperbarui.${defaulted ? ` ${nf.format(defaulted)} sekolah di luar CSV ditandai Belum kirim.` : ''}${skipped ? ` ${nf.format(skipped)} NPSN di luar pemetaan kegiatan ini dilewati.` : ''}${contacts ? ` ${nf.format(contacts)} kontak dilengkapi.` : ''}` });
       onSaved();
     } catch (e) {
-      setFeedback({ error: true, message: e.message });
+      const moduleFailed = /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i.test(e.message || '');
+      setFeedback({ error: true, message: moduleFailed
+        ? 'Komponen pembaca file gagal dimuat. Muat ulang halaman, pilih kembali CSV, lalu coba impor lagi. Periksa juga koneksi internet.'
+        : e.message });
     } finally {
       setBusy(false);
     }

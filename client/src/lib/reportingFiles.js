@@ -1,3 +1,5 @@
+import Papa from 'papaparse';
+
 const asText = (value) => String(value ?? '').trim();
 const normalized = (value) => asText(value).toLowerCase();
 
@@ -15,7 +17,6 @@ function pickColumns(rows, required, optional = []) {
 export async function readMonitoringCsv(file, onProgress = () => {}) {
   if (file.size > 20_000_000) throw new Error('Ukuran CSV maksimal 20 MB.');
   onProgress('reading');
-  const { default: Papa } = await import('papaparse');
   const text = await file.text();
   onProgress('validating');
   await new Promise((resolve) => setTimeout(resolve, 0));

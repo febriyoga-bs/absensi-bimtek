@@ -1,10 +1,9 @@
 import { attendanceCell } from './attendanceNaming.js';
 import { downloadFile } from './downloadFile.js';
+import Papa from 'papaparse';
 
 export async function downloadAttendanceExcel(csv, filename) {
-  const [{ default: Papa }, { default: writeExcelFile }] = await Promise.all([
-    import('papaparse'), import('write-excel-file/browser'),
-  ]);
+  const { default: writeExcelFile } = await import('write-excel-file/browser');
   const { data, errors } = Papa.parse(csv.replace(/^\uFEFF/, ''), { skipEmptyLines: 'greedy' });
   if (errors.length || !data.length) throw new Error('Data ekspor tidak dapat dibaca. Silakan coba lagi.');
   const [headers, ...body] = data;

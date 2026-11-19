@@ -2,6 +2,23 @@
 // attach actual session attendance; an ambiguous identity must not count twice.
 const key = value => String(value ?? '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 const schoolKey = value => key(String(value ?? '').toLowerCase().replace(/\bsd\s*n(?=\s|\d|[.-])/g, 'sd negeri '));
+// School identifiers take precedence; school-name fallback ignores administrative prefixes.
+const schoolIdentity = value => schoolKey(String(value ?? '').replace(/^(?:\s*(?:UPT(?:D)?|SPF|SATUAN PENDIDIKAN FORMAL)\b[.\s]*)+/i, ''));
+const schoolIds = value => String(value ?? '').split(';').map(v => v.trim()).filter(v => /^\d{8}$/.test(v));
+const personKey = value => key(String(value ?? '').split(',')[0].replace(/\b(?:s\.?\s*pd|s\.?\s*pd\.?\s*sd|m\.?\s*pd|gr)\b.*$/i, ''));
+function similarName(a, b) {
+  a = personKey(a); b = personKey(b);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (Math.min(a.length, b.length) < 7) return false;
+  let previous = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const current = [i];
+    for (let j = 1; j <= b.length; j++) current[j] = Math.min(current[j-1]+1, previous[j]+1, previous[j-1]+(a[i-1] === b[j-1] ? 0 : 1));
+    previous = current;
+  }
+  return previous[b.length] / Math.max(a.length, b.length) <= 0.2;
+}
 const positionKey = value => key(value) === 'sekolah' ? 'bendahara' : key(value);
 export function sourceAttendance(source, profiles, position) {
   const summary = source?.source_summary?.filter(row => positionKey(row.position) === positionKey(position));
@@ -28,6 +45,15 @@ export function sourceAttendance(source, profiles, position) {
     }
     if (matches.length > 1 && usableSchool) matches = matches.filter(p => (p.institution || '').split(';').some(part => schoolKey(part) === institution));
     if (!matches.length && usableSchool) matches = bySchool.get(institution) || [];
+    const ids = schoolIds(row.npsn);
+    if (ids.length || matches.length !== 1) {
+      const schoolMatches = candidates.filter(p => ids.length
+        ? schoolIds(p.npsn).some(id => ids.includes(id))
+        : usableSchool && (p.institution || '').split(';').some(part => schoolIdentity(part) === schoolIdentity(row.institution)));
+      const similar = schoolMatches.filter(p => similarName(row.name, p.name));
+      // Never choose arbitrarily between profiles or fall back from a conflicting NPSN.
+      matches = similar.length === 1 ? similar : ids.length ? similar : matches;
+    }
     return { row, match: matches.length === 1 ? matches[0] : null, ambiguous: matches.length > 1 };
   });
   const occurrences = new Map();
@@ -45,6 +71,7 @@ export function sourceAttendance(source, profiles, position) {
   const count = { total: summary.reduce((n,row) => n + row.invited,0),
     registered: details.filter(row => row.people[0].registered).length,
     attended: details.filter(row => ['valid','review'].includes(row.people[0].status)).length,
+    recorded: details.filter(row => ['valid','review','berhalangan'].includes(row.people[0].status)).length,
     source: 'arrival', detail_count: details.length,
     unresolved: details.filter(row => !row.people[0].registered).length };
   return { count, details };

@@ -20,7 +20,7 @@ const sessionStatuses = [
 function VenueAttendanceCard({ venue, day, testSession, onDetails, visibleGroups }) {
   const participantGroups = visibleGroups.filter(([key]) => key !== 'lo');
   const total = participantGroups.reduce((sum, [key]) => sum + venue[key].total, 0);
-  const attended = participantGroups.reduce((sum, [key]) => sum + venue[key].attended, 0);
+  const attended = participantGroups.reduce((sum, [key]) => sum + venue[key].recorded, 0);
 
   return (
     <article className="venue-attendance">
@@ -28,13 +28,13 @@ function VenueAttendanceCard({ venue, day, testSession, onDetails, visibleGroups
         <span className="kpi__icon"><FontIcon name="location-dot" /></span>
         <div>
           <h4>{venue.name}</h4>
-          <div className="muted small"><b>{number.format(attended + (visibleGroups.some(([key]) => key === 'lo') ? venue.lo.attended : 0))}</b> dari {number.format(total + (visibleGroups.some(([key]) => key === 'lo') ? venue.lo.total : 0))} orang sudah absen</div>
+          <div className="muted small"><b>{number.format(attended + (visibleGroups.some(([key]) => key === 'lo') ? venue.lo.recorded : 0))}</b> dari {number.format(total + (visibleGroups.some(([key]) => key === 'lo') ? venue.lo.total : 0))} orang sudah dicatat</div>
           <div className="muted small">{number.format(total)} peserta{visibleGroups.some(([key]) => key === 'lo') && ` dan ${number.format(venue.lo.total)} LO`}</div>
         </div>
       </header>
       <div className="venue-attendance__groups">
         {visibleGroups.map(([key, label]) => {
-          const { total, attended, registered } = venue[key];
+          const { total, recorded: attended, registered } = venue[key];
           return (
             <button type="button" key={key} aria-haspopup="dialog" aria-label={`Lihat daftar ${label} di ${venue.name}`}
               onClick={() => onDetails({
@@ -45,7 +45,7 @@ function VenueAttendanceCard({ venue, day, testSession, onDetails, visibleGroups
                 sourceTotal: venue[key].source === 'arrival' ? total : undefined,
               })}>
               <span className="venue-attendance__label">{label} <FontIcon name="chevron-right" /></span>
-              <span className="venue-attendance__count"><b>{number.format(attended)}</b> / {number.format(total)} <small>sudah absen</small></span>
+              <span className="venue-attendance__count"><b>{number.format(attended)}</b> / {number.format(total)} <small>sudah dicatat</small></span>
               {venue[key].source !== 'arrival' && registered < total && <small className="muted">
                 {registered === 0 ? 'Belum ada profil absensi' : `${number.format(registered)} punya profil absensi`}
               </small>}
@@ -230,7 +230,7 @@ export default function Dashboard() {
       </section>
       <section className="venue-attendance-section" aria-labelledby="venue-attendance-title">
         <h3 id="venue-attendance-title">Ringkasan per venue</h3>
-        <p className="muted small">{day === null ? 'Menentukan hari absensi…' : selectedTest ? `Ringkasan sesi test: ${sessionTitle(selectedTest)}. Tidak digabung dengan sesi resmi.` : selectedDay ? `Ringkasan ${checkInDayLabel(selectedDay)}.` : 'Gabungan semua sesi resmi.'} Setiap orang dihitung sekali per venue.</p>
+        <p className="muted small">{day === null ? 'Menentukan hari absensi…' : selectedTest ? `Ringkasan sesi test: ${sessionTitle(selectedTest)}. Tidak digabung dengan sesi resmi.` : selectedDay ? `Ringkasan ${checkInDayLabel(selectedDay)}.` : 'Gabungan semua sesi resmi.'} Setiap orang dihitung sekali per venue. Catatan hadir maupun berhalangan masuk hitungan.</p>
         <div className="scan-display-controls">
           <details className="scan-column-picker">
             <summary className="btn btn--sm">Atur jenis peserta ({visibleGroups.length}/{venueGroups.length})</summary>

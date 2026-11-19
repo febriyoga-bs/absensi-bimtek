@@ -3,7 +3,7 @@ import { HttpError } from './util.js';
 import { eventVenueScope } from './eventVenues.js';
 import { sourceAttendance } from './sourceAttendance.js';
 
-const emptyCount = () => ({ total: 0, registered: 0, attended: 0 });
+const emptyCount = () => ({ total: 0, registered: 0, attended: 0, recorded: 0 });
 const nameKey = (name) => String(name || '').normalize('NFKD').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 const participantPositions = {
   bendahara: 'bendahara', pengawas: 'pengawas', dinas: 'dinas pendidikan', bpmp: 'bb/bpmp',
@@ -98,6 +98,47 @@ const loadArrivalSources = venueId => q(`SELECT r.venue_id,r.source_summary,r.de
   JOIN venues v ON v.id=r.venue_id WHERE ($1::int IS NULL OR r.venue_id=$1) AND ${eventVenueScope('v')}`, [venueId]);
 
 export async function getVenueAttendanceDetails(venueId, group, day = null, testSession = null) {
+  const entries = await loadVenueAttendanceDetails(venueId, group, day, testSession);
+  if (!Object.hasOwn(participantPositions, group)) return entries;
+  const { rows: assignments } = await q(`SELECT DISTINCT l.name AS lo_name,m.name,m.npsn
+    FROM assignment_roster r
+    CROSS JOIN LATERAL jsonb_each(r.data->'attendance_assignments') mapping
+    JOIN lo_accounts l ON mapping.key=l.id::text AND l.active AND l.venue_id=$1
+    CROSS JOIN LATERAL jsonb_to_recordset(mapping.value)
+      AS m(name text,position text,npsn text,venue_id int)
+    WHERE r.id=1 AND m.venue_id=$1 AND lower(trim(m.position))=$2
+    UNION
+    SELECT l.name,NULL,NULL FROM lo_accounts l
+    WHERE l.active AND l.venue_id=$1 AND $2 IN ('dinas pendidikan','bb/bpmp')`,
+  [venueId, participantPositions[group]]);
+  const { rows: schoolAssignments } = group === 'bendahara' ? await q(`
+    SELECT s.npsn,s.name AS institution,l.name AS lo_name
+    FROM assignment_roster r
+    CROSS JOIN LATERAL jsonb_to_recordset(r.data->'schools') AS s(npsn text,name text,venue text,lo text)
+    JOIN venues v ON v.id=$1 AND v.name=s.venue
+    JOIN lo_accounts l ON l.venue_id=v.id AND l.active
+      AND (lower(trim(l.name))=lower(trim(s.lo)) OR EXISTS (
+        SELECT 1 FROM jsonb_to_recordset(r.data->'lo') AS owner(name text,account_id int)
+        WHERE owner.account_id=l.id AND lower(trim(owner.name))=lower(trim(s.lo))))
+    WHERE r.id=1`, [venueId]) : { rows: [] };
+  return entries.map(entry => {
+    const schools = String(entry.npsn || '').split(';').map(value => value.trim()).filter(Boolean);
+    const assigned = assignments.filter(assignment => {
+      if (!assignment.name) return true;
+      const assignedSchools = String(assignment.npsn || '').split(';').map(value => value.trim()).filter(Boolean);
+      const sameSchool = schools.some(id => assignedSchools.includes(id));
+      if (group === 'bendahara' && sameSchool) return true;
+      return nameKey(assignment.name) === nameKey(entry.name)
+        && (!schools.length || !assignedSchools.length || sameSchool);
+    });
+    const schoolOwners = schoolAssignments.filter(school => schools.length
+      ? schools.includes(school.npsn)
+      : nameKey(school.institution) && nameKey(school.institution) === nameKey(entry.institution));
+    return { ...entry, assigned_los: [...new Set([...assigned, ...schoolOwners].map(assignment => assignment.lo_name))] };
+  });
+}
+
+async function loadVenueAttendanceDetails(venueId, group, day = null, testSession = null) {
   if (Object.hasOwn(participantPositions, group)) {
     if (group !== 'bpmp') {
       const { rows: [source] } = await loadArrivalSources(venueId);
@@ -139,14 +180,20 @@ export async function getVenueAttendance(venueId, day = null, testSession = null
           WHERE a.person_id=p.id AND a.venue_id=p.venue_id AND a.status IN ('valid','review')
             AND ($3::date IS NULL OR (s.starts_at AT TIME ZONE 'Asia/Jakarta')::date=$3)
             AND (CASE WHEN $4::int IS NULL THEN NOT s.is_test ELSE s.is_test AND s.id=$4 END)
-        ))::int AS attended
+        ))::int AS attended,
+        count(*) FILTER (WHERE EXISTS (
+          SELECT 1 FROM attendance a JOIN sessions s ON s.id=a.session_id
+          WHERE a.person_id=p.id AND a.venue_id=p.venue_id AND a.status IN ('valid','review','berhalangan')
+            AND ($3::date IS NULL OR (s.starts_at AT TIME ZONE 'Asia/Jakarta')::date=$3)
+            AND (CASE WHEN $4::int IS NULL THEN NOT s.is_test ELSE s.is_test AND s.id=$4 END)
+        ))::int AS recorded
       FROM people p
       WHERE p.role='peserta' AND p.archived_at IS NULL AND lower(trim(p.position))=ANY($2::text[])
         AND p.venue_id IS NOT NULL AND ($1::int IS NULL OR p.venue_id=$1)
       GROUP BY p.venue_id, lower(trim(p.position))
     )
     SELECT v.id, v.name, COALESCE(jsonb_object_agg(c.category, jsonb_build_object(
-      'total', c.total, 'registered', c.total, 'attended', c.attended)) FILTER (WHERE c.category IS NOT NULL), '{}') AS counts
+      'total', c.total, 'registered', c.total, 'attended', c.attended, 'recorded', c.recorded)) FILTER (WHERE c.category IS NOT NULL), '{}') AS counts
     FROM venues v LEFT JOIN counts c ON c.venue_id=v.id WHERE ${eventVenueScope('v')}
     GROUP BY v.id, v.name ORDER BY v.name`, [venueId, Object.values(participantPositions), day, testSession]),
     loadRoster(),
@@ -172,6 +219,7 @@ export async function getVenueAttendance(venueId, day = null, testSession = null
       if (!count) continue;
       count.total++;
       if (person.registered) count.registered++;
+      if (['valid', 'review', 'berhalangan'].includes(person.status)) count.recorded++;
       if (person.status === 'valid' || person.status === 'review') count.attended++;
     }
   }
