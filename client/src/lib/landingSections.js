@@ -1,5 +1,5 @@
 export const landingSections = [
-  { id: 'panduan-menu', label: 'Panduan' },
+  { id: 'panduan-menu', label: 'Cara akses' },
   { id: 'public-pelaporan', label: 'Pelaporan' },
   { id: 'public-absensi', label: 'Absensi' },
   { id: 'public-kehadiran', label: 'Kehadiran' },

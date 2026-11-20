@@ -4,31 +4,20 @@ import { adminToken, adminUser, api } from '../api.js';
 import Icon from '../components/Icon.jsx';
 import FontIcon from '../components/FontIcon.jsx';
 import BrandMark from '../components/BrandMark.jsx';
-import { menuForEvent } from '../lib/dashboardMenu.js';
 import { useEvents } from '../components/EventScope.jsx';
 import DeferredSection from '../components/DeferredSection.jsx';
 import VenueSchedule from '../components/VenueSchedule.jsx';
 import { currentAndUpcomingBimtek } from '../lib/bimtekSchedule.js';
 import { useNow, fmtClock, fmtDate } from '../lib/time.js';
-import { checkInDayLabel } from './admin/shared.js';
 
 const VervalDashboard = lazy(() => import('../components/VervalDashboard.jsx'));
 const PublicDashboardSection = lazy(() => import('./PublicDashboard.jsx').then((module) => ({ default: module.PublicDashboardSection })));
 
 const workflows = [
-  ['Pantau Pelaporan', 'Cek sekolah binaan, fasilitator, ruangan, dan status laporan. Gunakan filter venue dan LO untuk mengubah cakupan.'],
-  ['Absenkan Peserta', 'Pilih peserta yang Anda tangani, ambil foto, isi catatan, lalu kirim.'],
-  ['Absen Saya', 'Kirim absensi Anda dengan foto dan lokasi saat sesi resmi dibuka.'],
+  ['Pilih program', 'Pilih BIMTEK Pelaporan atau BIMTEK PKS SPAB melalui tombol akses di atas.'],
+  ['Masuk dengan akun Anda', 'Gunakan akun admin atau LO yang ditugaskan pada program tersebut.'],
+  ['Kelola kegiatan', 'Pantau laporan dan fasilitator untuk Pelaporan, atau rekap PKS dan verifikator untuk PKS SPAB. Absensi mengikuti jadwal masing-masing program.'],
 ];
-
-function MenuGuide({ items }) {
-  return <ul className="home-menu">
-    {items.map(({ to, icon, label, description }) => <li key={to}>
-      <span className="home-menu__icon"><FontIcon name={icon} /></span>
-      <div><b>{label}</b><small>{description}</small></div>
-    </li>)}
-  </ul>;
-}
 
 export default function Home() {
   const { hash } = useLocation();
@@ -37,9 +26,7 @@ export default function Home() {
   const now = useNow();
   const scope = useEvents();
   const pks = scope.event.id === 5;
-  const menu = menuForEvent(pks);
   const schedule = pks ? [{ stage: 5, dates: '23–28 November 2026' }] : currentAndUpcomingBimtek(now);
-  const showStage3 = schedule.some((item) => item.stage === 3);
   const signedIn = !!adminToken.get();
   const reportingEvent = scope.events.find(event => event.id !== 5 && event.status === 'active')
     || [...scope.events].filter(event => event.id !== 5).sort((a, b) => b.id - a.id)[0];
@@ -88,34 +75,14 @@ export default function Home() {
       </header>
 
       <main className="home__main">
-        <DeferredSection id="panduan-menu" title="Panduan menu dashboard">
-        <div className="landing-guide">
-        <section className="panel" aria-labelledby="judul-panduan">
-          <h2 id="judul-panduan" className="panel__title">Panduan menu dashboard</h2>
-          <MenuGuide items={menu.filter((item) => item.lo)} />
-          <details className="home-admin-guide">
-            <summary>Menu tambahan Admin Utama</summary>
-            <MenuGuide items={menu.filter((item) => !item.lo || item.adminLabel).map((item) => item.adminLabel
-              ? { ...item, label: item.adminLabel, description: 'Lihat daftar peserta serta status kedatangan dan absensi per venue.' } : item)} />
-          </details>
-        </section>
-        <section className="panel" aria-labelledby="langkah-lo">
-          <h2 id="langkah-lo" className="panel__title">Mulai bekerja sebagai LO</h2>
-          <p className="muted">Masuk dengan akun LO Anda. Peserta yang akan absen dapat menemui LO di venue kegiatan.</p>
-          <ol className="steps">
-            {(pks ? [['Pantau Rekap PKS', 'Cek sekolah binaan, verifikator, status dokumen PKS, dan catatan perbaikan.'], ...workflows.slice(1)] : workflows).map(([label, description]) => <li key={label}><b>{label}</b><small>{description}</small></li>)}
-          </ol>
-          {!!schedule.length && <div className="home-schedule">
-            <b>Jadwal BIMTEK</b>
-            {schedule.map(({ stage, dates }) => <span key={stage} className="tag tag--type">{stage === 5 ? 'PKS SPAB' : `TAHAP ${stage}`} · {dates}</span>)}
-          </div>}
-          {showStage3 && !!info?.check_in_days?.length && <div className="home-schedule">
-            <b>Sesi absensi {info?.event?.name || 'BIMTEK'}</b>
-            {info.check_in_days.map((day) => <span key={day.date} className="tag tag--type">{checkInDayLabel(day)}</span>)}
-          </div>}
-        </section>
-
-        </div>
+        <DeferredSection id="panduan-menu" title="Cara akses dashboard">
+          <section className="panel" aria-labelledby="cara-akses">
+            <h2 id="cara-akses" className="panel__title">Mulai menggunakan dashboard</h2>
+            <p className="muted">Tersedia dua program dengan data, penugasan, dan jadwal absensi masing-masing.</p>
+            <ol className="steps">
+              {workflows.map(([label, description]) => <li key={label}><b>{label}</b><small>{description}</small></li>)}
+            </ol>
+          </section>
         </DeferredSection>
 
         {(pks ? [
@@ -132,7 +99,7 @@ export default function Home() {
         {!pks && <DeferredSection id="public-verval" title="Peta Revitalisasi">
           <VervalDashboard />
         </DeferredSection>}
-        <footer className="footer">Dashboard LO · BIMTEK Revitalisasi SD{info?.organizer ? ` · ${info.organizer}` : ''}</footer>
+        <footer className="footer">Dashboard BIMTEK · Pelaporan & PKS SPAB{info?.organizer ? ` · ${info.organizer}` : ''}</footer>
       </main>
     </div>
   );
