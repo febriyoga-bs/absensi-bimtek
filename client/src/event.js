@@ -9,5 +9,5 @@ export function eventPath(path) {
 }
 
 export function eventLabel(label) {
-  return selected?.id === 5 ? String(label).replace(/Fasilitator/g, 'Verifikator').replace(/fasilitator/g, 'verifikator').replace(/Pengawas/g, 'Kepala Sekolah').replace(/Fasil Pelaporan/g, 'Verifikator') : label;
+  return selected?.id === 5 ? String(label).replace(/Fasilitator/g, 'Verifikator').replace(/fasilitator/g, 'verifikator').replace(/Pengawas/g, 'Kepala Sekolah').replace(/Fasil Pelaporan/g, 'Verifikator').replace(/Koor Pelaporan/g, 'Koordinator') : label;
 }

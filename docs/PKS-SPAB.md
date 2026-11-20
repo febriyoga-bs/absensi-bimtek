@@ -25,15 +25,19 @@ Tab **Pemetaan LO x Verifikator** hanya berisi judul tanpa rincian;
 hubungan penugasan diambil dari kolom LO dan Verifikator pada setiap sekolah.
 Teks petunjuk di workbook diperlakukan sebagai data, bukan instruksi agent.
 
-Hasil: 1.433 NPSN unik, 38 LO, 38 verifikator, dan 72 hubungan
-LO–verifikator. Satu LO belum mempunyai sekolah dan tetap dibuatkan akun.
+Pemetaan terbaru 20 November 2026: 1.433 NPSN unik, 38 LO, 51 verifikator,
+108 hubungan LO–verifikator, dan 10 koordinator. Satu LO belum mempunyai sekolah dan tetap dibuatkan akun.
 Novotel Mangga Dua: 542 sekolah; Lumire Jakarta: 349;
 Atria Tangerang: 542. Penugasan verifikator ke beberapa LO tetap dipertahankan.
 
-Workbook belum memuat nama peserta individual. Dua profil per sekolah
-dibuat dengan penanda **Kepala Sekolah — nama sekolah** dan
-**Bendahara — nama sekolah**. Konfirmasikan nama pada menu Peserta & Panitia
-sebelum pencatatan peserta nyata. Kode profil tetap agar penugasan LO terjaga.
+File terbaru menambahkan nama dan kontak kepala sekolah: 1.408 nama dan
+1.290 kontak. Profil kepala sekolah diisi menurut NPSN; 25 sekolah tanpa
+nama mempertahankan profil yang ada. Sebanyak 143 sekolah belum mempunyai
+kontak pada sumber. Nomor dari sumber dinormalisasi (spasi/tanda hubung,
+serta satu awalan huruf O yang seharusnya nol). Nama bendahara yang sudah
+ada tetap dipertahankan karena sumber tidak menyediakan nama bendahara.
+Kode, ID, QR, dan profil LO tetap dipertahankan. Koordinator disimpan
+sebagai hubungan penugasan sekolah/verifikator, tanpa membuat akun baru.
 
 Ketiga venue sudah aktif dengan radius 150 meter dan koordinat hotel yang
 dicocokkan pada 20 November 2026. Koordinat dan sumber tersedia di
@@ -76,3 +80,25 @@ tertimpa. Kredensial ditulis ke berkas baru sebelum commit. Jika commit gagal,
 berkas tersebut bukan bukti akun sudah terbentuk; periksa database sebelum
 menggunakan atau mengulang provisioning. Perubahan aplikasi perlu dideploy
 agar tombol login dan halaman PKS tersedia pada situs produksi.
+
+## Memperbarui pemetaan PKS yang sudah ada
+
+Ekstraksi memakai header, bukan posisi kolom, sehingga penambahan kolom
+kepala sekolah/koordinator tidak menggeser pembacaan LO dan verifikator.
+
+```powershell
+python scripts/readPks.py '<file pemetaan terbaru.xlsx>' data/pks-pemetaan-update.local
+```
+
+Dari direktori server:
+
+```powershell
+node src/updatePksMapping.js --input ../data/pks-pemetaan-update.local --dry-run
+node src/updatePksMapping.js --input ../data/pks-pemetaan-update.local
+```
+
+Pembaruan membuat cadangan lokal sebelum mutasi, memeriksa keunikan profil,
+menghubungkan peserta melalui NPSN, dan membangun ulang penugasan LO.
+Perubahan daftar sekolah/LO atau penghapusan verifikator memerlukan pemeriksaan
+tersendiri; importer berhenti bila menemukan kondisi tersebut. Status PKS,
+QR, akun/password LO, venue, jadwal, dan catatan absensi diperiksa agar tetap utuh.

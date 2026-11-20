@@ -35,6 +35,12 @@ test('formats personal names while preserving the LO abbreviation', () => {
   assert.equal(personName('lola bagus'), 'Lola Bagus');
 });
 
+test('invisible characters copied from Excel do not prevent name capitalization', () => {
+  assert.equal(personName('\u2060Dio Rafael Sinaga'), 'Dio Rafael Sinaga');
+  assert.equal(personName('\u2060Fatiya Dwi Riyani'), 'Fatiya Dwi Riyani');
+  assert.equal(personName('\u200bdio\u2060 rafael sinaga\ufeff'), 'Dio Rafael Sinaga');
+});
+
 test('keeps SD and PKS uppercase in school placeholders and admin names', () => {
   assert.equal(personName('Bendahara — SD 2 MUHAMMADIYAH'), 'Bendahara — SD 2 Muhammadiyah');
   assert.equal(personName('Admin Pks Satdik Aman Bencana'), 'Admin PKS Satdik Aman Bencana');

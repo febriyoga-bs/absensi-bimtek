@@ -10,7 +10,8 @@ const degreePattern = new RegExp(`(^|[^\\p{L}\\p{N}])(${[...degrees].sort((a,b)=
 export function personName(value) {
   const preserved = [];
   const preserve = (text) => { preserved.push(text); return `\uE000${preserved.length - 1}\uE001`; };
-  let text = String(value || '').trim().replace(degreePattern, (_, prefix, degree) => prefix + preserve(degreeNames.get(degree.replace(/\s/g, '').toLowerCase())));
+  // Excel can prefix names with invisible word joiners; remove them before casing.
+  let text = String(value || '').replace(/[\u200B\u2060\uFEFF]/g, '').trim().replace(degreePattern, (_, prefix, degree) => prefix + preserve(degreeNames.get(degree.replace(/\s/g, '').toLowerCase())));
   // Keep the distinction between dr. (medical doctor) and Dr. (doctoral title).
   text = text.replace(/(^|[^\p{L}\p{N}])(prof|drg|dr|ir|ar)\.(?!\p{L})/giu, (_, prefix, title) =>
     prefix + preserve(title === 'dr' ? 'dr.' : ({prof:'Prof.',drg:'drg.',dr:'Dr.',ir:'Ir.',ar:'Ar.'})[title.toLowerCase()]));

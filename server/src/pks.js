@@ -29,7 +29,9 @@ pksRoutes.get('/', ah(async (req, res) => {
   const allowed = row => req.user.role === 'admin' || own && row.venue === own.venue && row.lo === own.name;
   res.json({ schools: data.schools.filter(allowed).map(row => ({ ...row, pks: data.pks_records?.[row.npsn] || { status: 'belum_diterima' } })), verifiers: data.facilitators.filter(allowed),
     lo: req.user.role === 'admin' ? data.lo.map(({ account_id, venue_id, ...row }) => row) : own ? [{ name: own.name, venue: own.venue }] : [],
-    venues: req.user.role === 'admin' ? data.venues : own ? [own.venue] : [] });
+    venues: req.user.role === 'admin' ? data.venues : own ? [own.venue] : [],
+    coordinators: (data.coordinators || []).filter(row => req.user.role === 'admin'
+      || data.schools.some(school => allowed(school) && school.venue === row.venue && school.coordinator === row.name)) });
 }));
 
 pksRoutes.put('/:npsn', ah(async (req, res) => {

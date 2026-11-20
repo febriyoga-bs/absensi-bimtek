@@ -66,3 +66,6 @@ tmp/pdfs/panduan-update-*.png
 /output/pdf/Dokumentasi-Lengkap-BIMTEK.pdf
 /tmp/pdfs/build_project_docs.py
 /tmp/pdfs/dokumentasi/
+
+# Rincian perubahan pemetaan dan data sumber sekolah
+/output/csv/Pemetaan-SPAB-*.csv

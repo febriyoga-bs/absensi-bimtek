@@ -28,26 +28,38 @@ with zipfile.ZipFile(args.input) as archive:
                 value = value.text if value is not None else ''.join(cell.find('m:is', ns).itertext()) if cell.find('m:is', ns) is not None else ''
                 result[re.sub(r'\d', '', cell.attrib['r'])] = (strings[int(value)] if cell.get('t') == 's' else value or '').strip()
             yield result
-    key = lambda value: re.sub(r'\W', '', value.casefold())
+    key = lambda value: re.sub(r'[^\w]', '', value.casefold())
+    def table(name):
+        data = list(rows(name))
+        headers = {key(value): column for column, value in data[0].items() if value}
+        return [{header: row.get(column, '') for header, column in headers.items()} for row in data[1:]]
     venues = ['Novotel Mangga Dua', 'Lumire Jakarta', 'Atria Tangerang']
-    owners = [{'name': r['B'], 'venue': r['C']} for r in rows('LO') if r.get('B') and r.get('C') in venues]
-    verifiers = {(key(r['B']), r['C']): r['B'] for r in rows('Verifikator') if r.get('B') and r.get('C') in venues}
+    owners = [{'name': r['namalengkap'], 'venue': r['penempatan']} for r in table('LO') if r.get('namalengkap') and r.get('penempatan') in venues]
+    verifier_rows = table('Verifikator')
+    verifier_people = [{'name': r.get('namaverifikator') or r.get('namafasilitator'), 'venue': r.get('penempatanhotel'),
+        'coordinator': r.get('koordinator', ''), 'tag': r.get('tag', '')} for r in verifier_rows
+        if (r.get('namaverifikator') or r.get('namafasilitator')) and r.get('penempatanhotel') in venues]
+    verifiers = {(key(r['name']), r['venue']): r['name'] for r in verifier_people}
+    verifier_meta = {(key(r['name']), r['venue']): r for r in verifier_people}
     owner_names = {(key(r['name']), r['venue']): r['name'] for r in owners}
+    coordinators = [{'name': r['namakoordinator'], 'venue': r['penempatanhotel']} for r in table('Koordinator') if r.get('namakoordinator') and r.get('penempatanhotel') in venues] if 'Koordinator' in paths else []
     schools, assignments = [], {}
-    for row in list(rows('Pemetaan Sekolah Final'))[1:]:
-        if not row.get('A'):
+    for row in table('Pemetaan Sekolah Final'):
+        if not row.get('npsn'):
             continue
-        npsn = str(int(decimal.Decimal(row['A']))).zfill(8)
+        npsn = str(int(decimal.Decimal(row['npsn']))).zfill(8)
         if not re.fullmatch(r'\d{8}', npsn):
             raise ValueError('NPSN invalid: ' + npsn)
-        venue = row['E']
-        owner = owner_names[(key(row['K']), venue)]
-        verifier = verifiers[(key(row['J']), venue)]
-        schools.append(dict(npsn=npsn, name=row['B'], provinsi=row['C'], kab_kota=row['D'], venue=venue, lo=owner, facilitator=verifier))
-        assignments[(venue, verifier, owner)] = dict(name=verifier, venue=venue, lo=owner)
+        venue = row['hotel']
+        owner = owner_names[(key(row['lo']), venue)]
+        verifier = verifiers[(key(row['verifikator']), venue)]
+        meta = verifier_meta[(key(verifier), venue)]
+        schools.append(dict(npsn=npsn, name=row['namasekolah'], provinsi=row['provinsi'], kab_kota=row['kabkota'], venue=venue, lo=owner, facilitator=verifier,
+            coordinator=row.get('koordinator', ''), head_name=row.get('namakepalasekolah', ''), head_phone=row.get('kontakkepalasekolah', ''), bpmp=row.get('bbbpmp', '')))
+        assignments[(venue, verifier, owner)] = dict(name=verifier, venue=venue, lo=owner, coordinator=meta['coordinator'], tag=meta['tag'])
     if len(schools) != 1433 or len({s['npsn'] for s in schools}) != 1433:
         raise ValueError('Expected 1433 unique schools')
-    result = dict(kind='pks_spab', stage=5, venues=venues, lo=owners, schools=schools, facilitators=list(assignments.values()), participants=[], organizations=[])
+    result = dict(kind='pks_spab', stage=5, venues=venues, lo=owners, schools=schools, facilitators=list(assignments.values()), participants=[], organizations=[], coordinators=coordinators, verifier_people=verifier_people)
     with open(args.output, 'w', encoding='utf8') as output:
         json.dump(result, output, ensure_ascii=False)
     print(json.dumps(dict(schools=len(schools), lo=len(owners), verifiers=len(verifiers), assignments=len(assignments), venues=dict(collections.Counter(s['venue'] for s in schools))), ensure_ascii=False))
