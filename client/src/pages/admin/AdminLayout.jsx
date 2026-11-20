@@ -5,7 +5,7 @@ import { api, adminToken, adminUser } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
 import FontIcon from '../../components/FontIcon.jsx';
 import BrandMark from '../../components/BrandMark.jsx';
-import { dashboardMenu } from '../../lib/dashboardMenu.js';
+import { menuForEvent } from '../../lib/dashboardMenu.js';
 import EventTabs from '../../components/EventTabs.jsx';
 import { selectedEvent } from '../../event.js';
 import { useEvents } from '../../components/EventScope.jsx';
@@ -14,8 +14,10 @@ export default function AdminLayout() {
   const nav = useNavigate();
   const loc = useLocation();
   const eventScope = useEvents();
+  const pks = eventScope?.event.id === 5;
+  const home = pks ? '/admin/pks' : '/admin/pelaporan';
   const activeAttendancePage = loc.pathname === '/admin/absen-saya' || loc.pathname.startsWith('/admin/scan');
-  const needsActiveEvent = activeAttendancePage && eventScope?.event.status !== 'active';
+  const needsActiveEvent = activeAttendancePage && !pks && eventScope?.event.status !== 'active';
   const activeEvent = eventScope?.events.find((event) => event.status === 'active');
   const [user, setUser] = useState(adminUser.get());
   const [menuOpen, setMenuOpen] = useState(false);
@@ -34,14 +36,16 @@ export default function AdminLayout() {
   if (!adminToken.get()) return <Navigate to="/admin/login" state={{ next: loc.pathname + loc.search }} replace />;
 
   const lo = user?.role === 'lo';
-  const items = dashboardMenu.filter((n) => (lo ? n.lo && (!user.no_assignment
-    || ['/admin/pelaporan','/admin/rekap-absensi'].includes(n.to)) : !n.loOnly));
+  const items = menuForEvent(pks).filter((n) => (lo ? n.lo && (!user.no_assignment
+    || [home,'/admin/rekap-absensi'].includes(n.to)) : !n.loOnly));
   if (['/admin', '/admin/', '/admin/pendampingan', '/admin/pendampingan/saya'].includes(loc.pathname)) {
-    return <Navigate to="/admin/pelaporan" replace />;
+    return <Navigate to={home} replace />;
   }
+  if (pks && loc.pathname === '/admin/pelaporan') return <Navigate to={home} replace />;
+  if (user?.scope === 'pks' && !items.some(n => n.end ? loc.pathname === n.to : loc.pathname.startsWith(n.to))) return <Navigate to={home} replace />;
   // LO yang membuka menu admin utama lewat URL → kembalikan ke Pantau Pelaporan
   if (lo && !items.some((n) => (n.end ? loc.pathname === n.to : loc.pathname.startsWith(n.to)))) {
-    return <Navigate to="/admin/pelaporan" replace />;
+    return <Navigate to={home} replace />;
   }
 
   return (
@@ -55,7 +59,7 @@ export default function AdminLayout() {
         <div className="admin__nav-head">
           <div className="admin__brand">
             <BrandMark size={38} />
-            <span>{lo ? 'Dashboard LO' : 'Admin BIMTEK'}<small>BIMTEK Revitalisasi SD</small></span>
+            <span>{lo ? 'Dashboard LO' : pks ? 'Admin PKS' : 'Admin BIMTEK'}<small>{pks ? 'Satdik Aman Bencana · 23–28 November 2026' : 'BIMTEK Revitalisasi SD'}</small></span>
           </div>
           <button ref={menuButton} className="admin__menu-toggle" type="button" aria-expanded={menuOpen}
             aria-controls="admin-menu" onClick={() => setMenuOpen(!menuOpen)}>
@@ -65,7 +69,7 @@ export default function AdminLayout() {
         <nav id="admin-menu" aria-label="Menu dashboard" className={`admin__menu${menuOpen ? ' is-open' : ''}`}>
           {user && (
             <div className="admin__user">
-              <span className={`tag ${lo ? 'tag--venue' : 'tag--type'}`}>{lo ? 'LO' : 'Admin utama'}</span>
+              <span className={`tag ${lo ? 'tag--venue' : 'tag--type'}`}>{lo ? 'LO' : pks ? 'Admin PKS' : 'Admin utama'}</span>
               <b>{personName(user.name)}</b>
               {lo && <small><Icon name="pin" size={13} /> {user.venue?.name}</small>}
             </div>
@@ -75,7 +79,7 @@ export default function AdminLayout() {
               <FontIcon name={n.icon} />{(!lo && n.adminLabel) || n.label}
             </NavLink>
           ))}
-          {!lo && <NavLink to="/#public-verval" onClick={() => setMenuOpen(false)}>
+          {!lo && !pks && <NavLink to="/#public-verval" onClick={() => setMenuOpen(false)}>
             <FontIcon name="map-location-dot" /> Peta Revitalisasi
           </NavLink>}
           <button className="link" onClick={() => { adminToken.clear(); nav('/admin/login'); }}>
@@ -84,7 +88,7 @@ export default function AdminLayout() {
         </nav>
       </aside>
       <section className="admin__main">
-        {loc.pathname !== '/admin/pelaporan' && <EventTabs activeOnly={activeAttendancePage} />}
+        {loc.pathname !== '/admin/pelaporan' && user?.scope !== 'pks' && <EventTabs activeOnly={activeAttendancePage} />}
         {!activeAttendancePage && selectedEvent()?.status === 'archived' && <p className="alert">{selectedEvent().name} sudah diarsipkan. Data hanya dapat dilihat dan diunduh.</p>}
         {needsActiveEvent ? <p role="status">{activeEvent ? 'Membuka tahap aktif…' : 'Belum ada tahap aktif untuk pencatatan absensi.'}</p> : <Outlet context={{ user, lo }} />}
       </section>

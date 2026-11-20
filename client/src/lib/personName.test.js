@@ -34,3 +34,14 @@ test('formats personal names while preserving the LO abbreviation', () => {
   assert.equal(personName('Lo'), 'LO');
   assert.equal(personName('lola bagus'), 'Lola Bagus');
 });
+
+test('keeps SD and PKS uppercase in school placeholders and admin names', () => {
+  assert.equal(personName('Bendahara — SD 2 MUHAMMADIYAH'), 'Bendahara — SD 2 Muhammadiyah');
+  assert.equal(personName('Admin Pks Satdik Aman Bencana'), 'Admin PKS Satdik Aman Bencana');
+  assert.equal(personName('sd al washliyah'), 'SD Al Washliyah');
+  assert.equal(personName('SD It AL HIKMAH'), 'SD IT Al Hikmah');
+  assert.equal(personName('Bendahara — Sdn LUENG SA'), 'Bendahara — SDN Lueng Sa');
+  assert.equal(personName('Upt SD NEGERI 105 ONAN GANJANG'), 'UPT SD Negeri 105 Onan Ganjang');
+  assert.equal(personName('PKS-B-10105697'), 'PKS-B-10105697');
+  assert.equal(personName('sdian pksari'), 'Sdian Pksari');
+});

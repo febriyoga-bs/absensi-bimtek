@@ -5,7 +5,7 @@ import fs from 'fs';
 import { q, getSettings, pool, rawPool } from '../db.js';
 import { ah, HttpError, clientIp } from '../util.js';
 import {
-  requireAdmin, requireLo, requireSuper, signAdmin, checkAdminPassword, hashPassword,
+  requireAdmin, requireLo, requireSuper, signAdmin, checkAdminPassword, hashPassword, verifyPassword,
 } from '../auth.js';
 import { deletePhoto, photoUrl, savePhoto, readPhoto } from '../storage.js';
 import { parsePeople, EXTRA_FIELDS } from '../peopleImport.js';
@@ -17,6 +17,7 @@ import { progressStatusSql, currentProgressSql, periodStatusSql } from '../progr
 import { reportingDates, reportingDays, withReportingDay } from '../reportingDays.js';
 import { getArrivalRecap, getArrivalRecapDetails, importArrivalRecap } from '../arrivalRecap.js';
 import { finiteInteger } from '../security.js';
+import { pksRoutes } from '../pks.js';
 import { eventId } from '../eventContext.js';
 import { loginLo } from '../loLogin.js';
 import { changeLoPassword } from '../loPassword.js';
@@ -50,6 +51,15 @@ export const loginHandler = ah(async (req, res) => {
   const username = String(req.body?.username || '').trim();
   const password = String(req.body?.password || '');
 
+  if (username.toLowerCase() === 'admin.pks.spab') {
+    const { rows: [exists] } = await rawPool.query("SELECT to_regclass('public.pks_admin_account') AS name");
+    const account = exists?.name && (await rawPool.query('SELECT password_hash FROM public.pks_admin_account WHERE id=1')).rows[0];
+    if (!account || !verifyPassword(password, account.password_hash)) throw new HttpError(401, 'Username atau password salah');
+    const { rows: [event] } = await rawPool.query('SELECT id,name,status FROM public.bimtek_events WHERE id=5');
+    if (!event) throw new HttpError(409, 'Kegiatan PKS belum disiapkan.');
+    return res.json({ token: signAdmin({ role: 'admin', scope: 'pks', event: 5 }), user: { role: 'admin', scope: 'pks', name: 'Admin PKS Satdik Aman Bencana', events: [5] }, event });
+  }
+
   if (!username) {
     if (!checkAdminPassword(password)) throw new HttpError(401, 'Password salah');
     const { rows: [event] } = await rawPool.query("SELECT id,name,status FROM public.bimtek_events ORDER BY (status='active') DESC,id DESC LIMIT 1");
@@ -61,6 +71,7 @@ export const loginHandler = ah(async (req, res) => {
 });
 
 r.use(requireAdmin);
+r.use('/pks', pksRoutes);
 
 r.get('/reporting', ah(async (req, res) => {
   res.json(await getReporting(req.query.dataset, req.user));
@@ -116,7 +127,7 @@ r.get('/assignments/mine', ah(async (req, res) => {
 
 /** Info akun yang sedang login (dipanggil saat dashboard dibuka; LO nonaktif langsung ditolak). */
 r.get('/me', ah(async (req, res) => {
-  if (req.user.role === 'admin') return res.json({ role: 'admin', name: 'Admin utama' });
+  if (req.user.role === 'admin') return res.json({ role: 'admin', name: req.user.scope === 'pks' ? 'Admin PKS Satdik Aman Bencana' : 'Admin utama', ...(req.user.scope === 'pks' && { scope: 'pks', events: [5] }) });
   const {rows:events} = await q('SELECT id,name,status FROM public.bimtek_events ORDER BY id');
   if (req.user.no_assignment) return res.json({role:'lo',name:req.user.name,venue:null,no_assignment:true,events});
   const { rows: [lo] } = await q(
@@ -296,11 +307,13 @@ r.delete('/lo/:id', requireSuper, ah(async (req, res) => {
 
 /* ---------- Peserta & Panitia (admin utama) ---------- */
 r.get('/people/sync', requireSuper, ah(async (_req, res) => {
+  if (eventId() === 5) throw new HttpError(409, 'Profil PKS dikelola melalui Peserta & Panitia; sinkronisasi Pelaporan tidak berlaku.');
   const { summary, revision, items, inactiveVenues } = await getParticipantPlan(pool);
   res.json({ summary, revision, items, inactiveVenues });
 }));
 
 r.post('/people/sync', requireSuper, ah(async (req, res) => {
+  if (eventId() === 5) throw new HttpError(409, 'Profil PKS dikelola melalui Peserta & Panitia; sinkronisasi Pelaporan tidak berlaku.');
   if (!/^[a-f0-9]{64}$/.test(req.body?.revision || '')) {
     throw new HttpError(400, 'Buka pratinjau sebelum menerapkan sinkronisasi.');
   }
@@ -555,9 +568,9 @@ r.delete('/sessions/:id', requireSuper, ah(async (req, res) => {
 // Absenkan lewat scan QR dinonaktifkan sementara (absen manual + foto tetap jalan). Ubah ke true untuk mengaktifkan lagi.
 const QR_SCAN_ENABLED = false;
 const sessionApplies = (venue) => `(${venue} IS NULL OR cardinality(COALESCE(s.venue_ids,'{}'))=0 OR ${venue} = ANY(s.venue_ids))`;
-const facilitatorPosition = "lower(trim(p.position)) ~ '^fasil(itator)?($|[[:space:]])'";
+const facilitatorPosition = "lower(trim(p.position)) ~ '^(verifikator|fasil(itator)?)($|[[:space:]])'";
 const scanCategories = {
-  sekolah: "p.npsn IS NOT NULL OR lower(trim(p.position)) IN ('bendahara','pengawas')",
+  sekolah: "p.npsn IS NOT NULL OR lower(trim(p.position)) IN ('bendahara','pengawas','kepala sekolah')",
   fasil: facilitatorPosition,
   dinas: "lower(trim(p.position))='dinas pendidikan'",
   bpmp: "lower(trim(p.position))='bb/bpmp'",
@@ -656,7 +669,7 @@ r.get('/scan/participants', ah(async (req, res) => {
     ), candidate_people AS MATERIALIZED (
       SELECT p.* FROM people p
       WHERE p.role='peserta' AND p.archived_at IS NULL AND (${scanCategories[category]})
-        AND ($7::text='' OR lower(trim(p.position))=$7)
+        AND ($7::text='' OR (lower(trim(p.position))=$7 OR ($7='pengawas' AND lower(trim(p.position))='kepala sekolah')))
         AND ($2::int IS NULL OR p.venue_id=$2)
         AND ($10::int IS NULL OR p.venue_id=(SELECT venue_id FROM active_owners WHERE id=$10))
     ), mappings AS MATERIALIZED (
@@ -707,7 +720,7 @@ r.get('/scan/participants', ah(async (req, res) => {
         ORDER BY s.starts_at,s.id LIMIT 1
       ) selected_session ON true
       WHERE p.role='peserta' AND p.archived_at IS NULL AND (${scanCategories[category]})
-        AND ($7::text='' OR lower(trim(p.position))=$7)
+        AND ($7::text='' OR (lower(trim(p.position))=$7 OR ($7='pengawas' AND lower(trim(p.position))='kepala sekolah')))
         AND ($2::int IS NULL OR p.venue_id=$2)
         AND ($10::int IS NULL OR EXISTS (SELECT 1 FROM assigned_people ap WHERE ap.id=p.id AND ap.account_id=$10))
         AND ($1='' OR p.name ILIKE '%'||$1||'%' OR p.code ILIKE '%'||$1||'%'
@@ -1045,7 +1058,7 @@ r.get('/reporting/attendance-ranking', ah(async (req, res) => {
       AND (lower(m.code)=lower(p.code) OR (m.npsn IS NOT NULL
         AND string_to_array(replace(m.npsn,' ',''),';') && string_to_array(replace(p.npsn,' ',''),';')))
     WHERE r.id=1 AND p.archived_at IS NULL
-      AND (lower(trim(p.position)) IN ('bendahara','pengawas') OR lower(trim(p.position)) ~ '^fasil(itator)?($|[[:space:]])')
+      AND (lower(trim(p.position)) IN ('bendahara','pengawas','kepala sekolah') OR lower(trim(p.position)) ~ '^(verifikator|fasil(itator)?)($|[[:space:]])')
   ), presence AS MATERIALIZED (
     SELECT DISTINCT a.person_id,a.venue_id FROM attendance a JOIN sessions s ON s.id=a.session_id
     WHERE NOT s.is_test AND a.status IN ('valid','review')
@@ -1067,8 +1080,8 @@ r.get('/reporting/attendance-ranking', ah(async (req, res) => {
   SELECT l.id,l.name,l.venue,
     (SELECT count(*)::int FROM targets t WHERE t.owner_id=l.id) AS assigned,
     COALESCE((SELECT present FROM presence_counts pc WHERE pc.owner_id=l.id),0) AS present,
-    count(DISTINCT p.id) FILTER (WHERE a.status<>'berhalangan' AND lower(trim(p.position)) IN ('bendahara','pengawas'))::int AS participants,
-    count(DISTINCT p.id) FILTER (WHERE a.status<>'berhalangan' AND lower(trim(p.position)) ~ '^fasil(itator)?($|[[:space:]])')::int AS facilitators,
+    count(DISTINCT p.id) FILTER (WHERE a.status<>'berhalangan' AND lower(trim(p.position)) IN ('bendahara','pengawas','kepala sekolah'))::int AS participants,
+    count(DISTINCT p.id) FILTER (WHERE a.status<>'berhalangan' AND lower(trim(p.position)) ~ '^(verifikator|fasil(itator)?)($|[[:space:]])')::int AS facilitators,
     count(DISTINCT p.id) FILTER (WHERE a.status<>'berhalangan')::int AS total,
     count(DISTINCT p.id) FILTER (WHERE a.status='berhalangan')::int AS unavailable,
     count(DISTINCT p.id) FILTER (WHERE a.status='berhalangan' AND EXISTS (
@@ -1081,7 +1094,7 @@ r.get('/reporting/attendance-ranking', ah(async (req, res) => {
       AND ($1::int IS NULL OR s.id=$1))
   LEFT JOIN people p ON p.id=a.person_id AND p.role='peserta'
     AND EXISTS (SELECT 1 FROM targets t WHERE t.owner_id=l.id AND t.person_id=p.id)
-    AND (lower(trim(p.position)) IN ('bendahara','pengawas') OR lower(trim(p.position)) ~ '^fasil(itator)?($|[[:space:]])')
+    AND (lower(trim(p.position)) IN ('bendahara','pengawas','kepala sekolah') OR lower(trim(p.position)) ~ '^(verifikator|fasil(itator)?)($|[[:space:]])')
   GROUP BY l.id,l.name,l.venue
   ORDER BY total DESC,l.name,l.id`, [sessionId]);
   res.json(rows);
@@ -1090,8 +1103,8 @@ r.get('/reporting/attendance-ranking', ah(async (req, res) => {
 const attendancePositions = {
   lo: "lower(trim(p.position))='lo'",
   bendahara: "lower(trim(p.position))='bendahara'",
-  pengawas: "lower(trim(p.position))='pengawas'",
-  fasil: "lower(trim(p.position)) ~ '^fasil(itator)?($|[[:space:]])'",
+  pengawas: "lower(trim(p.position)) IN ('pengawas','kepala sekolah')",
+  fasil: "lower(trim(p.position)) ~ '^(verifikator|fasil(itator)?)($|[[:space:]])'",
   dinas: "lower(trim(p.position))='dinas pendidikan'",
   bpmp: "lower(trim(p.position))='bb/bpmp'",
 };

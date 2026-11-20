@@ -13,3 +13,9 @@ export const dashboardMenu = [
   { to: '/admin/pengaturan', icon: 'sliders', label: 'Pengaturan', description: 'Atur informasi kegiatan dan kebijakan absensi.' },
   { to: '/admin/password', icon: 'key', label: 'Ganti Kata Sandi', lo: true, loOnly: true, description: 'Perbarui kata sandi akun LO Anda.' },
 ];
+
+export function menuForEvent(pks) {
+  if (!pks) return dashboardMenu;
+  return dashboardMenu.filter(item => !['/admin/kegiatan', '/admin/pengaturan'].includes(item.to)).map(item => item.to === '/admin/pelaporan'
+    ? { ...item, to: '/admin/pks', label: 'Pantau Rekap PKS', description: 'Pantau pemetaan sekolah, verifikator, dan LO Bimtek PKS.' } : item);
+}

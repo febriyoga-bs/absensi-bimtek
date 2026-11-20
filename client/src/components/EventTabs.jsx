@@ -1,3 +1,4 @@
+import { adminUser } from '../api.js';
 import { useEvents } from './EventScope.jsx';
 import './EventTabs.css';
 
@@ -5,7 +6,7 @@ export default function EventTabs({ children, current = true, onSelect, activeOn
   const scope = useEvents();
   if (!scope) return null;
   return <div className="reporting-datasets event-tabs" role="group" aria-label="Kegiatan BIMTEK">
-    {scope.events.filter((event) => !activeOnly || event.status === 'active').sort((a, b) => b.id - a.id).map((event) => <button key={event.id} type="button"
+    {scope.events.filter((event) => (adminUser.get()?.scope !== 'pks' || event.id === 5) && (!activeOnly || event.status === 'active' || scope.event.id === 5 && event.id === 5)).sort((a, b) => b.id - a.id).map((event) => <button key={event.id} type="button"
       className={current && event.id === scope.event.id ? 'on' : ''} aria-pressed={current && event.id === scope.event.id}
       onClick={() => {
         if (event.id === scope.event.id) onSelect?.();

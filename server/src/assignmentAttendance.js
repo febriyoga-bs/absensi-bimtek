@@ -3,9 +3,9 @@ import { HttpError } from './util.js';
 import { reportingCheckInDates, reportingDates } from './reportingDays.js';
 
 const positions = {
-  schools: '^(bendahara|pengawas)$',
+  schools: '^(bendahara|pengawas|kepala sekolah)$',
   supervisors: '^pengawas$',
-  facilitators: '^fasil(itator)?($|[[:space:]])',
+  facilitators: '^(verifikator|fasil(itator)?)($|[[:space:]])',
   coordinators: '^(koor(dinator)?)($|[[:space:]])',
 };
 const nameKey = (value) => String(value || '').normalize('NFKD').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');

@@ -12,6 +12,7 @@ import { invalidateReportingRoster } from '../src/reporting.js';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { cleanPksRecord } from '../src/pks.js';
 
 // Actual PostgreSQL in memory: never connect tests to DATABASE_URL.
 const db = new PGlite();
@@ -765,4 +766,42 @@ test('an explicit identity merge updates old sessions and new logins without mat
   assert.equal((await request('/admin/login',{method:'POST',token:null,body:{username:'lo-sama',password:'test-lo-password'}})).status,200);
   await scoped(4,()=>q('UPDATE lo_accounts SET active=false WHERE id=$1',[ids[4]]));
   assert.equal((await request('/admin/me?event=4',{token:data.token})).status,401);
+});
+
+
+test('PKS login and records stay isolated and LO can update only assigned schools', async () => {
+  assert.throws(() => cleanPksRecord({ status: 'lengkap' }), /nomor PKS/);
+  assert.throws(() => cleanPksRecord({ status: 'belum_diterima', tanggal_ttd: '2026-02-30' }), /Tanggal/);
+  await rawPool.query("INSERT INTO public.bimtek_events VALUES(5,'PKS SPAB','bimtek_5','draft',now())");
+  await migrate();
+  const pksEvent = { id: 5, schema_name: 'bimtek_5' };
+  await eventContext.run(pksEvent, async () => {
+    await q("INSERT INTO venues(name,lat,lng) VALUES('PKS Hotel',-6,106)");
+    await q("INSERT INTO lo_accounts(name,username,password_hash,venue_id) VALUES('LO PKS','pks-test',$1,1)", [hashPassword('pks-lo-test-password')]);
+    const roster = { venues: ['PKS Hotel'], lo: [{ name: 'LO PKS', venue: 'PKS Hotel', account_id: 1, venue_id: 1 }], facilitators: [], schools: [
+      { npsn: '11111111', name: 'Sekolah PKS', lo: 'LO PKS', venue: 'PKS Hotel' },
+      { npsn: '22222222', name: 'Sekolah lain', lo: 'LO Lain', venue: 'PKS Hotel' }
+    ] };
+    await q('INSERT INTO assignment_roster(id,data) VALUES(1,$1)', [JSON.stringify(roster)]);
+  });
+  await rawPool.query('CREATE TABLE public.pks_admin_account(id int PRIMARY KEY,password_hash text NOT NULL)');
+  await rawPool.query('INSERT INTO public.pks_admin_account VALUES(1,$1)', [hashPassword('pks-admin-test-password')]);
+  invalidateEventMetadata();
+  const login = await request('/admin/login', { method: 'POST', token: null, body: { username: 'admin.pks.spab', password: 'pks-admin-test-password' } });
+  assert.equal(login.status, 200);
+  const { token, event, user } = await login.json();
+  assert.equal(event.id, 5); assert.equal(user.scope, 'pks');
+  assert.equal((await request('/admin/people?event=3', { token })).status, 403);
+  assert.equal((await request('/admin/reporting?event=5', { token })).status, 403);
+  assert.equal((await request('/admin/people/sync?event=5', { token })).status, 409);
+  assert.equal((await request('/events/4/status', { token, method: 'PUT', body: { status: 'active' } })).status, 403);
+  const initial = await (await request('/admin/pks?event=5', { token })).json();
+  assert.equal(initial.schools.length, 2); assert.equal(initial.schools[0].pks.status, 'belum_diterima');
+  const complete = { status: 'lengkap', nomor_pks: 'PKS/001', tanggal_ttd: '2026-11-23', tanggal_diterima: '2026-11-23', catatan: 'Diperiksa' };
+  assert.equal((await request('/admin/pks/11111111?event=5', { token, method: 'PUT', body: complete })).status, 200);
+  const loToken = signAdmin({ role: 'lo', username: 'pks-test', accounts: [{ event: 5, id: 1 }] });
+  assert.equal((await request('/admin/pks/22222222?event=5', { token: loToken, method: 'PUT', body: complete })).status, 403);
+  const own = await (await request('/admin/pks?event=5', { token: loToken })).json();
+  assert.equal(own.schools.length, 1); assert.equal(own.schools[0].pks.status, 'lengkap');
+  assert.equal((await request('/admin/pks?event=3', { token: admin })).status, 404);
 });

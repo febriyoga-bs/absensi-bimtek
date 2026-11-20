@@ -1,3 +1,4 @@
+import { eventLabel } from '../../event.js';
 import { personName } from '../../lib/personName.js';
 import FilterField from '../../components/FilterField.jsx';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
@@ -188,8 +189,8 @@ export default function Records() {
           <option value="">Semua jabatan</option>
           <option value="lo">LO</option>
           <option value="bendahara">Bendahara</option>
-          <option value="pengawas">Pengawas</option>
-          <option value="fasil">Fasilitator</option>
+          <option value="pengawas">{eventLabel('Pengawas')}</option>
+          <option value="fasil">{eventLabel('Fasilitator')}</option>
           <option value="dinas">Dinas Pendidikan</option>
           <option value="bpmp">BB/BPMP</option>
         </select></FilterField>

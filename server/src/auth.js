@@ -33,6 +33,9 @@ export async function requireAdmin(req, res, next) {
   } catch {
     return res.status(401).json({ error: 'Sesi login berakhir, silakan login ulang' });
   }
+  if (p.scope === 'pks' && (p.event !== eventId() || !pksAdminPath(req.path, req.method))) {
+    return res.status(403).json({ error: 'Akun Admin PKS hanya dapat mengakses menu Bimtek PKS.' });
+  }
   if (p.role === 'lo') {
     try {
       p.accounts=await identityGrants(p.accounts);
@@ -64,7 +67,8 @@ export async function requireAdmin(req, res, next) {
       return next(e);
     }
   }
-  req.user = { role: p.role === 'lo' ? 'lo' : 'admin', lo: p.lo ?? null, venue: p.venue ?? null, name:p.name,
+  req.user = { role: p.role === 'lo' ? 'lo' : 'admin', lo: p.lo ?? null, venue: p.venue ?? null, name: p.scope === 'pks' ? 'Admin PKS Satdik Aman Bencana' : p.name,
+    ...(p.scope === 'pks' && { scope: 'pks', events: [p.event] }),
     ...(Array.isArray(p.accounts) && { events: p.accounts.map((account) => account.event) }) };
   next();
 }
@@ -117,4 +121,9 @@ export function verifyChallenge(token) {
   } catch {
     return null;
   }
+}
+
+export function pksAdminPath(path, method = 'GET') {
+  if (path === '/me' || /^\/(?:pks|arrival-recap|assignments|venue-attendance|sessions|venues|lo|people|participants|attendance|attempts|photo|export|scan|schools|school|facilitators|dinas|bpmp|stats|summary|dashboard|person|challenge|check-in)(?:\/|$)/.test(path)) return true;
+  return path === '/settings' && method === 'GET';
 }

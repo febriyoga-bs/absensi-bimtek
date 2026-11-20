@@ -1,8 +1,9 @@
+import { eventLabel } from '../../event.js';
 import { useEffect, useRef, useState } from 'react';
 import { api, adminUrl } from '../../api.js';
 import FilterField from '../../components/FilterField.jsx';
 import Icon from '../../components/Icon.jsx';
-import { printAttendance } from '../../lib/printAttendance.js';
+import { printAttendance, printAttendanceByVenue } from '../../lib/printAttendance.js';
 import { sessionTitle } from './shared.js';
 import { downloadAttendanceExcel } from '../../lib/attendanceExcel.js';
 import { downloadFile } from '../../lib/downloadFile.js';
@@ -13,6 +14,7 @@ const statusLabels = { valid: 'Valid', review: 'Perlu dicek', ditolak: 'Ditolak'
 
 export default function AttendanceDownloadDialog({ sessions, venues, lo, initial, onClose }) {
   const dialog = useRef(null);
+  const pdfResume = useRef({});
   const [filters, setFilters] = useState(initial);
   const [format, setFormat] = useState('xlsx');
   const [scope, setScope] = useState('recorded');
@@ -45,11 +47,16 @@ export default function AttendanceDownloadDialog({ sessions, venues, lo, initial
     try {
       const sessionName = sessionTitle(sessions.find((session) => String(session.id) === String(filters.session_id)));
       const venueName = selected.venue_id ? venues.find((venue) => String(venue.id) === String(selected.venue_id))?.name : lo && venues.length === 1 ? venues[0].name : 'Semua venue';
-      const heading = `Rekap Absensi - ${sessionName} - ${venueName}`;
+      const heading = `${venueName} - ${sessionName}`;
       if (format === 'pdf') {
         const title = [sessionName, venueName,
           selected.recorded_by ? personName(selected.recorded_by) : 'Semua LO pencatat', selected.role ? personName(selected.role) : 'Peserta dan Panitia', loLabel(selected.position) || 'Semua jabatan', statusLabels[selected.status] || 'Semua status'].filter(Boolean).join(' · ');
-        await printAttendance({ filters: selected, title, heading, onProgress: setProgress });
+        if (!lo && !selected.venue_id) {
+          await printAttendanceByVenue({ filters:selected, venues, sessionName,
+            titleForVenue:name=>title.replace(venueName,name), onProgress:setProgress, resumeState:pdfResume.current });
+        } else {
+          await printAttendance({ filters: selected, title, heading, onProgress: setProgress, resumeState: pdfResume.current });
+        }
       } else {
         const query = new URLSearchParams({ ...selected, ...(scope === 'all' ? { include_all: 'true' } : { recorded_only: 'true' }) });
         const response = await fetch(adminUrl(`/export?${query}`));
@@ -85,16 +92,16 @@ export default function AttendanceDownloadDialog({ sessions, venues, lo, initial
           {recorders.map((name) => <option key={name} value={name}>{personName(name)}</option>)}
         </select></FilterField>
         <FilterField label="Peserta / Panitia"><select value={filters.role || ''} onChange={change('role')}><option value="">Peserta dan Panitia</option><option value="peserta">Peserta</option><option value="panitia">Panitia</option></select></FilterField>
-        <FilterField label="Jabatan"><select value={filters.position} onChange={change('position')}><option value="">Semua jabatan</option><option value="lo">LO</option><option value="bendahara">Bendahara</option><option value="pengawas">Pengawas</option><option value="fasil">Fasilitator</option><option value="dinas">Dinas Pendidikan</option><option value="bpmp">BB/BPMP</option></select></FilterField>
+        <FilterField label="Jabatan"><select value={filters.position} onChange={change('position')}><option value="">Semua jabatan</option><option value="lo">LO</option><option value="bendahara">Bendahara</option><option value="pengawas">{eventLabel('Pengawas')}</option><option value="fasil">{eventLabel('Fasilitator')}</option><option value="dinas">Dinas Pendidikan</option><option value="bpmp">BB/BPMP</option></select></FilterField>
         <FilterField label="Status absensi"><select value={filters.status} onChange={change('status')}><option value="">Semua status</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></FilterField>
         {format !== 'pdf' && <FilterField label="Cakupan peserta"><select value={scope} onChange={(event) => setScope(event.target.value)}><option value="recorded">Catatan absensi</option><option value="all">Semua peserta, termasuk belum absen</option></select></FilterField>}
       </fieldset>
-      {format === 'pdf' && <p className="muted small">PDF menyertakan foto absensi dalam empat kolom dan langsung diunduh.</p>}
+      {format === 'pdf' && <p className="muted small">{!lo && !filters.venue_id ? 'Semua venue: satu PDF per venue, dikemas dalam satu ZIP. Venue tanpa catatan sesuai filter dilewati.' : 'PDF menyertakan foto absensi dalam empat kolom dan langsung diunduh.'}</p>}
       {format === 'xlsx' && <p className="muted small">Excel dengan header biru, lebar kolom menyesuaikan isi, dan catatan panjang dibungkus otomatis.</p>}
       {error && <p className="alert alert--err" role="alert">{error}</p>}
       {busy && <p className="muted small" role="status">Menyiapkan {format.toUpperCase()} {progress}…</p>}
       <footer className="download-actions"><button type="button" className="btn" disabled={busy} onClick={onClose}>Batal</button>
-        <button type="submit" className="btn btn--primary" disabled={busy || !filters.session_id}><Icon name="download" size={16} />{busy ? 'Menyiapkan…' : `Unduh ${format === 'xlsx' ? 'Excel' : format.toUpperCase()}`}</button>
+        <button type="submit" className="btn btn--primary" disabled={busy || !filters.session_id}><Icon name="download" size={16} />{busy ? 'Menyiapkan…' : format === 'pdf' && error ? 'Lanjutkan PDF' : `Unduh ${format === 'xlsx' ? 'Excel' : format.toUpperCase()}`}</button>
       </footer>
     </form>
   </dialog>;

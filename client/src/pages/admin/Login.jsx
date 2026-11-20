@@ -1,31 +1,35 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { api, adminToken, adminUser } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
 import FontIcon from '../../components/FontIcon.jsx';
 import BrandMark from '../../components/BrandMark.jsx';
+import { selectedEvent } from '../../event.js';
 
 export default function Login() {
-  const [mode, setMode] = useState('lo'); // 'lo' | 'admin'
+  const { state, search } = useLocation();
+  const program = new URLSearchParams(search).get('program');
+  const pksProgram = program === 'pks' || (!program && selectedEvent()?.id === 5);
+  const [mode, setMode] = useState(pksProgram ? 'pks' : 'lo');
   const [username, setUsername] = useState('');
   const [pw, setPw] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   const nav = useNavigate();
-  const { state, search } = useLocation();
+  useEffect(() => { setMode(pksProgram ? 'pks' : 'lo'); setErr(null); setPw(''); }, [pksProgram]);
 
   async function submit(e) {
     e.preventDefault();
     setBusy(true);
     setErr(null);
     try {
-      const body = mode === 'lo' ? { username, password: pw } : { password: pw };
+      const body = mode !== 'admin' ? { username: mode === 'pks' ? 'admin.pks.spab' : username, password: pw } : { password: pw };
       const { token, user, event } = await api('/admin/login', { method: 'POST', body });
       adminToken.set(token);
       adminUser.set(user);
       const next = state?.next ?? new URLSearchParams(search).get('next');
-      const destination = typeof next === 'string' && /^\/admin(?:\/|\?|$)/.test(next) ? next : '/admin/pelaporan';
+      const destination = typeof next === 'string' && /^\/admin(?:\/|\?|$)/.test(next) ? next : event?.id === 5 ? '/admin/pks' : '/admin/pelaporan';
       if (event) {
         try { localStorage.setItem('bimtek_event', String(event.id)); } catch { /* URL preserves selection */ }
         const url = new URL(destination, window.location.origin);
@@ -42,19 +46,20 @@ export default function Login() {
   return (
     <div className="login">
       <form className="card form" onSubmit={submit}>
-        <span className="brand"><BrandMark size={44} /><span className="brand__text">Dashboard LO<small>BIMTEK Revitalisasi SD</small></span></span>
+        <span className="brand"><BrandMark size={44} /><span className="brand__text">{pksProgram ? 'BIMTEK PKS SPAB' : 'BIMTEK Pelaporan'}<small>{pksProgram ? 'Satdik Aman Bencana · 23–28 November 2026' : 'BIMTEK Revitalisasi SD'}</small></span></span>
         <div className="seg" role="tablist">
           <button type="button" role="tab" className={mode === 'lo' ? 'on' : ''} onClick={() => switchMode('lo')}>
-            <Icon name="pin" size={16} />LO Venue
+            <Icon name="pin" size={16} />{pksProgram ? 'LO' : 'LO Venue'}
           </button>
-          <button type="button" role="tab" className={mode === 'admin' ? 'on' : ''} onClick={() => switchMode('admin')}>
+          {!pksProgram && <button type="button" role="tab" className={mode === 'admin' ? 'on' : ''} onClick={() => switchMode('admin')}>
             <Icon name="settings" size={16} />Admin utama
-          </button>
+          </button>}
+          {pksProgram && <button type="button" role="tab" className={mode === 'pks' ? 'on' : ''} onClick={() => switchMode('pks')}>Admin PKS SPAB</button>}
         </div>
         {mode === 'lo' && (
           <label>Username LO
             <span className="input-icon"><Icon name="users" /><input value={username} onChange={(e) => setUsername(e.target.value)}
-              autoFocus autoCapitalize="none" autoComplete="username" placeholder="mis. LO1.Febriyoga" /></span>
+              autoFocus autoCapitalize="none" autoComplete="username" placeholder={pksProgram ? 'mis. PKS.LO01' : 'mis. LO1.Febriyoga'} /></span>
           </label>
         )}
         <div className="login-password">
@@ -62,7 +67,7 @@ export default function Login() {
           <span className="input-icon">
             <Icon name="key" />
             <input id="login-password" type={showPassword ? 'text' : 'password'} value={pw} onChange={(e) => setPw(e.target.value)}
-              autoFocus={mode === 'admin'} autoComplete="current-password" autoCapitalize="none" spellCheck={false} />
+              autoFocus={mode !== 'lo'} autoComplete="current-password" autoCapitalize="none" spellCheck={false} />
             <button type="button" className="login-password__toggle" aria-controls="login-password"
               aria-label={showPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
               onClick={() => setShowPassword((visible) => !visible)}>
@@ -75,7 +80,7 @@ export default function Login() {
           {busy ? 'Masuk…' : 'Masuk'}
         </button>
         <p className="muted small" style={{ margin: 0, textAlign: 'center' }}>
-          {mode === 'lo' ? 'Masuk untuk melihat binaan, memantau pelaporan, dan mencatat kehadiran di venue Anda.' : 'Masuk untuk mengelola kegiatan, akun LO, dan rekap lintas venue.'}
+          {pksProgram ? mode === 'lo' ? 'Masuk untuk memantau rekap PKS sekolah binaan dan mencatat kehadiran di venue Anda.' : 'Masuk untuk mengelola rekap PKS SPAB, verifikator, akun LO, dan absensi lintas venue.' : mode === 'lo' ? 'Masuk untuk melihat binaan, memantau pelaporan, dan mencatat kehadiran di venue Anda.' : 'Masuk untuk mengelola kegiatan, akun LO, dan rekap lintas venue.'}
         </p>
         <Link to="/" className="link">← Kembali ke beranda</Link>
       </form>

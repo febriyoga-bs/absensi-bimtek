@@ -12,6 +12,7 @@
     "seed-venues": "node src/seedVenues.js",
     "seed-lo": "node src/seedLoAccounts.js",
     "import-bimtek3": "node src/importBimtek3.js",
+    "provision-pks": "node src/provisionPks.js",
     "import-bimtek4": "node src/importBimtek4.js"
   },
   "dependencies": {

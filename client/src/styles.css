@@ -49,6 +49,18 @@ code { background: #eef1f6; padding: 1px 6px; border-radius: 6px; font-size: .92
 .clock__time small { font-size: 16px; font-weight: 700; opacity: .7; }
 .clock__date { font-size: 14px; opacity: .85; margin-top: 2px; }
 .hero--home { padding-bottom: 96px; }
+.home-access { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 24px 0; text-align: left; }
+.home-access__card { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 24px; border: 1px solid #ffffff45; border-radius: 18px; background: #ffffff10; box-shadow: 0 12px 30px #001b4018; }
+.home-access__card--pks { background: #ffffff1c; border-color: #ffffff70; }
+.home-access__icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: #ffffff20; font-size: 20px; }
+.home-access__card h2 { margin: 0; font-size: 20px; color: #fff; }
+.home-access__card p { margin: 0; font-size: 14px; line-height: 1.65; color: #fff; opacity: .9; }
+.home-access__card small { margin-top: auto; color: #fff; opacity: .85; }
+.home-access__button { width: 100%; justify-content: space-between; margin-top: 6px; background: #fff; color: #09396c; border-color: #fff; min-height: 46px; }
+.home-access__button:hover { background: #eaf2ff; color: #09396c; }
+.home-access__button:focus-visible { outline: 3px solid #facc15; outline-offset: 4px; }
+.home-access__unavailable { font-size: 13px; opacity: .8; }
+@media (max-width: 560px) { .home-access { grid-template-columns: 1fr; } .home-access__card { padding: 20px; } }
 .hero--absen { padding-bottom: 76px; }
 .hero__body--compact h1 { font-size: clamp(22px, 4vw, 30px); margin-bottom: 4px; }
 .hero__sub { margin: 0; opacity: .85; font-size: 14px; }

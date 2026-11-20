@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { useEvents } from './EventScope.jsx';
 import { landingSections } from '../lib/landingSections.js';
 import '../theme.css';
 
@@ -14,6 +15,8 @@ delete document.documentElement.dataset.appearance;
 export default function Appearance({ children }) {
   const { pathname, hash } = useLocation();
   const landing = pathname === '/';
+  const scope = useEvents();
+  const sections = scope?.event.id === 5 ? landingSections.filter(section => !['public-pelaporan', 'public-verval'].includes(section.id)) : landingSections;
   const bar = useRef(null);
   const menuButton = useRef(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -55,7 +58,7 @@ export default function Appearance({ children }) {
       frame = requestAnimationFrame(() => {
         const threshold = (bar.current?.getBoundingClientRect().height || 56) + 80;
         let current = '';
-        for (const { id } of landingSections) {
+        for (const { id } of sections) {
           if ((document.getElementById(id)?.getBoundingClientRect().top ?? Infinity) <= threshold) current = id;
         }
         setActiveSection(current);
@@ -75,7 +78,7 @@ export default function Appearance({ children }) {
         </svg><span>Menu</span>
       </button>}
       {landing && <nav id="landing-navigation" className={`landing-topbar-nav${menuOpen ? ' is-open' : ''}`} aria-label="Navigasi segmen beranda">
-        {landingSections.map(({ id, label }) => <a key={id} href={`#${id}`} onClick={() => setMenuOpen(false)} aria-current={activeSection === id ? 'location' : undefined}>{label}</a>)}
+        {sections.map(({ id, label }) => <a key={id} href={`#${id}`} onClick={() => setMenuOpen(false)} aria-current={activeSection === id ? 'location' : undefined}>{label}</a>)}
       </nav>}
       <div className="appearance-control"><span className="appearance-label">Tampilan</span>
         <div className="appearance-switch" role="group" aria-label="Mode warna">

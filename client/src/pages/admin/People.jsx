@@ -3,7 +3,7 @@ import FilterField from '../../components/FilterField.jsx';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api.js';
-import { selectedEvent } from '../../event.js';
+import { selectedEvent, eventLabel } from '../../event.js';
 import Icon from '../../components/Icon.jsx';
 import { Skel, SkelRows, SkelLines, Spinner } from '../../components/Skeleton.jsx';
 import { formatRoom } from '../../lib/room.js';
@@ -164,7 +164,7 @@ export default function People() {
     <>
       <div className="page-head"><div><h2>Peserta & Panitia</h2>
         <p className="muted">Kelola identitas dan penempatan peserta. Kode membantu LO mencari peserta; pencatatan absensi mengikuti penugasan LO dan sesi aktif.</p></div>
-        <Link className="btn" to="/admin/orang/sinkronisasi">Pratinjau Sinkronisasi Absensi</Link>
+        {selectedEvent()?.id !== 5 && <Link className="btn" to="/admin/orang/sinkronisasi">Pratinjau Sinkronisasi Absensi</Link>}
       </div>
       <div className="tabs">
         <button className={role === 'peserta' ? 'on' : ''} onClick={() => switchRole('peserta')}>Peserta</button>
@@ -186,7 +186,7 @@ export default function People() {
             <summary>Data sekolah / pemetaan (NPSN, ruangan, wilayah, PTN…)</summary>
             <div className="form--grid">
               {EXTRA.map(([k, l]) => (
-                <label key={k} className={k === 'notes' ? 'span2' : ''}>{l}<input value={form[k] || ''} onChange={f(k)} /></label>
+                <label key={k} className={k === 'notes' ? 'span2' : ''}>{eventLabel(l)}<input value={form[k] || ''} onChange={f(k)} /></label>
               ))}
             </div>
           </details>

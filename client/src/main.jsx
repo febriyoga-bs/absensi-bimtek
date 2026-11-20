@@ -21,6 +21,7 @@ import LoAccounts from './pages/admin/LoAccounts.jsx';
 const ParticipantSync = lazy(() => import('./pages/admin/ParticipantSync.jsx'));
 const Scan = lazy(() => import('./pages/admin/Scan.jsx'));
 const LoSelfAttendance = lazy(() => import('./pages/admin/LoSelfAttendance.jsx'));
+const Pks = lazy(() => import('./pages/admin/Pks.jsx'));
 const Reporting = lazy(() => import('./pages/admin/Reporting.jsx'));
 const ArrivalRecap = lazy(() => import('./pages/admin/ArrivalRecap.jsx'));
 const PublicDashboard = lazy(() => import('./pages/PublicDashboard.jsx'));
@@ -54,6 +55,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="venue" element={<Venues />} />
           <Route path="lo" element={<LoAccounts />} />
           <Route path="pendampingan" element={<Navigate to="/admin/pelaporan" replace />} />
+          <Route path="pks" element={<Pks />} />
           <Route path="pelaporan" element={<Reporting />} />
           <Route path="pendampingan/saya" element={<Navigate to="/admin/pelaporan" replace />} />
           <Route path="pengaturan" element={<Settings />} />

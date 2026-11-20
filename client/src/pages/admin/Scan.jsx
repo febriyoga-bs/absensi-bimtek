@@ -1,3 +1,4 @@
+import { eventLabel, selectedEvent } from '../../event.js';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import jsQR from 'jsqr';
@@ -77,7 +78,7 @@ export default function Scan() {
   const [tab, setTab] = useState(QR_SCAN_ENABLED && lo ? 'qr' : 'sekolah');
   const organizationTab = tab === 'dinas' || tab === 'bpmp';
   const organizationHiddenColumns = ['LO bertugas', 'Fasilitator', 'Status Laporan 50%', 'Status Laporan Mingguan', 'Status Laporan Bulanan'];
-  const fixedHiddenColumns = organizationTab ? organizationHiddenColumns : tab === 'fasil' ? ['Fasilitator'] : [];
+  const fixedHiddenColumns = [...(organizationTab ? organizationHiddenColumns : tab === 'fasil' ? ['Fasilitator'] : []), ...(selectedEvent()?.id === 5 ? ['Status Laporan 50%', 'Status Laporan Mingguan', 'Status Laporan Bulanan'] : [])];
   const [search, setSearch] = useState('');
   const [filterVenue, setFilterVenue] = useState('');
   const [filterArrival, setFilterArrival] = useState('');
@@ -273,7 +274,7 @@ export default function Scan() {
         {QR_SCAN_ENABLED && lo && <button className={tab === 'qr' ? 'on' : ''} onClick={() => changeTab('qr')} disabled={!!pending}><Icon name="qr" size={16} /> Scan QR</button>}
         {Object.entries(categories).map(([key, category]) => (
           <button key={key} className={tab === key ? 'on' : ''} aria-pressed={tab === key} onClick={() => changeTab(key)} disabled={!!pending}>
-            <Icon name={category.icon} size={16} /> {category.label}
+            <Icon name={category.icon} size={16} /> {eventLabel(category.label)}
           </button>
         ))}
       </div>
@@ -310,7 +311,7 @@ export default function Scan() {
                 {testSessionId && !testSessions.some((session) => String(session.id) === testSessionId) &&
                   <option value={testSessionId}>Sesi uji coba dipilih · tidak tersedia</option>}
               </select></label>
-              <label><span>Pencarian peserta</span><input type="search" aria-label="Cari peserta" placeholder={categories[tab].placeholder} value={search} maxLength={150}
+              <label><span>Pencarian peserta</span><input type="search" aria-label="Cari peserta" placeholder={eventLabel(categories[tab].placeholder)} value={search} maxLength={150}
                 onChange={(e) => { setLoading(true); setSearch(e.target.value); setPage(1); }} /></label>
               <label><span>Venue</span><select aria-label="Filter venue" value={filterVenue}
                 onChange={(e) => { setLoading(true); setFilterVenue(e.target.value); setPage(1); }}>
@@ -328,14 +329,14 @@ export default function Scan() {
               </select></label>}
               {tab === 'sekolah' && <label><span>Jabatan peserta</span><select aria-label="Filter jabatan peserta" value={filterPosition}
                 onChange={(e) => { setLoading(true); setFilterPosition(e.target.value); setPage(1); }}>
-                <option value="">Bendahara &amp; Pengawas</option>
+                <option value="">{eventLabel('Bendahara & Pengawas')}</option>
                 <option value="bendahara">Bendahara</option>
-                <option value="pengawas">Pengawas</option>
+                <option value="pengawas">{eventLabel('Pengawas')}</option>
               </select></label>}
-              {tab === 'sekolah' && <label><span>Fasilitator</span><select aria-label="Filter fasilitator" value={filterFacilitator} onChange={(e) => {
+              {tab === 'sekolah' && <label><span>{eventLabel('Fasilitator')}</span><select aria-label="Filter fasilitator" value={filterFacilitator} onChange={(e) => {
                 setLoading(true); setFilterFacilitator(e.target.value); setPage(1);
               }}>
-                <option value="">Semua fasilitator</option>
+                <option value="">{eventLabel('Semua fasilitator')}</option>
                 {filterFacilitator && !list?.facilitators?.includes(filterFacilitator) && <option value={filterFacilitator}>{filterFacilitator} (di luar filter saat ini)</option>}
                 {list?.facilitators?.map((name) => <option key={name} value={name}>{name}</option>)}
               </select></label>}
@@ -377,7 +378,7 @@ export default function Scan() {
               {loading ? 'Memuat daftar peserta…' : `${number.format(list?.total || 0)} peserta`}
             </p>
             <div className="assignment-table">
-              <table className="table stack-table scan-table" style={{ '--scan-table-width': `${tableWidth}px` }} role="table" aria-label={`Daftar ${categories[tab].label}`} aria-busy={loading}>
+              <table className="table stack-table scan-table" style={{ '--scan-table-width': `${tableWidth}px` }} role="table" aria-label={`Daftar ${eventLabel(categories[tab].label)}`} aria-busy={loading}>
                 <thead role="rowgroup"><tr role="row">
                   {headers.map((name, index) => (
                     <th key={name} scope="col" role="columnheader" hidden={columnHidden(name)}
@@ -385,7 +386,7 @@ export default function Scan() {
                       {sortKeys[index] ? <button type="button" className="scan-sort" onClick={() => {
                         setLoading(true); setPage(1);
                         setDirection(sort === sortKeys[index] && direction === 'asc' ? 'desc' : 'asc'); setSort(sortKeys[index]);
-                      }}>{name} <span aria-hidden="true">{sort === sortKeys[index] ? direction === 'asc' ? '↑' : '↓' : '↕'}</span></button> : name}
+                      }}>{eventLabel(name)} <span aria-hidden="true">{sort === sortKeys[index] ? direction === 'asc' ? '↑' : '↓' : '↕'}</span></button> : eventLabel(name)}
                     </th>
                   ))}
                 </tr></thead>
