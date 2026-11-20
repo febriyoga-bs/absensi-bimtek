@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { api } from '../../api.js';
 import { selectedEvent } from '../../event.js';
 import { personName } from '../../lib/personName.js';
+import { groupPksVerifiers } from '../../lib/pksVerifiers.js';
 import FilterField from '../../components/FilterField.jsx';
 import './Pks.css';
 
@@ -43,9 +44,10 @@ export default function Pks() {
   }
   function reset() { setQuery(''); setVenue(''); setOwner(''); setStatus(''); setPage(1); }
   const search = query.trim().toLocaleLowerCase('id');
-  const rows = (data?.[view] || []).filter(row => (!status || view !== 'schools' || row.pks.status === status)
-    && (!venue || row.venue === venue) && (!owner || (view === 'lo' ? row.name : row.lo) === owner)
-    && [row.npsn, row.name, row.provinsi, row.kab_kota, row.venue, row.facilitator, row.coordinator, row.head_name, row.lo, row.pks?.nomor_pks]
+  const verifiers = groupPksVerifiers(data?.verifiers);
+  const rows = (view === 'verifiers' ? verifiers : data?.[view] || []).filter(row => (!status || view !== 'schools' || row.pks.status === status)
+    && (!venue || row.venue === venue) && (!owner || (view === 'verifiers' ? row.los.includes(owner) : (view === 'lo' ? row.name : row.lo) === owner))
+    && [row.npsn, row.name, row.provinsi, row.kab_kota, row.venue, row.facilitator, row.coordinator, row.head_name, row.lo, ...(row.los || []), row.pks?.nomor_pks]
       .some(value => String(value || '').toLocaleLowerCase('id').includes(search)));
   const pages = Math.max(1, Math.ceil(rows.length / pageSize));
   const active = Math.min(page, pages);
@@ -55,7 +57,7 @@ export default function Pks() {
   return <div className="pks-page">
     <header className="pks-heading">
       <div><h1>Pantau Rekap PKS</h1><p>Satuan Pendidikan Aman Bencana <span>·</span> 23–28 November 2026</p></div>
-      {data && <p className="pks-heading__meta">{data.venues.length} Venue <span>·</span> {data.lo.length} LO <span>·</span> {new Set(data.verifiers.map(row => row.code)).size} Verifikator{!!data.coordinators?.length && <><span>·</span> {data.coordinators.length} Koordinator</>}</p>}
+      {data && <p className="pks-heading__meta">{data.venues.length} Venue <span>·</span> {data.lo.length} LO <span>·</span> {verifiers.length} Verifikator{!!data.coordinators?.length && <><span>·</span> {data.coordinators.length} Koordinator</>}</p>}
     </header>
     {error && !editing && <div className="alert alert--err" role="alert">{error} {!data && <button className="btn btn--sm" onClick={load}>Coba lagi</button>}</div>}
     {!data && !error && <p role="status">Memuat pemetaan PKS…</p>}
@@ -66,7 +68,7 @@ export default function Pks() {
       </section>
       <section className="pks-register" aria-label="Daftar pemetaan PKS">
         <div className="pks-register__head">
-          <div className="pks-tabs" role="group" aria-label="Tampilan pemetaan">{Object.entries(views).map(([key, label]) => <button key={key} aria-pressed={view === key} onClick={() => { setView(key); setPage(1); }}>{label}<span>{number.format(data[key].length)}</span></button>)}</div>
+          <div className="pks-tabs" role="group" aria-label="Tampilan pemetaan">{Object.entries(views).map(([key, label]) => <button key={key} aria-pressed={view === key} onClick={() => { setView(key); setPage(1); }}>{label}<span>{number.format(key === 'verifiers' ? verifiers.length : data[key].length)}</span></button>)}</div>
           <p>Status dokumen diperbarui berdasarkan pemeriksaan PKS.</p>
         </div>
         <div className="pks-filters">
@@ -75,9 +77,9 @@ export default function Pks() {
           <FilterField label="LO bertugas"><select value={owner} onChange={e => { setOwner(e.target.value); setPage(1); }}><option value="">Semua LO</option>{data.lo.filter(row => !venue || row.venue === venue).map(row => <option value={row.name} key={row.venue + row.name}>{personName(row.name)}</option>)}</select></FilterField>
           {view === 'schools' && <FilterField label="Status PKS"><select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}><option value="">Semua status</option>{Object.entries(statuses).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></FilterField>}
         </div>
-        <div className="pks-results"><span><b>{number.format(rows.length)}</b> {view === 'schools' ? 'sekolah' : view === 'verifiers' ? 'penugasan verifikator' : 'LO'}{filtered ? ' sesuai filter' : ''}</span>{filtered && <button type="button" onClick={reset}>Reset filter</button>}</div>
+        <div className="pks-results"><span><b>{number.format(rows.length)}</b> {view === 'schools' ? 'sekolah' : view === 'verifiers' ? 'verifikator' : 'LO'}{filtered ? ' sesuai filter' : ''}</span>{filtered && <button type="button" onClick={reset}>Reset filter</button>}</div>
         <div className="pks-table-scroll" tabIndex={0} role="region" aria-label={`Tabel ${views[view]}`}>
-          <table className={`table pks-table${view !== 'schools' ? ' pks-table--people' : ''}`}>
+          <table className={`table pks-table${view !== 'schools' ? ` pks-table--people${view === 'verifiers' ? ' pks-table--verifiers' : ''}` : ''}`}>
             <thead><tr>{(view === 'schools' ? ['Sekolah / NPSN', 'Wilayah', 'Venue', 'Verifikator', 'LO bertugas', 'Status PKS', 'Tindakan'] : ['Nama', 'Venue', ...(view === 'verifiers' ? ['LO bertugas'] : [])]).map(label => <th key={label} scope="col">{label}</th>)}</tr></thead>
             <tbody>{rows.slice(start, start + pageSize).map(row => <tr key={row.npsn || `${row.venue}:${row.name}:${row.lo || ''}`}>
               {view === 'schools' ? <>
@@ -86,7 +88,7 @@ export default function Pks() {
                 <td>{personName(row.facilitator)}{row.coordinator && <small>Koordinator: {personName(row.coordinator)}</small>}</td><td>{personName(row.lo)}</td>
                 <td><span className="pks-status" data-status={row.pks.status}>{statuses[row.pks.status]}</span></td>
                 <td><button className="pks-edit" onClick={() => { setEditing({ ...row, pks: { ...row.pks } }); setError(''); }} aria-label={`Perbarui PKS ${row.name}`}>Perbarui</button></td>
-              </> : <><td><b>{personName(row.name)}</b>{row.coordinator && <small>Koordinator: {personName(row.coordinator)}</small>}</td><td>{row.venue}</td>{view === 'verifiers' && <td>{personName(row.lo)}</td>}</>}
+              </> : <><td><b>{personName(row.name)}</b>{row.coordinator && <small>Koordinator: {personName(row.coordinator)}</small>}</td><td>{row.venue}</td>{view === 'verifiers' && <td><div className="pks-verifier-los">{row.los.map(name => personName(name)).join(', ')}</div></td>}</>}
             </tr>)}</tbody>
           </table>
           {!rows.length && <div className="pks-empty"><b>Tidak ada hasil</b><p>Coba kata pencarian lain atau ubah filter.</p><button className="btn btn--sm" onClick={reset}>Reset filter</button></div>}
