@@ -7,6 +7,8 @@ import { unifiedStorage } from './unifiedStorage.js';
 import { hashPassword } from './auth.js';
 import { ensureRosterLoProfiles } from './loProfile.js';
 import { insertPksSchedule } from './pksSchedule.js';
+import { pksLoUsername } from './pksLoUsername.js';
+import { pksVenues } from './pksVenues.js';
 
 const args = parseArgs({ options: { input: { type: 'string' }, credentials: { type: 'string' }, 'dry-run': { type: 'boolean' } } }).values;
 if (!args.input || (!args['dry-run'] && (!args.credentials?.endsWith('.local') || existsSync(args.credentials)))) {
@@ -40,14 +42,15 @@ try {
     ON CONFLICT(id) DO UPDATE SET event_name=EXCLUDED.event_name,event_dates=EXCLUDED.event_dates`, [event.name]);
   const venueIds = new Map();
   for (const name of roster.venues) {
-    // Coordinates must be confirmed in Venue before GPS attendance is enabled.
-    const { rows: [venue] } = await db.query('INSERT INTO venues(name,lat,lng,active) VALUES($1,0,0,false) RETURNING id', [name]);
+    const location = pksVenues[name];
+    if (!location) throw new Error(`Koordinat venue belum tersedia: ${name}`);
+    const { rows: [venue] } = await db.query('INSERT INTO venues(name,address,lat,lng,active) VALUES($1,$2,$3,$4,true) RETURNING id', [name, location.address, location.lat, location.lng]);
     venueIds.set(name, venue.id);
   }
   const credentials = [];
   const lo = [];
-  for (const [index, row] of roster.lo.entries()) {
-    const username = `PKS.LO${String(index + 1).padStart(2, '0')}`;
+  for (const row of roster.lo) {
+    const username = pksLoUsername(row.name);
     const password = randomBytes(18).toString('base64url');
     const venue_id = venueIds.get(row.venue);
     const { rows: [account] } = await db.query('INSERT INTO lo_accounts(name,username,password_hash,venue_id) VALUES($1,$2,$3,$4) RETURNING id', [row.name, username, hashPassword(password), venue_id]);
@@ -85,6 +88,6 @@ try {
     writeFileSync(args.credentials, `Username\tPassword awal\tNama\tVenue\n${credentials.join('\n')}\n`, { flag: 'wx', mode: 0o600 });
     await raw.query('COMMIT');
   }
-  console.log(JSON.stringify({ dry_run: !!args['dry-run'], schools: participants.length / 2, lo: lo.length, verifiers: new Set(facilitators.map(row => row.code)).size, status: 'draft', venues_need_coordinates: true }));
+  console.log(JSON.stringify({ dry_run: !!args['dry-run'], schools: participants.length / 2, lo: lo.length, verifiers: new Set(facilitators.map(row => row.code)).size, status: 'draft', venues_active: true }));
 } catch (error) { await raw.query('ROLLBACK').catch(() => {}); throw error; }
 finally { raw.release(); await rawPool.end(); }

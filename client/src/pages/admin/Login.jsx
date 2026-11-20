@@ -59,7 +59,7 @@ export default function Login() {
         {mode === 'lo' && (
           <label>Username LO
             <span className="input-icon"><Icon name="users" /><input value={username} onChange={(e) => setUsername(e.target.value)}
-              autoFocus autoCapitalize="none" autoComplete="username" placeholder={pksProgram ? 'mis. PKS.LO01' : 'mis. LO1.Febriyoga'} /></span>
+              autoFocus autoCapitalize="none" autoComplete="username" placeholder={pksProgram ? 'mis. SPAB.LO.Akbar' : 'mis. LO1.Febriyoga'} /></span>
           </label>
         )}
         <div className="login-password">

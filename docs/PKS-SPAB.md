@@ -35,9 +35,9 @@ dibuat dengan penanda **Kepala Sekolah — nama sekolah** dan
 **Bendahara — nama sekolah**. Konfirmasikan nama pada menu Peserta & Panitia
 sebelum pencatatan peserta nyata. Kode profil tetap agar penugasan LO terjaga.
 
-Koordinat hotel belum tersedia dalam sumber. Venue dibuat tidak aktif,
-dengan koordinat penanda 0,0; perbarui koordinat, radius, dan aktifkan
-melalui menu Venue sebelum absensi GPS digunakan. Jadwal absensi: Senin 23 November kedatangan panitia tanpa absensi;
+Ketiga venue sudah aktif dengan radius 150 meter dan koordinat hotel yang
+dicocokkan pada 20 November 2026. Koordinat dan sumber tersedia di
+`server/src/pksVenues.js`; titik serta radius dapat diperbarui melalui Venue. Jadwal absensi: Senin 23 November kedatangan panitia tanpa absensi;
 Selasa 24 November kedatangan peserta dengan absensi panitia saja;
 Rabu 25 November Hari 1 dan Kamis 26 November Hari 2 untuk panitia dan peserta;
 Jumat 27 November penutupan dengan absensi panitia saja. Panitia absen

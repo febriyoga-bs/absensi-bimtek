@@ -59,7 +59,7 @@ export default function AdminLayout() {
         <div className="admin__nav-head">
           <div className="admin__brand">
             <BrandMark size={38} />
-            <span>{lo ? 'Dashboard LO' : pks ? 'Admin PKS' : 'Admin BIMTEK'}<small>{pks ? 'Satdik Aman Bencana · 23–28 November 2026' : 'BIMTEK Revitalisasi SD'}</small></span>
+            <span>{lo ? 'Dashboard LO' : pks ? 'Admin PKS' : 'Admin BIMTEK'}<small>{pks ? <>BIMTEK PKS SPAB<br />23–28 November 2026</> : 'BIMTEK Revitalisasi SD'}</small></span>
           </div>
           <button ref={menuButton} className="admin__menu-toggle" type="button" aria-expanded={menuOpen}
             aria-controls="admin-menu" onClick={() => setMenuOpen(!menuOpen)}>

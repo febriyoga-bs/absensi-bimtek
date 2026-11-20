@@ -6,6 +6,15 @@ export const bimtekSchedule = [
 
 export const reportingDates = { current: bimtekSchedule[1].dates, k3: bimtekSchedule[2].dates };
 
+// Venue tabs follow the selected program; PKS is not a reporting stage.
+export function venueSchedulesFor(event) {
+  if (event?.id === 5) return [{ stage: 5, name: 'BIMTEK PKS SPAB', tabLabel: 'PKS SPAB', dates: '23–28 November 2026' }];
+  if (Number.isSafeInteger(event?.id) && event.id > 0 && !bimtekSchedule.some(item => item.stage === event.id)) {
+    return [{ stage: event.id, name: event.name || `Kegiatan ${event.id}`, tabLabel: event.name || `Kegiatan ${event.id}`, dates: '' }, ...bimtekSchedule];
+  }
+  return bimtekSchedule;
+}
+
 const wibDate = new Intl.DateTimeFormat('sv-SE', {
   timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit',
 });

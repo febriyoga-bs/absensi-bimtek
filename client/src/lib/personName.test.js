@@ -42,6 +42,7 @@ test('keeps SD and PKS uppercase in school placeholders and admin names', () => 
   assert.equal(personName('SD It AL HIKMAH'), 'SD IT Al Hikmah');
   assert.equal(personName('Bendahara — Sdn LUENG SA'), 'Bendahara — SDN Lueng Sa');
   assert.equal(personName('Upt SD NEGERI 105 ONAN GANJANG'), 'UPT SD Negeri 105 Onan Ganjang');
+  assert.equal(personName('Uptd SD NEGERI 158506 TUKKA'), 'UPTD SD Negeri 158506 Tukka');
   assert.equal(personName('PKS-B-10105697'), 'PKS-B-10105697');
   assert.equal(personName('sdian pksari'), 'Sdian Pksari');
 });
