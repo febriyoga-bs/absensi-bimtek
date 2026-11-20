@@ -37,9 +37,13 @@ sebelum pencatatan peserta nyata. Kode profil tetap agar penugasan LO terjaga.
 
 Koordinat hotel belum tersedia dalam sumber. Venue dibuat tidak aktif,
 dengan koordinat penanda 0,0; perbarui koordinat, radius, dan aktifkan
-melalui menu Venue sebelum absensi GPS digunakan. Enam sesi awal memakai
-tanggal 23–28 November, pukul 00.00–23.59.59 WIB per hari. Sesuaikan jam
-dengan rundown resmi melalui Sesi & Jadwal.
+melalui menu Venue sebelum absensi GPS digunakan. Jadwal absensi: Senin 23 November kedatangan panitia tanpa absensi;
+Selasa 24 November kedatangan peserta dengan absensi panitia saja;
+Rabu 25 November Hari 1 dan Kamis 26 November Hari 2 untuk panitia dan peserta;
+Jumat 27 November penutupan dengan absensi panitia saja. Panitia absen
+05.00–08.00 WIB, peserta 08.00–23.00 WIB. Tidak ada sesi Sabtu 28 November.
+Unduhan PKS menggabungkan sesi resmi panitia dan peserta pada tanggal WIB
+yang dipilih; hari lain dan sesi uji coba tidak ikut digabung.
 
 ## Rekomendasi rekap PKS
 

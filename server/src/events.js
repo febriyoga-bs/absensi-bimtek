@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { pksDayLabels } from './pksSchedule.js';
 import { rawPool, q } from './db.js';
 import { currentEvent, eventContext, eventId, legacyReportingDays, searchPathSql } from './eventContext.js';
 import { requireAdmin, requireSuper } from './auth.js';
@@ -70,7 +71,7 @@ export const selectEvent = ah(async (req, res, next) => {
     const rows = needsDates ? await daysCache.get(String(event.id), async () => (await q(`SELECT DISTINCT to_char(starts_at AT TIME ZONE 'Asia/Jakarta','YYYY-MM-DD') AS date
       FROM sessions WHERE NOT is_test ORDER BY date`)).rows) : [];
     const dates = [...new Set([...(event.id === 3 ? legacyReportingDays.map((day) => day.date) : []), ...rows.map((row) => row.date)])].sort();
-    event.check_in_days = dates.map((date, index) => ({ date, label: `Absensi Hari-${index + 1}`,
+    event.check_in_days = dates.map((date, index) => ({ date, label: event.id === 5 ? pksDayLabels[date] || `Absensi ${date}` : `Absensi Hari-${index + 1}`,
       shortDate: new Date(`${date}T12:00:00Z`).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', timeZone: 'Asia/Jakarta' }) }));
     next();
   });

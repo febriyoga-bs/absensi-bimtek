@@ -1,3 +1,4 @@
+import { selectedEvent } from '../../event.js';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
@@ -56,8 +57,11 @@ export default function Sessions() {
     <>
       <div className="page-head">
         <div><h2>Sesi & Jadwal</h2>
-          <p className="muted">Absensi hanya tersedia selama jadwal sesi. Jika batas satu sesi resmi per hari aktif di Pengaturan, gunakan peran Semua untuk peserta dan panitia; sesi uji coba dikecualikan.</p></div>
+          <p className="muted">{selectedEvent()?.id === 5 ? 'Panitia: 05.00–08.00 WIB. Peserta: 08.00–23.00 WIB. Unduhan menggabungkan kedua sesi pada tanggal yang sama.' : 'Absensi hanya tersedia selama jadwal sesi. Jika batas satu sesi resmi per hari aktif di Pengaturan, gunakan peran Semua untuk peserta dan panitia; sesi uji coba dikecualikan.'}</p></div>
       </div>
+      {selectedEvent()?.id === 5 && <div className="pks-agenda" aria-label="Rundown PKS">
+        {[['Senin, 23 Nov', 'Kedatangan Panitia', 'Tanpa absensi'], ['Selasa, 24 Nov', 'Kedatangan Peserta', 'Absensi Panitia'], ['Rabu, 25 Nov', 'Hari 1', 'Absensi Panitia & Peserta'], ['Kamis, 26 Nov', 'Hari 2', 'Absensi Panitia & Peserta'], ['Jumat, 27 Nov', 'Penutupan', 'Absensi Panitia']].map(([day, label, scope]) => <div key={day}><small>{day}</small><b>{label}</b><span>{scope}</span></div>)}
+      </div>}
       <form className="card form form--grid" onSubmit={save}>
         <h3 className="span2">{form.id ? 'Ubah sesi' : 'Tambah sesi'}</h3>
         <label className="span2">Nama sesi<input value={form.name} onChange={f('name')} placeholder="Hari 1 – Absen Pagi" required /></label>

@@ -1051,3 +1051,11 @@ select:disabled { background-color: var(--surface-2); color: var(--muted); curso
   .session-row__venues { grid-column: 1 / -1; }
   .session-row__actions { grid-column: 1 / -1; justify-content: flex-end; padding-top: 12px; border-top: 1px solid var(--line); }
 }
+
+.pks-agenda { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 10px; background: var(--surface); margin-bottom: 20px; overflow: hidden; }
+.pks-agenda > div { display: grid; gap: 7px; padding: 16px; border-right: 1px solid var(--line); }
+.pks-agenda > div:last-child { border-right: 0; }
+.pks-agenda small, .pks-agenda span { color: var(--muted); font-size: 11px; }
+.pks-agenda b { font-size: 13px; font-weight: 600; }
+@media (max-width: 900px) { .pks-agenda { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pks-agenda > div { border-bottom: 1px solid var(--line); } }
+@media (max-width: 480px) { .pks-agenda { grid-template-columns: minmax(0, 1fr); } }

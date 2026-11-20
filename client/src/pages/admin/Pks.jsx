@@ -55,7 +55,7 @@ export default function Pks() {
   return <div className="pks-page">
     <header className="pks-heading">
       <div><h1>Pantau Rekap PKS</h1><p>Satuan Pendidikan Aman Bencana <span>·</span> 23–28 November 2026</p></div>
-      {data && <p className="pks-heading__meta">{data.venues.length} venue <span>·</span> {data.lo.length} LO <span>·</span> {new Set(data.verifiers.map(row => row.code)).size} verifikator</p>}
+      {data && <p className="pks-heading__meta">{data.venues.length} Venue <span>·</span> {data.lo.length} LO <span>·</span> {new Set(data.verifiers.map(row => row.code)).size} Verifikator</p>}
     </header>
     {error && !editing && <div className="alert alert--err" role="alert">{error} {!data && <button className="btn btn--sm" onClick={load}>Coba lagi</button>}</div>}
     {!data && !error && <p role="status">Memuat pemetaan PKS…</p>}

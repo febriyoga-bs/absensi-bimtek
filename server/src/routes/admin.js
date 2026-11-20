@@ -1132,13 +1132,23 @@ const attendanceOrders = {
   venue_asc: 'lower(v.name) ASC NULLS LAST, lower(p.name) ASC, a.id ASC',
   venue_desc: 'lower(v.name) DESC NULLS LAST, lower(p.name) ASC, a.id ASC',
 };
+async function attendanceSessionScope(req) {
+  const id = Number(req.query.session_id);
+  if (!Number.isSafeInteger(id) || id < 1 || id > 2147483647) throw new HttpError(400, 'Sesi absensi tidak valid.');
+  const { rows: [session] } = await q('SELECT * FROM sessions WHERE id=$1', [id]);
+  if (!session) throw new HttpError(404, 'Sesi absensi tidak ditemukan pada kegiatan ini. Pilih sesi yang sesuai.');
+  if (eventId() !== 5 || req.query.combine_day !== 'true' || session.is_test) return { session, ids: [id] };
+  const { rows } = await q(`SELECT id FROM sessions WHERE NOT is_test
+    AND (starts_at AT TIME ZONE 'Asia/Jakarta')::date=($1::timestamptz AT TIME ZONE 'Asia/Jakarta')::date ORDER BY starts_at,id`, [session.starts_at]);
+  return { session, ids: rows.map(row => row.id) };
+}
+
 r.get('/attendance', ah(async (req, res) => {
   const ownOnly = req.user.role === 'lo';
   if (ownOnly && !req.user.lo) throw new HttpError(403, 'Belum ada penugasan pada tahap ini.');
   const sort = req.query.sort ?? 'risk';
   if (typeof sort !== 'string' || !Object.hasOwn(attendanceOrders, sort)) throw new HttpError(400, 'Urutan absensi tidak valid.');
-  const sessionId = Number(req.query.session_id);
-  if (!Number.isSafeInteger(sessionId) || sessionId < 1 || sessionId > 2147483647) throw new HttpError(400, 'Sesi absensi tidak valid.');
+  const { ids: sessionIds } = await attendanceSessionScope(req);
   const v = scopeVenue(req);
   const recordedBy = ownOnly ? `LO ${req.user.name}` : typeof req.query.recorded_by === 'string' ? req.query.recorded_by.trim().slice(0, 300) : '';
   const status = ['valid', 'review', 'ditolak', 'berhalangan'].includes(req.query.status) ? req.query.status : null;
@@ -1146,7 +1156,7 @@ r.get('/attendance', ah(async (req, res) => {
   const offset = finiteInteger(req.query.offset, 0, 0, 1000000);
   const positionFilter = attendancePositionFilter(req);
   const search = attendanceSearch(req);
-  const where = `a.session_id=$1 AND ($2::int IS NULL OR a.venue_id=$2)
+  const where = `a.session_id=ANY($1::int[]) AND ($2::int IS NULL OR a.venue_id=$2)
     AND EXISTS (SELECT 1 FROM people p WHERE p.id=a.person_id AND ${positionFilter}
       AND ($8::text='' OR p.name ILIKE $8 OR p.npsn ILIKE $8 OR EXISTS (
         SELECT 1 FROM venue_arrival_recap arrival WHERE arrival.venue_id=a.venue_id
@@ -1169,21 +1179,21 @@ r.get('/attendance', ah(async (req, res) => {
        WHERE ${where} AND ($3::text IS NULL OR a.status=$3) AND ($7::text='' OR a.scanned_by=$7)
        ORDER BY ${attendanceOrders[sort]}
        LIMIT $4 OFFSET $5`,
-      [sessionId, v, status, limit, offset, req.user.lo, recordedBy, search, ownOnly ? req.user.lo : null]
+      [sessionIds, v, status, limit, offset, req.user.lo, recordedBy, search, ownOnly ? req.user.lo : null]
     ),
     q(
-      `SELECT EXISTS (SELECT 1 FROM sessions WHERE id=$1) AS session_exists,
+      `SELECT EXISTS (SELECT 1 FROM sessions WHERE id=ANY($1::int[])) AS session_exists,
               count(*)::int AS total,
               count(*) FILTER (WHERE a.status='valid')::int AS valid,
               count(*) FILTER (WHERE a.status='review')::int AS review,
               count(*) FILTER (WHERE a.status='ditolak')::int AS ditolak,
               count(*) FILTER (WHERE a.status='berhalangan')::int AS berhalangan,
               ARRAY(SELECT DISTINCT recorder.scanned_by FROM attendance recorder
-                WHERE recorder.session_id=$1 AND ($2::int IS NULL OR recorder.venue_id=$2)
+                WHERE recorder.session_id=ANY($1::int[]) AND ($2::int IS NULL OR recorder.venue_id=$2)
                   AND recorder.method IN ('manual','qr') AND recorder.scanned_by IS NOT NULL
                 ORDER BY recorder.scanned_by) AS recorders
        FROM attendance a WHERE ${where.replaceAll('$8', '$4').replaceAll('$9', '$5')} AND ($3::text='' OR a.scanned_by=$3)`,
-      [sessionId, v, recordedBy, search, ownOnly ? req.user.lo : null]
+      [sessionIds, v, recordedBy, search, ownOnly ? req.user.lo : null]
     ),
   ]);
   const { recorders, session_exists: sessionExists, ...c } = summary;
@@ -1299,8 +1309,7 @@ r.get('/export', ah(async (req, res) => {
   const exportStatus = ['valid', 'review', 'ditolak', 'berhalangan'].includes(req.query.status) ? req.query.status : null;
   const recordedBy = typeof req.query.recorded_by === 'string' ? req.query.recorded_by.trim().slice(0, 300) : '';
   const positionFilter = attendancePositionFilter(req);
-  const { rows: [s] } = await q('SELECT * FROM sessions WHERE id=$1', [req.query.session_id]);
-  if (!s) throw new HttpError(404, 'Sesi tidak ditemukan');
+  const { session: s, ids: sessionIds } = await attendanceSessionScope(req);
   const { rows } = await q(
     `SELECT p.name, p.role, p.institution, p.position, pv.name AS assigned_venue,
             p.npsn, p.provinsi, p.kab_kota, p.ptn,
@@ -1314,16 +1323,18 @@ r.get('/export', ah(async (req, res) => {
             a.status, a.created_at, av.name AS venue, a.flags, a.method, a.participant_note
      FROM people p
      LEFT JOIN venues pv ON pv.id=p.venue_id
-     LEFT JOIN attendance a ON a.person_id=p.id AND a.session_id=$1
+     LEFT JOIN attendance a ON a.person_id=p.id AND a.session_id=ANY($1::int[])
      LEFT JOIN venues av ON av.id=a.venue_id
-     WHERE (${positionFilter}) AND ($7::text='' OR a.scanned_by=$7) AND ($8::text IS NULL OR a.status=$8)
-       AND ($10::text='' OR p.name ILIKE $10 OR p.npsn ILIKE $10)
-       AND ((a.id IS NOT NULL AND ($6::boolean OR $9::boolean OR a.status IN ('valid','review')) AND ($4::int IS NULL OR a.venue_id=$4))
-        OR ($6::boolean AND a.id IS NULL AND ($2='semua' OR p.role=$2) AND ${inRosterAt('LEAST(now(), $5::timestamptz)')}
-            AND (cardinality(COALESCE($3::int[],'{}'))=0 OR p.venue_id IS NULL OR p.venue_id = ANY($3::int[]))
-            AND ($4::int IS NULL OR p.venue_id IS NULL OR p.venue_id=$4)))
+     WHERE (${positionFilter}) AND ($4::text='' OR a.scanned_by=$4) AND ($5::text IS NULL OR a.status=$5)
+       AND ($7::text='' OR p.name ILIKE $7 OR p.npsn ILIKE $7)
+       AND ((a.id IS NOT NULL AND ($3::boolean OR $6::boolean OR a.status IN ('valid','review')) AND ($2::int IS NULL OR a.venue_id=$2))
+        OR ($3::boolean AND a.id IS NULL AND EXISTS (SELECT 1 FROM sessions scope
+            WHERE scope.id=ANY($1::int[]) AND (scope.role='semua' OR p.role=scope.role)
+              AND ${inRosterAt('LEAST(now(), scope.ends_at)')}
+              AND (cardinality(COALESCE(scope.venue_ids,'{}'))=0 OR p.venue_id IS NULL OR p.venue_id=ANY(scope.venue_ids)))
+            AND ($2::int IS NULL OR p.venue_id IS NULL OR p.venue_id=$2)))
      ORDER BY p.role, p.name`,
-    [s.id, s.role, s.venue_ids, v, s.ends_at, req.query.include_all === 'true', recordedBy, exportStatus, req.query.recorded_only === 'true', search]
+    [sessionIds, v, req.query.include_all === 'true', recordedBy, exportStatus, req.query.recorded_only === 'true', search]
   );
   let venueName = '';
   if (v) venueName = (await q('SELECT name FROM venues WHERE id=$1', [v])).rows[0]?.name || '';

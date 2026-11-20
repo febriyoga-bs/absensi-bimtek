@@ -6,6 +6,7 @@ import { rawPool, ensureStorageMode } from './db.js';
 import { unifiedStorage } from './unifiedStorage.js';
 import { hashPassword } from './auth.js';
 import { ensureRosterLoProfiles } from './loProfile.js';
+import { insertPksSchedule } from './pksSchedule.js';
 
 const args = parseArgs({ options: { input: { type: 'string' }, credentials: { type: 'string' }, 'dry-run': { type: 'boolean' } } }).values;
 if (!args.input || (!args['dry-run'] && (!args.credentials?.endsWith('.local') || existsSync(args.credentials)))) {
@@ -71,8 +72,7 @@ try {
     SELECT code,name,'peserta',position,venue_id,npsn,institution,provinsi,kab_kota,facilitator,now()
     FROM jsonb_to_recordset($1::jsonb) x(code text,name text,position text,venue_id int,npsn text,institution text,provinsi text,kab_kota text,facilitator text)`, [JSON.stringify(profiles)]);
   await ensureRosterLoProfiles(db.query);
-  for (let day = 23; day <= 28; day++) await db.query(`INSERT INTO sessions(name,role,starts_at,ends_at) VALUES($1,'semua',$2,$3)`,
-    [`Absensi PKS Hari-${day - 22}`, `2026-11-${day}T00:00:00+07:00`, `2026-11-${day}T23:59:59+07:00`]);
+  await insertPksSchedule(db.query);
   // Return to owner role for private authentication metadata.
   await raw.query('RESET ROLE');
   await raw.query(`CREATE TABLE IF NOT EXISTS public.pks_admin_account(id int PRIMARY KEY CHECK(id=1),password_hash text NOT NULL);

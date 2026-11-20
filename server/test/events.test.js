@@ -13,6 +13,7 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { cleanPksRecord } from '../src/pks.js';
+import { insertPksSchedule } from '../src/pksSchedule.js';
 
 // Actual PostgreSQL in memory: never connect tests to DATABASE_URL.
 const db = new PGlite();
@@ -804,4 +805,44 @@ test('PKS login and records stay isolated and LO can update only assigned school
   const own = await (await request('/admin/pks?event=5', { token: loToken })).json();
   assert.equal(own.schools.length, 1); assert.equal(own.schools[0].pks.status, 'lengkap');
   assert.equal((await request('/admin/pks?event=3', { token: admin })).status, 404);
+  let wednesday;
+  await eventContext.run(pksEvent, async () => {
+    await insertPksSchedule(q);
+    const { rows: schedule } = await q("SELECT * FROM sessions ORDER BY starts_at");
+    assert.equal(schedule.length, 6);
+    assert.equal(schedule.filter(s => s.role === 'panitia').length, 4);
+    assert.equal(schedule.filter(s => s.role === 'peserta').length, 2);
+    const dayOf = date => new Date(date).toLocaleDateString('sv-SE', { timeZone: 'Asia/Jakarta' });
+    assert.deepEqual([...new Set(schedule.map(s => dayOf(s.starts_at)))], ['2026-11-24','2026-11-25','2026-11-26','2026-11-27']);
+    for (const session of schedule) {
+      const hours = date => new Date(date).toLocaleTimeString('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit' });
+      assert.equal(hours(session.starts_at), session.role === 'panitia' ? '05:00' : '08:00');
+      assert.equal(hours(session.ends_at), session.role === 'panitia' ? '08:00' : '23:00');
+    }
+    const { rows: [committee] } = await q("INSERT INTO people(code,name,role,position,venue_id) VALUES('pks-committee-test','Committee Wednesday','panitia','LO',1) RETURNING id");
+    const { rows: [participant] } = await q("INSERT INTO people(code,name,role,position,venue_id) VALUES('pks-participant-test','Participant Wednesday','peserta','Bendahara',1) RETURNING id");
+    const { rows: [thursday] } = await q("INSERT INTO people(code,name,role,position,venue_id) VALUES('pks-thursday-test','Thursday Only','peserta','Bendahara',1) RETURNING id");
+    const wed = schedule.filter(s => dayOf(s.starts_at) === '2026-11-25'); wednesday = wed[0].id;
+    for (const session of wed) await q("INSERT INTO attendance(person_id,session_id,venue_id,photo_path,status) VALUES($1,$2,1,'pks-test-photo.jpg','valid')", [session.role === 'panitia' ? committee.id : participant.id,session.id]);
+    const thu = schedule.find(s => dayOf(s.starts_at) === '2026-11-26' && s.role === 'peserta');
+    await q("INSERT INTO attendance(person_id,session_id,venue_id,photo_path,status) VALUES($1,$2,1,'pks-test-photo.jpg','valid')", [thursday.id,thu.id]);
+    const { rows: [testSession] } = await q("INSERT INTO sessions(name,role,starts_at,ends_at,is_test) VALUES('Test Wednesday','semua','2026-11-25T10:00:00+07:00','2026-11-25T11:00:00+07:00',true) RETURNING id");
+    await q("INSERT INTO attendance(person_id,session_id,venue_id,photo_path,status) VALUES($1,$2,1,'pks-test-photo.jpg','valid')", [thursday.id,testSession.id]);
+  });
+  invalidateEventMetadata();
+  const single = await (await request(`/admin/attendance?event=5&session_id=${wednesday}`, { token })).json();
+  assert.equal(single.total, 1);
+  const mergedResponse = await request(`/admin/attendance?event=5&session_id=${wednesday}&combine_day=true`, { token });
+  assert.equal(mergedResponse.status, 200);
+  const merged = await mergedResponse.json();
+  assert.equal(merged.total, 2);
+  assert.deepEqual(merged.rows.map(row => row.role).sort(), ['panitia', 'peserta']);
+  const exported = await request(`/admin/export?event=5&session_id=${wednesday}&combine_day=true&recorded_only=true`, { token });
+  assert.equal(exported.status, 200);
+  const csv = await exported.text();
+  assert.ok(csv.includes('Committee Wednesday') && csv.includes('Participant Wednesday'));
+  assert.ok(!csv.includes('Thursday Only'));
+  const all = await request(`/admin/export?event=5&session_id=${wednesday}&combine_day=true&include_all=true`, { token });
+  assert.equal(all.status, 200);
+
 });
