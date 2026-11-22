@@ -10,13 +10,13 @@ export default function PksRanking({ data, venue, query, owner, onReload }) {
   const rows = rankPksOwners(data.schools, data.lo, venue)
     .filter(row => (!owner || row.name === owner) && personName(row.name).toLocaleLowerCase('id').includes(query));
   return <section className="pks-ranking" aria-label="Peringkat LO">
-    <header className="pks-ranking__heading"><h2>Peringkat LO</h2><button type="button" className="btn btn--sm" onClick={onReload}>Muat ulang</button></header>
+    <header className="pks-ranking__heading"><h2>Peringkat LO</h2>{tab === 'progress' && <button type="button" className="btn btn--sm" onClick={onReload}>Muat ulang</button>}</header>
     <div className="pks-tabs" role="group" aria-label="Jenis peringkat LO">
       <button aria-pressed={tab === 'progress'} onClick={() => setTab('progress')}>Capaian Verifikasi Sekolah</button>
       <button aria-pressed={tab === 'attendance'} onClick={() => setTab('attendance')}>Absensi</button>
     </div>
-    {tab === 'attendance' ? <AttendanceRanking venue={venue} query={query} owner={owner} facilitatorLabel="verifikator" /> : <>
-      <p className="pks-ranking__note">Capaian = sekolah berstatus Lengkap ÷ seluruh sekolah binaan LO. Urutan berdasarkan persentase capaian, lalu jumlah sekolah lengkap.</p>
+    {tab === 'attendance' ? <AttendanceRanking venue={venue} query={query} owner={owner} facilitatorLabel="verifikator" compact /> : <>
+      <p className="pks-ranking__note">Diurutkan berdasarkan persentase sekolah berstatus Lengkap.</p>
       <div className="reporting-ranking" tabIndex={0} aria-label="Peringkat capaian verifikasi sekolah">
         {rows.length ? <ol>{rows.map(row => <li key={`${row.venue}:${row.name}`}>
           <div className="reporting-ranking-name"><b>{row.rank ?? '—'}. {personName(row.name)}</b><strong>{row.ratio == null ? 'Belum ada binaan' : `${percent.format(row.ratio)}%`}</strong></div>

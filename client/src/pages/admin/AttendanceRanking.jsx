@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../api.js';
 import { sessionTitle } from './shared.js';
 
-export default function AttendanceRanking({ venue, query, owner = '', facilitatorLabel = 'fasilitator' }) {
+export default function AttendanceRanking({ venue, query, owner = '', facilitatorLabel = 'fasilitator', compact = false }) {
   const [sessionId, setSessionId] = useState('');
   const [sessions, setSessions] = useState([]);
   const [sessionError, setSessionError] = useState('');
@@ -42,7 +42,7 @@ export default function AttendanceRanking({ venue, query, owner = '', facilitato
     .sort((a, b) => (b.ratio ?? -1) - (a.ratio ?? -1) || b.total - a.total || a.name.localeCompare(b.name, 'id'))
     .map((row, i) => ({ ...row, rank: i + 1 }))
     .filter((row) => (!owner || row.name === owner) && row.name.toLowerCase().includes(query));
-  return <section aria-label="Peringkat absensi LO">
+  return <section className={compact ? 'pks-attendance-ranking' : undefined} aria-label="Peringkat absensi LO">
     <div className="toolbar">
       <label>Sesi<select value={sessionId} disabled={!sessions.length} onChange={(event) => setSessionId(event.target.value)}>
         {!sessionId && <option value="">{sessionError ? 'Daftar sesi gagal dimuat' : 'Memuat sesi resmi…'}</option>}
@@ -52,15 +52,24 @@ export default function AttendanceRanking({ venue, query, owner = '', facilitato
     </div>
     {sessionError && <p className="alert alert--err" role="alert">Daftar sesi gagal dimuat. {sessionError}</p>}
     {!sessionId && !sessionError && sessions.length === 0 && <p className="muted">Menunggu daftar sesi resmi. Klik Muat ulang jika belum tersedia.</p>}
-    <p className="muted small">Progres mencakup binaan yang diabsenkan dan yang dicatat Mundur/Berhalangan Hadir oleh LO pada sesi pilihan. Target mencakup binaan hadir serta binaan berhalangan yang sudah dicatat, tanpa hitung ganda. Hadir berdasarkan rekap kedatangan atau bukti absensi resmi lintas sesi. Absensi mandiri dan status ditolak tidak dihitung sebagai pekerjaan LO.</p>
+    {compact ? <div className="pks-attendance-help"><p>Absensi dihitung per orang, bukan per sekolah.</p><details><summary>Cara hitung</summary><p>Progres mencakup absensi dan catatan mundur/berhalangan oleh LO pada sesi pilihan. Target mencakup binaan hadir serta yang berhalangan dan sudah dicatat, tanpa hitung ganda. Kehadiran mengikuti rekap kedatangan atau absensi resmi lintas sesi. Absensi mandiri dan ditolak tidak dihitung sebagai pekerjaan LO.</p></details></div> : <p className="muted small">Progres mencakup binaan yang diabsenkan dan yang dicatat Mundur/Berhalangan Hadir oleh LO pada sesi pilihan. Target mencakup binaan hadir serta binaan berhalangan yang sudah dicatat, tanpa hitung ganda. Hadir berdasarkan rekap kedatangan atau bukti absensi resmi lintas sesi. Absensi mandiri dan status ditolak tidak dihitung sebagai pekerjaan LO.</p>}
     {error && <p className="alert alert--err" role="alert">{error}</p>}
     {sessionId && !result && !error && <p role="status">Memuat peringkat absensi…</p>}
     {result && <div className="reporting-ranking" tabIndex={0}>
       {rows.length ? <ol>{rows.map((row) => <li key={row.id}>
         <div className="reporting-ranking-name"><b>{row.rank}. {personName(row.name)}</b>
-          <strong>{row.completed}/{row.target} sudah dicatat{row.ratio == null ? '' : ` (${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(row.ratio)}%)`}</strong></div>
+          <strong>{compact ? (row.ratio == null ? 'Belum ada target hadir' : `${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(row.ratio)}% tercatat`) : <>{row.completed}/{row.target} sudah dicatat{row.ratio == null ? '' : ` (${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(row.ratio)}%)`}</>}</strong></div>
         <progress aria-label={`${row.completed} dari ${row.target} sudah dicatat oleh ${personName(row.name)}`} value={row.ratio ?? 0} max={100} />
-        <p>{row.present}/{row.assigned} peserta/{facilitatorLabel} hadir di venue · {row.participants} peserta dan {row.facilitators} {facilitatorLabel} sudah diabsenkan · {row.unavailable} mundur/berhalangan hadir · {row.venue}</p>
+        {compact ? <>
+          <p className="pks-attendance-venue">{row.venue}</p>
+          <dl className="pks-attendance-metrics">
+            <div><dt>Binaan</dt><dd>{row.assigned}<small>orang</small></dd></div>
+            <div><dt>Hadir di venue</dt><dd>{row.present}<small>orang</small></dd></div>
+            <div><dt>Sudah dicatat</dt><dd>{row.completed}<small>dari {row.target} target</small></dd></div>
+            <div><dt>Berhalangan</dt><dd>{row.unavailable}<small>orang</small></dd></div>
+          </dl>
+          <details className="pks-attendance-breakdown"><summary>Rincian absensi</summary><p>{row.participants} peserta dan {row.facilitators} {facilitatorLabel} sudah diabsenkan. {row.unavailable} orang dicatat mundur/berhalangan.</p></details>
+        </> : <p>{row.present}/{row.assigned} peserta/{facilitatorLabel} hadir di venue · {row.participants} peserta dan {row.facilitators} {facilitatorLabel} sudah diabsenkan · {row.unavailable} mundur/berhalangan hadir · {row.venue}</p>}
       </li>)}</ol> : <p className="muted">Tidak ada LO yang cocok dengan filter.</p>}
     </div>}
   </section>;
