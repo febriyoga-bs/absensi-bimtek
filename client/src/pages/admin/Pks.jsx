@@ -5,10 +5,11 @@ import { selectedEvent } from '../../event.js';
 import { personName } from '../../lib/personName.js';
 import { groupPksVerifiers } from '../../lib/pksVerifiers.js';
 import FilterField from '../../components/FilterField.jsx';
+import PksRanking from './PksRanking.jsx';
 import './Pks.css';
 
 const statuses = { belum_diterima: 'Belum diterima', menunggu_verifikasi: 'Menunggu verifikasi', perlu_perbaikan: 'Perlu perbaikan', lengkap: 'Lengkap' };
-const views = { schools: 'Sekolah', verifiers: 'Verifikator', lo: 'LO' };
+const views = { schools: 'Sekolah', verifiers: 'Verifikator', lo: 'LO', ranking: 'Peringkat LO' };
 const number = new Intl.NumberFormat('id-ID');
 
 export default function Pks() {
@@ -68,7 +69,7 @@ export default function Pks() {
       </section>
       <section className="pks-register" aria-label="Daftar pemetaan PKS">
         <div className="pks-register__head">
-          <div className="pks-tabs" role="group" aria-label="Tampilan pemetaan">{Object.entries(views).map(([key, label]) => <button key={key} aria-pressed={view === key} onClick={() => { setView(key); setPage(1); }}>{label}<span>{number.format(key === 'verifiers' ? verifiers.length : data[key].length)}</span></button>)}</div>
+          <div className="pks-tabs" role="group" aria-label="Tampilan pemetaan">{Object.entries(views).map(([key, label]) => <button key={key} aria-pressed={view === key} onClick={() => { setView(key); setPage(1); }}>{label}<span>{number.format(key === 'verifiers' ? verifiers.length : key === 'ranking' ? data.lo.length : data[key].length)}</span></button>)}</div>
           <p>Status dokumen diperbarui berdasarkan pemeriksaan PKS.</p>
         </div>
         <div className="pks-filters">
@@ -77,6 +78,7 @@ export default function Pks() {
           <FilterField label="LO bertugas"><select value={owner} onChange={e => { setOwner(e.target.value); setPage(1); }}><option value="">Semua LO</option>{data.lo.filter(row => !venue || row.venue === venue).map(row => <option value={row.name} key={row.venue + row.name}>{personName(row.name)}</option>)}</select></FilterField>
           {view === 'schools' && <FilterField label="Status PKS"><select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}><option value="">Semua status</option>{Object.entries(statuses).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></FilterField>}
         </div>
+        {view === 'ranking' ? <PksRanking data={data} venue={venue} query={search} owner={owner} onReload={load} /> : <>
         <div className="pks-results"><span><b>{number.format(rows.length)}</b> {view === 'schools' ? 'sekolah' : view === 'verifiers' ? 'verifikator' : 'LO'}{filtered ? ' sesuai filter' : ''}</span>{filtered && <button type="button" onClick={reset}>Reset filter</button>}</div>
         <div className="pks-table-scroll" tabIndex={0} role="region" aria-label={`Tabel ${views[view]}`}>
           <table className={`table pks-table${view !== 'schools' ? ` pks-table--people${view === 'verifiers' ? ' pks-table--verifiers' : ''}` : ''}`}>
@@ -94,6 +96,7 @@ export default function Pks() {
           {!rows.length && <div className="pks-empty"><b>Tidak ada hasil</b><p>Coba kata pencarian lain atau ubah filter.</p><button className="btn btn--sm" onClick={reset}>Reset filter</button></div>}
         </div>
         <footer className="pks-pagination"><span>{rows.length ? `${number.format(start + 1)}–${number.format(Math.min(start + pageSize, rows.length))}` : '0'} dari {number.format(rows.length)}</span><label>Baris<select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(1); }}>{[25, 50, 100].map(size => <option key={size}>{size}</option>)}</select></label><nav aria-label="Halaman rekap PKS"><button className="btn btn--sm" disabled={active <= 1} onClick={() => setPage(active - 1)}>Sebelumnya</button><span>{active} / {pages}</span><button className="btn btn--sm" disabled={active >= pages} onClick={() => setPage(active + 1)}>Berikutnya</button></nav></footer>
+        </>}
       </section>
       <p className="pks-footnote">Pemetaan sekolah mencakup {data.verifiers.length} penugasan LO–verifikator. Status awal dokumen: belum diterima.</p>
     </>}

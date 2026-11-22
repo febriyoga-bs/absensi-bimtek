@@ -124,6 +124,7 @@ export function verifyChallenge(token) {
 }
 
 export function pksAdminPath(path, method = 'GET') {
+  if (path === '/reporting/attendance-ranking' && method === 'GET') return true;
   if (path === '/me' || /^\/(?:pks|arrival-recap|assignments|venue-attendance|sessions|venues|lo|people|participants|attendance|attempts|photo|export|scan|schools|school|facilitators|dinas|bpmp|stats|summary|dashboard|person|challenge|check-in)(?:\/|$)/.test(path)) return true;
   return path === '/settings' && method === 'GET';
 }

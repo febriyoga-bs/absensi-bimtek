@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../api.js';
 import { sessionTitle } from './shared.js';
 
-export default function AttendanceRanking({ venue, query }) {
+export default function AttendanceRanking({ venue, query, owner = '', facilitatorLabel = 'fasilitator' }) {
   const [sessionId, setSessionId] = useState('');
   const [sessions, setSessions] = useState([]);
   const [sessionError, setSessionError] = useState('');
@@ -41,7 +41,7 @@ export default function AttendanceRanking({ venue, query }) {
     })
     .sort((a, b) => (b.ratio ?? -1) - (a.ratio ?? -1) || b.total - a.total || a.name.localeCompare(b.name, 'id'))
     .map((row, i) => ({ ...row, rank: i + 1 }))
-    .filter((row) => row.name.toLowerCase().includes(query));
+    .filter((row) => (!owner || row.name === owner) && row.name.toLowerCase().includes(query));
   return <section aria-label="Peringkat absensi LO">
     <div className="toolbar">
       <label>Sesi<select value={sessionId} disabled={!sessions.length} onChange={(event) => setSessionId(event.target.value)}>
@@ -60,7 +60,7 @@ export default function AttendanceRanking({ venue, query }) {
         <div className="reporting-ranking-name"><b>{row.rank}. {personName(row.name)}</b>
           <strong>{row.completed}/{row.target} sudah dicatat{row.ratio == null ? '' : ` (${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(row.ratio)}%)`}</strong></div>
         <progress aria-label={`${row.completed} dari ${row.target} sudah dicatat oleh ${personName(row.name)}`} value={row.ratio ?? 0} max={100} />
-        <p>{row.present}/{row.assigned} peserta/fasilitator hadir di venue · {row.participants} peserta dan {row.facilitators} fasilitator sudah diabsenkan · {row.unavailable} mundur/berhalangan hadir · {row.venue}</p>
+        <p>{row.present}/{row.assigned} peserta/{facilitatorLabel} hadir di venue · {row.participants} peserta dan {row.facilitators} {facilitatorLabel} sudah diabsenkan · {row.unavailable} mundur/berhalangan hadir · {row.venue}</p>
       </li>)}</ol> : <p className="muted">Tidak ada LO yang cocok dengan filter.</p>}
     </div>}
   </section>;

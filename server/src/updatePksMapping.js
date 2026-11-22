@@ -38,7 +38,7 @@ try {
   }
   const { rows: [roster] } = await db.query('SELECT data FROM assignment_roster WHERE id=1');
   if (JSON.stringify(roster.data.pks_records) !== JSON.stringify(before.assignment_roster[0].data.pks_records || {})) throw new Error('Status PKS berubah.');
-  const verifierCodes = new Set(roster.data.facilitators.map(row=>row.code));
+  const verifierCodes = new Set(roster.data.verifier_people.map(row=>row.code));
   if (people.filter(row=>verifierCodes.has(row.code) && !row.archived_at).length !== plan.summary.verifiers) throw new Error('Profil verifikator belum lengkap.');
   await db.query(args['dry-run'] ? 'ROLLBACK' : 'COMMIT');
   invalidateReportingRoster();

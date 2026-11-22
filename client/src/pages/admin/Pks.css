@@ -75,6 +75,19 @@ html[data-theme="dark"] .pks-summary__total { --metric-bg: #244b7d; }
 .pks-table--people.table { min-width: 600px; }
 .pks-table--verifiers td:first-child b { white-space: nowrap; }
 .pks-verifier-los { white-space: normal; }
+.pks-ranking { padding: 20px; }
+.pks-ranking__heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.pks-ranking h2 { margin: 0; font-size: 20px; }
+.pks-ranking > .pks-tabs { border-bottom: 1px solid var(--line); margin: 8px 0 16px; }
+.pks-ranking__note { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
+.pks-ranking .reporting-ranking { max-height: 520px; overflow: auto; padding: 0; background: var(--surface); }
+.pks-ranking .reporting-ranking ol { list-style: none; padding: 0; margin: 0; }
+.pks-ranking .reporting-ranking li { padding: 18px 0; border-bottom: 1px solid var(--line); }
+.pks-ranking .reporting-ranking li:first-child { padding-top: 0; }
+.pks-ranking .reporting-ranking-name { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; font-size: 15px; }
+.pks-ranking .reporting-ranking-name strong { font-variant-numeric: tabular-nums; }
+.pks-ranking .reporting-ranking progress { display: block; width: 100%; height: 8px; margin: 10px 0; accent-color: var(--accent); }
+.pks-ranking .reporting-ranking p { margin: 0; font-size: 14px; color: var(--muted); }
 .pks-empty { padding: 44px 20px; text-align: center; font-size: 14px; }
 .pks-empty p { margin: 6px 0 16px; color: var(--muted); }
 .pks-pagination { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; padding: 14px 20px; font-size: 14px; color: var(--muted); }
