@@ -749,6 +749,7 @@ select:disabled { background-color: var(--surface-2); color: var(--muted); curso
 .whatsapp-link { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px;
   margin-inline-start: 4px; border-radius: 8px; color: #116b42; background: #e5f4ec; text-decoration: none; vertical-align: middle; }
 .whatsapp-link:hover { background: #ccebd9; }
+.lo-representation-tag { display: inline-block; margin: 4px 0 4px 7px; padding: 3px 8px; border: 1px solid #c58b32; border-radius: 5px; background: #fff5df; color: #77500d; font-size: 11px; font-weight: 600; line-height: 1.5; vertical-align: middle; white-space: nowrap; }
 .assignment-person-days { flex-basis: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 .sync-tabs { flex-wrap: wrap; }
 @media (max-width: 900px) {

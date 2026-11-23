@@ -1,3 +1,4 @@
+import LoRepresentation from '../../components/LoRepresentation.jsx';
 import { sortTableRows } from '../../lib/tableSort.js';
 import { personName } from '../../lib/personName.js';
 import { useEffect, useState } from 'react';
@@ -162,7 +163,7 @@ export default function LoAccounts() {
         <tbody>
           {sorted.map((l) => (
             <tr key={l.id} role="row">
-              <td role="cell"><b>{personName(l.name)}</b></td>
+              <td role="cell"><b>{personName(l.name)}</b><LoRepresentation name={l.name}/></td>
               <td role="cell" data-label="Username"><code>{l.username}</code></td>
               <td role="cell" data-label="Venue"><span className="tag tag--venue">{l.venue_name}</span></td>
               <td role="cell" data-label="Login terakhir" className="small">{l.last_login_at ? fmtDT(l.last_login_at) : <span className="muted">Belum pernah</span>}</td>

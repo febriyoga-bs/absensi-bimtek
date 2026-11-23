@@ -1,3 +1,4 @@
+import LoRepresentation from '../../components/LoRepresentation.jsx';
 import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { api } from '../../api.js';
@@ -76,14 +77,14 @@ export default function Pks() {
               {view === 'schools' ? <>
                 <td className="pks-school-identity" data-label="Sekolah"><b>{personName(row.name)}</b><small className="pks-npsn">NPSN {row.npsn}</small><div className="pks-school-head">{row.head_name && <small>Kepala Sekolah <strong>{personName(row.head_name)}</strong></small>}<Contact phone={row.head_phone} name={row.head_name} /></div></td>
                 <td className="pks-school-region" data-label="Wilayah">{row.kab_kota}<small>{row.provinsi}</small></td><td className="pks-school-venue" data-label="Venue"><span className="pks-venue-name">{row.venue}</span></td>
-                <td className="pks-school-support" data-label="Verifikator"><b>{personName(row.facilitator)}</b><Contact phone={row.facilitator_phone} email={row.facilitator_email} name={row.facilitator} /><div className="pks-school-coordinator">{row.coordinator && <small>Koordinator <strong>{personName(row.coordinator)}</strong></small>}<Contact phone={row.coordinator_phone} email={row.coordinator_email} name={row.coordinator} /></div></td><td className="pks-school-lo" data-label="LO bertugas"><div className="pks-verifier-los"><span>{personName(row.lo)}</span></div></td>
+                <td className="pks-school-support" data-label="Verifikator"><b>{personName(row.facilitator)}</b><Contact phone={row.facilitator_phone} email={row.facilitator_email} name={row.facilitator} /><div className="pks-school-coordinator">{row.coordinator && <small>Koordinator <strong>{personName(row.coordinator)}</strong></small>}<Contact phone={row.coordinator_phone} email={row.coordinator_email} name={row.coordinator} /></div></td><td className="pks-school-lo" data-label="LO bertugas"><div className="pks-verifier-los"><span>{personName(row.lo)}<LoRepresentation name={row.lo}/></span></div></td>
                 <td className="pks-school-status" data-label="Hasil pemeriksaan"><dl className="pks-inspection-list">{schoolInspectionItems(row).map(item=><PksMetricInfo key={item.metric} metric={item.metric} label={item.label} context={`${row.name} · NPSN ${row.npsn}`} schoolLevel><span className="pks-inspection-value">{item.status}</span></PksMetricInfo>)}</dl>{(row.bimtek?.note || row.pks?.catatan) && <small>Catatan: {[row.bimtek?.note,row.pks?.catatan].filter(Boolean).join(' · ')}</small>}</td>
               </> : <>
-                <td className="pks-person-cell" data-label={view === 'verifiers' ? 'Verifikator' : 'LO'}><span className="pks-person-avatar" aria-hidden="true">{personName(row.name).split(/\s+/).slice(0, 2).map(word => word[0]).join('')}</span><b>{personName(row.name)}</b><Contact phone={row.phone} email={row.email} name={row.name} /></td>
+                <td className="pks-person-cell" data-label={view === 'verifiers' ? 'Verifikator' : 'LO'}><span className="pks-person-avatar" aria-hidden="true">{personName(row.name).split(/\s+/).slice(0, 2).map(word => word[0]).join('')}</span><b>{personName(row.name)}</b><LoRepresentation name={row.name}/><Contact phone={row.phone} email={row.email} name={row.name} /></td>
                 <td data-label="Venue"><span className="pks-venue-name">{row.venue}</span></td>
                 {view === 'verifiers' && <>
                   <td className="pks-coordinator-cell" data-label="Koordinator"><b>{personName(row.coordinator) || '—'}</b><Contact phone={row.coordinator_phone} email={row.coordinator_email} name={row.coordinator} /></td>
-                  <td data-label="LO bertugas"><div className="pks-verifier-los">{row.los.map(name => <span key={name}>{personName(name)}</span>)}</div></td>
+                  <td data-label="LO bertugas"><div className="pks-verifier-los">{row.los.map(name => <span key={name}>{personName(name)}<LoRepresentation name={name}/></span>)}</div></td>
                 </>}
               </>}
             </tr>)}</tbody>

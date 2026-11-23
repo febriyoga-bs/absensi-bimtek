@@ -1,3 +1,4 @@
+import LoRepresentation from '../../components/LoRepresentation.jsx';
 import { personName } from '../../lib/personName.js';
 import { useEffect, useState } from 'react';
 import { api } from '../../api.js';
@@ -60,7 +61,7 @@ export default function AttendanceRanking({ venue, query, owner = '', facilitato
     {sessionId && !result && !error && <p role="status">Memuat peringkat absensi…</p>}
     {result && <div className="reporting-ranking" tabIndex={0}>
       {rows.length ? <ol>{rows.map((row) => <li key={row.id}>
-        <div className="reporting-ranking-name"><b>{row.rank}. {personName(row.name)}</b>
+        <div className="reporting-ranking-name"><b>{row.rank}. {personName(row.name)}<LoRepresentation name={row.name}/></b>
           <strong>{compact ? (row.ratio == null ? 'Tidak ada binaan untuk sesi ini' : `${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(row.ratio)}% tercatat`) : <>{row.completed}/{row.target} sudah dicatat{row.ratio == null ? '' : ` (${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(row.ratio)}%)`}</>}</strong></div>
         <progress aria-label={`${row.completed} dari ${row.target} sudah dicatat oleh ${personName(row.name)}`} value={row.ratio ?? 0} max={100} />
         {compact ? <>
