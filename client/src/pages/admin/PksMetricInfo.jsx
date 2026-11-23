@@ -14,7 +14,7 @@ function Explanation({metric,context,schoolLevel,onClose}) {
   useEffect(()=>{ref.current.showModal();},[]);
   return <dialog ref={ref} className="pks-dialog pks-metric-dialog" aria-labelledby={titleId} onCancel={onClose}>
     <header><div><h2 id={titleId}>{info.title}</h2>{context && <p>{context}</p>}</div><button type="button" className="pks-dialog__close" aria-label="Tutup penjelasan" onClick={onClose}>×</button></header>
-    <div className="pks-dialog__body"><p>{info.text}</p><p>{info.rule}</p>{!schoolLevel && metric!=='total' && <div className="pks-metric-formula"><b>Cara membaca angka</b><p>Contoh: 12 / 40 (30%) berarti 12 dari 40 sekolah binaan memenuhi indikator ini.</p><p>Persentase = sekolah yang memenuhi indikator ÷ total sekolah binaan × 100%.</p></div>}<p className="pks-form-hint">{!schoolLevel && 'Angka 0 berarti belum ada sekolah yang tercatat memenuhi indikator. '}Data yang belum dicatat belum membuktikan sekolah belum menyelesaikan prosesnya.</p></div>
+    <div className="pks-dialog__body"><p>{info.text}</p><p>{info.rule}</p>{!schoolLevel && metric!=='total' && <div className="pks-metric-formula"><b>Cara membaca angka</b><p>Contoh: 12 / 40 (30%) berarti 12 dari 40 sekolah binaan memenuhi indikator ini.</p><p>Persentase = sekolah yang memenuhi indikator ÷ total sekolah binaan × 100%.</p></div>}{!schoolLevel && <p className="pks-form-hint">Angka 0 berarti belum ada sekolah yang tercatat memenuhi indikator.</p>}</div>
     <div className="pks-metric-role-note">Pemeriksaan dan pembaruan status merupakan tugas verifikator. Dashboard ini membantu LO memantau progres dan mengingatkan verifikator.</div>
     <footer><button type="button" className="btn btn--primary" onClick={onClose}>Mengerti</button></footer>
   </dialog>;

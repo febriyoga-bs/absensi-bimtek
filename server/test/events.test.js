@@ -370,6 +370,18 @@ test('scan candidate pruning preserves owner mapping and excludes unknown owners
     const defaultResponse=await request('/admin/scan/participants?event=3&category=sekolah',{token});
     assert.equal(defaultResponse.status,200);
     assert.deepEqual((await defaultResponse.json()).rows.map(row=>row.id),data.rows.map(row=>row.id));
+    const rankingResponse=await request('/admin/reporting/attendance-ranking?event=3&session_id=1');
+    assert.equal(rankingResponse.status,200);
+    const ranking=(await rankingResponse.json()).find(row=>row.id===1);
+    const metrics={assigned:ranking.assigned,present:ranking.present,completed:ranking.total+ranking.unavailable,
+      target:ranking.assigned,unavailable:ranking.unavailable,participants:ranking.participants,facilitators:ranking.facilitators};
+    for(const [metric,count] of Object.entries(metrics)) {
+      const detail=await request(`/admin/reporting/attendance-ranking?event=3&session_id=1&owner_id=1&metric=${metric}`,{token});
+      assert.equal(detail.status,200,await detail.clone().text());
+      assert.equal((await detail.json()).length,count,metric);
+    }
+    assert.equal((await request('/admin/reporting/attendance-ranking?event=3&session_id=1&owner_id=999&metric=assigned',{token})).status,403);
+    assert.equal((await request('/admin/reporting/attendance-ranking?event=3&session_id=1&owner_id=1&metric=unknown',{token})).status,400);
     const empty=await request('/admin/scan/participants?event=3&category=sekolah&lo_id=999999',{token});
     assert.equal(empty.status,200);assert.equal((await empty.json()).rows.length,0);
   }finally{

@@ -17,10 +17,14 @@ export function documentsComplete(record = {}) {
     && requiredDocuments(record).every(key => record.documents?.[key] === true);
 }
 export function summarizeBimtek(schools = []) {
-  const unique = [...new Map(schools.map(s => [s.npsn,s])).values()];
-  return { total: unique.length, documents: unique.filter(s => documentsComplete(s.bimtek)).length,
-    submitted: unique.filter(s => ['diajukan','perlu_perbaikan','diajukan_ulang','sesuai'].includes(s.bimtek?.rab_status)).length,
-    reviewed: unique.filter(s => s.bimtek?.rab_status === 'sesuai').length,
-    followup: unique.filter(s => s.bimtek?.document_status === 'perlu_perbaikan' || s.bimtek?.rab_status === 'perlu_perbaikan' || s.pks?.status === 'perlu_perbaikan').length,
-    complete: unique.filter(s => s.pks?.status === 'lengkap').length };
+  return Object.fromEntries(['total','documents','submitted','reviewed','followup','complete'].map(key=>[key,schoolsForBimtekMetric(schools,key).length]));
+}
+export function schoolsForBimtekMetric(schools = [], metric) {
+  const unique=[...new Map(schools.map(s=>[s.npsn,s])).values()];
+  const matches={total:()=>true,documents:s=>documentsComplete(s.bimtek),
+    submitted:s=>['diajukan','perlu_perbaikan','diajukan_ulang','sesuai'].includes(s.bimtek?.rab_status),
+    reviewed:s=>s.bimtek?.rab_status==='sesuai',
+    followup:s=>s.bimtek?.document_status==='perlu_perbaikan' || s.bimtek?.rab_status==='perlu_perbaikan' || s.pks?.status==='perlu_perbaikan',
+    complete:s=>s.pks?.status==='lengkap'};
+  return unique.filter(matches[metric] || (()=>false));
 }
