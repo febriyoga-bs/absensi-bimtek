@@ -801,9 +801,15 @@ test('PKS login and records stay isolated and LO can update only assigned school
   const complete = { status: 'lengkap', nomor_pks: 'PKS/001', tanggal_ttd: '2026-11-23', tanggal_diterima: '2026-11-23', catatan: 'Diperiksa' };
   assert.equal((await request('/admin/pks/11111111?event=5', { token, method: 'PUT', body: complete })).status, 200);
   const loToken = signAdmin({ role: 'lo', username: 'pks-test', accounts: [{ event: 5, id: 1 }] });
+  const preparation={school_type:'negeri',assistance_types:['school_kit'],documents:{data_sekolah:true,sk_tim:true},rab_status:'belum_diajukan'};
+  assert.equal((await request('/admin/pks/11111111/bimtek?event=5',{token:loToken,method:'PUT',body:preparation})).status,200);
+  assert.equal((await request('/admin/pks/22222222/bimtek?event=5',{token:loToken,method:'PUT',body:preparation})).status,403);
+  assert.equal((await request('/admin/pks/11111111/bimtek?event=3',{token:admin,method:'PUT',body:preparation})).status,404);
+  assert.equal((await request('/admin/pks/11111111/bimtek?event=5',{token:loToken,method:'PUT',body:{...preparation,rab_status:'sesuai'}})).status,403);
   assert.equal((await request('/admin/pks/22222222?event=5', { token: loToken, method: 'PUT', body: complete })).status, 403);
   const own = await (await request('/admin/pks?event=5', { token: loToken })).json();
   assert.equal(own.schools.length, 1); assert.equal(own.schools[0].pks.status, 'lengkap');
+  assert.equal(own.schools[0].bimtek.documents.sk_tim,true);
   assert.equal((await request('/admin/pks?event=3', { token: admin })).status, 404);
   let wednesday;
   await eventContext.run(pksEvent, async () => {

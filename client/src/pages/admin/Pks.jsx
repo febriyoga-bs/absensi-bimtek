@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { api } from '../../api.js';
 import { selectedEvent } from '../../event.js';
@@ -8,6 +8,9 @@ import FilterField from '../../components/FilterField.jsx';
 import PksRanking from './PksRanking.jsx';
 import WhatsAppLink from '../../components/WhatsAppLink.jsx';
 import './Pks.css';
+import { BimtekSummary } from './PksBimtek.jsx';
+import { schoolInspectionItems } from '../../lib/pksInspection.js';
+import PksMetricInfo from './PksMetricInfo.jsx';
 
 const statuses = { belum_diterima: 'Belum diterima', menunggu_verifikasi: 'Menunggu verifikasi', perlu_perbaikan: 'Perlu perbaikan', lengkap: 'Lengkap' };
 const views = { schools: 'Sekolah', verifiers: 'Verifikator', lo: 'LO', ranking: 'Peringkat LO' };
@@ -24,30 +27,15 @@ export default function Pks() {
   const [venue, setVenue] = useState('');
   const [owner, setOwner] = useState('');
   const [view, setView] = useState('schools');
-  const [editing, setEditing] = useState(null);
-  const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const dialog = useRef(null);
   async function load() {
     setError('');
     try { setData(await api('/admin/pks', { admin: true })); } catch (e) { setError(e.message); }
   }
   useEffect(() => { if (selectedEvent()?.id === 5) load(); }, []);
-  useEffect(() => {
-    if (editing && dialog.current && !dialog.current.open) dialog.current.showModal();
-    else if (!editing && dialog.current?.open) dialog.current.close();
-  }, [editing]);
   if (selectedEvent()?.id !== 5) return <Navigate to="/admin/pelaporan" replace />;
-  async function save(e) {
-    e.preventDefault(); setSaving(true); setError('');
-    try {
-      const record = await api(`/admin/pks/${editing.npsn}`, { admin: true, method: 'PUT', body: editing.pks });
-      setData(current => ({ ...current, schools: current.schools.map(s => s.npsn === editing.npsn ? { ...s, pks: record } : s) }));
-      setEditing(null);
-    } catch (e) { setError(e.message); } finally { setSaving(false); }
-  }
   function reset() { setQuery(''); setVenue(''); setOwner(''); setStatus(''); setPage(1); }
   const search = query.trim().toLocaleLowerCase('id');
   const verifiers = groupPksVerifiers(data?.verifiers, data?.schools);
@@ -59,15 +47,15 @@ export default function Pks() {
   const active = Math.min(page, pages);
   const start = (active - 1) * pageSize;
   const filtered = query || venue || owner || (view === 'schools' && status);
-  const setField = (key, value) => setEditing(current => ({ ...current, pks: { ...current.pks, [key]: value } }));
   return <div className="pks-page">
     <header className="pks-heading">
       <div><h1>Pantau Rekap PKS</h1><p>Satuan Pendidikan Aman Bencana <span>·</span> 23–28 November 2026</p></div>
       {data && <p className="pks-heading__meta">{data.venues.length} Venue <span>·</span> {data.lo.length} LO <span>·</span> {verifiers.length} Verifikator{!!data.coordinators?.length && <><span>·</span> {data.coordinators.length} Koordinator</>}</p>}
     </header>
-    {error && !editing && <div className="alert alert--err" role="alert">{error} {!data && <button className="btn btn--sm" onClick={load}>Coba lagi</button>}</div>}
+    {error && <div className="alert alert--err" role="alert">{error} {!data && <button className="btn btn--sm" onClick={load}>Coba lagi</button>}</div>}
     {!data && !error && <p role="status">Memuat pemetaan PKS…</p>}
     {data && <>
+      <BimtekSummary schools={data.schools.filter(row => (!venue || row.venue === venue) && (!owner || row.lo === owner))} />
       <section className="pks-summary" aria-label="Ringkasan status PKS">
         <button className="pks-summary__total" aria-pressed={!status} onClick={() => { setStatus(''); setView('schools'); setPage(1); }}><span>Total sekolah</span><b>{number.format(data.schools.length)}</b></button>
         {Object.entries(statuses).map(([key, label]) => <button key={key} data-status={key} aria-pressed={status === key} onClick={() => { setStatus(status === key ? '' : key); setView('schools'); setPage(1); }}><span>{label}</span><b>{number.format(data.schools.filter(s => s.pks.status === key).length)}</b></button>)}
@@ -75,7 +63,7 @@ export default function Pks() {
       <section className="pks-register" aria-label="Daftar pemetaan PKS">
         <div className="pks-register__head">
           <div className="pks-tabs" role="group" aria-label="Tampilan pemetaan">{Object.entries(views).map(([key, label]) => <button key={key} aria-pressed={view === key} onClick={() => { setView(key); setPage(1); }}>{label}<span>{number.format(key === 'verifiers' ? verifiers.length : key === 'ranking' ? data.lo.length : data[key].length)}</span></button>)}</div>
-          <p>Status dokumen diperbarui berdasarkan pemeriksaan PKS.</p>
+          <p>Monitoring hasil pemeriksaan dari dashboard verifikasi.</p>
         </div>
         <div className="pks-filters">
           <FilterField label="Pencarian"><input type="search" value={query} placeholder={view === 'schools' ? 'Nama sekolah, NPSN, atau nomor PKS' : 'Cari nama atau venue'} onChange={e => { setQuery(e.target.value); setPage(1); }} /></FilterField>
@@ -87,14 +75,13 @@ export default function Pks() {
         <div className="pks-results"><span><b>{number.format(rows.length)}</b> {view === 'schools' ? 'sekolah' : view === 'verifiers' ? 'verifikator' : 'LO'}{filtered ? ' sesuai filter' : ''}</span>{filtered && <button type="button" onClick={reset}>Reset filter</button>}</div>
         <div className="pks-table-scroll" tabIndex={0} role="region" aria-label={`Tabel ${views[view]}`}>
           <table className={`table pks-table${view !== 'schools' ? ` pks-table--people${view === 'verifiers' ? ' pks-table--verifiers' : ''}` : ''}`}>
-            <thead><tr>{(view === 'schools' ? ['Sekolah / NPSN', 'Wilayah', 'Venue', 'Verifikator', 'LO bertugas', 'Status PKS', 'Tindakan'] : ['Nama', 'Venue', ...(view === 'verifiers' ? ['Koordinator', 'LO bertugas'] : [])]).map(label => <th key={label} scope="col">{label}</th>)}</tr></thead>
-            <tbody>{rows.slice(start, start + pageSize).map(row => <tr key={row.npsn || `${row.venue}:${row.name}:${row.lo || ''}`}>
+            <thead><tr>{(view === 'schools' ? ['Sekolah / NPSN', 'Wilayah', 'Venue', 'Verifikator', 'LO bertugas', 'Hasil Pemeriksaan'] : ['Nama', 'Venue', ...(view === 'verifiers' ? ['Koordinator', 'LO bertugas'] : [])]).map(label => <th key={label} scope="col">{label}</th>)}</tr></thead>
+            <tbody>{rows.slice(start, start + pageSize).map(row => <tr className={view === 'schools' ? 'pks-school-card' : undefined} key={row.npsn || `${row.venue}:${row.name}:${row.lo || ''}`}>
               {view === 'schools' ? <>
-                <td data-label="Sekolah / NPSN"><b>{personName(row.name)}</b><small className="pks-npsn">{row.npsn}</small>{row.head_name && <small>Kepsek: {personName(row.head_name)}</small>}<Contact phone={row.head_phone} name={row.head_name} /></td>
-                <td data-label="Wilayah">{row.kab_kota}<small>{row.provinsi}</small></td><td data-label="Venue">{row.venue}</td>
-                <td data-label="Verifikator">{personName(row.facilitator)}<Contact phone={row.facilitator_phone} email={row.facilitator_email} name={row.facilitator} />{row.coordinator && <small>Koordinator: {personName(row.coordinator)}</small>}<Contact phone={row.coordinator_phone} email={row.coordinator_email} name={row.coordinator} /></td><td data-label="LO bertugas">{personName(row.lo)}</td>
-                <td data-label="Status PKS"><span className="pks-status" data-status={row.pks.status}>{statuses[row.pks.status]}</span></td>
-                <td data-label="Tindakan"><button className="pks-edit" onClick={() => { setEditing({ ...row, pks: { ...row.pks } }); setError(''); }} aria-label={`Perbarui PKS ${row.name}`}>Perbarui</button></td>
+                <td className="pks-school-identity" data-label="Sekolah"><b>{personName(row.name)}</b><small className="pks-npsn">NPSN {row.npsn}</small><div className="pks-school-head">{row.head_name && <small>Kepala sekolah <strong>{personName(row.head_name)}</strong></small>}<Contact phone={row.head_phone} name={row.head_name} /></div></td>
+                <td className="pks-school-region" data-label="Wilayah">{row.kab_kota}<small>{row.provinsi}</small></td><td className="pks-school-venue" data-label="Venue"><span className="pks-venue-name">{row.venue}</span></td>
+                <td className="pks-school-support" data-label="Verifikator"><b>{personName(row.facilitator)}</b><Contact phone={row.facilitator_phone} email={row.facilitator_email} name={row.facilitator} /><div className="pks-school-coordinator">{row.coordinator && <small>Koordinator <strong>{personName(row.coordinator)}</strong></small>}<Contact phone={row.coordinator_phone} email={row.coordinator_email} name={row.coordinator} /></div></td><td className="pks-school-lo" data-label="LO bertugas"><div className="pks-verifier-los"><span>{personName(row.lo)}</span></div></td>
+                <td className="pks-school-status" data-label="Hasil pemeriksaan"><dl className="pks-inspection-list">{schoolInspectionItems(row).map(item=><PksMetricInfo key={item.metric} metric={item.metric} label={item.label} context={`${row.name} · NPSN ${row.npsn}`} schoolLevel><span className="pks-inspection-value">{item.status}</span></PksMetricInfo>)}</dl>{(row.bimtek?.note || row.pks?.catatan) && <small>Catatan: {[row.bimtek?.note,row.pks?.catatan].filter(Boolean).join(' · ')}</small>}</td>
               </> : <>
                 <td className="pks-person-cell" data-label={view === 'verifiers' ? 'Verifikator' : 'LO'}><span className="pks-person-avatar" aria-hidden="true">{personName(row.name).split(/\s+/).slice(0, 2).map(word => word[0]).join('')}</span><b>{personName(row.name)}</b><Contact phone={row.phone} email={row.email} name={row.name} /></td>
                 <td data-label="Venue"><span className="pks-venue-name">{row.venue}</span></td>
@@ -112,22 +99,5 @@ export default function Pks() {
       </section>
       <p className="pks-footnote">Pemetaan sekolah mencakup {data.verifiers.length} penugasan LO–verifikator. Status awal dokumen: belum diterima.</p>
     </>}
-    <dialog ref={dialog} className="pks-dialog" aria-labelledby="pks-edit-title" onCancel={e => { if (saving) e.preventDefault(); }} onClose={() => { setEditing(null); setError(''); }}>
-      {editing && <form onSubmit={save}>
-        <header><div><h2 id="pks-edit-title">Perbarui PKS</h2><p>{personName(editing.name)} <span>NPSN {editing.npsn}</span></p></div><button type="button" className="pks-dialog__close" aria-label="Tutup formulir" disabled={saving} onClick={() => setEditing(null)}>×</button></header>
-        <div className="pks-dialog__body">
-          {error && <p role="alert" className="alert alert--err">{error}</p>}
-          <div className="pks-form-grid">
-            <FilterField label="Status PKS"><select autoFocus value={editing.pks.status} onChange={e => setField('status', e.target.value)}>{Object.entries(statuses).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></FilterField>
-            <FilterField label="Nomor PKS"><input value={editing.pks.nomor_pks || ''} maxLength={200} required={editing.pks.status === 'lengkap'} onChange={e => setField('nomor_pks', e.target.value)} /></FilterField>
-            {[['tanggal_diterima', 'Tanggal diterima'], ['tanggal_ttd', 'Tanggal tanda tangan']].map(([key, label]) => <FilterField key={key} label={label}><input type="date" required={editing.pks.status === 'lengkap'} value={editing.pks[key] || ''} onChange={e => setField(key, e.target.value)} /></FilterField>)}
-            <label className="pks-form-notes">Catatan pemeriksaan / perbaikan<textarea rows={4} maxLength={4000} value={editing.pks.catatan || ''} onChange={e => setField('catatan', e.target.value)} /></label>
-          </div>
-          <p className="pks-form-hint">Untuk status lengkap, isi nomor PKS serta kedua tanggal.</p>
-          {editing.pks.updated_at && <p className="pks-form-hint">Terakhir diperbarui {editing.pks.updated_by} · {new Date(editing.pks.updated_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })} WIB</p>}
-        </div>
-        <footer><button className="btn" type="button" disabled={saving} onClick={() => setEditing(null)}>Batal</button><button className="btn btn--primary" disabled={saving}>{saving ? 'Menyimpan…' : 'Simpan perubahan'}</button></footer>
-      </form>}
-    </dialog>
   </div>;
 }
