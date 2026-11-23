@@ -56,10 +56,6 @@ export default function Pks() {
     {!data && !error && <p role="status">Memuat pemetaan PKS…</p>}
     {data && <>
       <BimtekSummary schools={data.schools.filter(row => (!venue || row.venue === venue) && (!owner || row.lo === owner))} />
-      <section className="pks-summary" aria-label="Ringkasan status PKS">
-        <button className="pks-summary__total" aria-pressed={!status} onClick={() => { setStatus(''); setView('schools'); setPage(1); }}><span>Total sekolah</span><b>{number.format(data.schools.length)}</b></button>
-        {Object.entries(statuses).map(([key, label]) => <button key={key} data-status={key} aria-pressed={status === key} onClick={() => { setStatus(status === key ? '' : key); setView('schools'); setPage(1); }}><span>{label}</span><b>{number.format(data.schools.filter(s => s.pks.status === key).length)}</b></button>)}
-      </section>
       <section className="pks-register" aria-label="Daftar pemetaan PKS">
         <div className="pks-register__head">
           <div className="pks-tabs" role="group" aria-label="Tampilan pemetaan">{Object.entries(views).map(([key, label]) => <button key={key} aria-pressed={view === key} onClick={() => { setView(key); setPage(1); }}>{label}<span>{number.format(key === 'verifiers' ? verifiers.length : key === 'ranking' ? data.lo.length : data[key].length)}</span></button>)}</div>
