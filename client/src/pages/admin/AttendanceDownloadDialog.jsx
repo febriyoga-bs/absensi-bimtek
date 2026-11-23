@@ -69,6 +69,7 @@ export default function AttendanceDownloadDialog({ sessions, venues, lo, initial
         }
       } else {
         const query = new URLSearchParams({ ...selected, ...(scope === 'all' ? { include_all: 'true' } : { recorded_only: 'true' }) });
+        setProgress('mengambil data absensi');
         const response = await fetch(adminUrl(`/export?${query}`));
         if (!response.ok) {
           const data = await response.json().catch(() => ({}));

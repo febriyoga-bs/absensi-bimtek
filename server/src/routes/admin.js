@@ -22,6 +22,7 @@ import { eventId } from '../eventContext.js';
 import { loginLo } from '../loLogin.js';
 import { changeLoPassword } from '../loPassword.js';
 import { eventVenueScope } from '../eventVenues.js';
+import { attendanceExportLoCtes } from '../attendanceExport.js';
 
 const r = Router();
 
@@ -1311,17 +1312,14 @@ r.get('/export', ah(async (req, res) => {
   const positionFilter = attendancePositionFilter(req);
   const { session: s, ids: sessionIds } = await attendanceSessionScope(req);
   const { rows } = await q(
-    `SELECT p.name, p.role, p.institution, p.position, pv.name AS assigned_venue,
+    `WITH ${attendanceExportLoCtes}
+     SELECT p.name, p.role, p.institution, p.position, pv.name AS assigned_venue,
             p.npsn, p.provinsi, p.kab_kota, p.ptn,
-            CASE WHEN p.role='peserta' THEN (
-              SELECT string_agg(DISTINCT owner.name, '; ' ORDER BY owner.name)
-              FROM lo_accounts owner
-              WHERE owner.active AND owner.venue_id=p.venue_id
-                AND ${canCheckInForLo('owner.id', 'owner.venue_id')}
-            ) END AS assigned_lo,
+            assigned.assigned_lo,
             a.id AS attendance_id, a.photo_path IS NOT NULL AS has_photo,
             a.status, a.created_at, av.name AS venue, a.flags, a.method, a.participant_note
      FROM people p
+     LEFT JOIN export_assigned_lo assigned ON assigned.person_id=p.id
      LEFT JOIN venues pv ON pv.id=p.venue_id
      LEFT JOIN attendance a ON a.person_id=p.id AND a.session_id=ANY($1::int[])
      LEFT JOIN venues av ON av.id=a.venue_id

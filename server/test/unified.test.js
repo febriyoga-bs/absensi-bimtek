@@ -46,6 +46,17 @@ test('RLS uses a non-owner role and separates equal IDs, codes, NPSNs and joins'
     assert.deepEqual(data.rows,[{name:`Person ${id}`,session:`Session ${id}`}]);
   });
 });
+
+test('bulk attendance exports respect event isolation in unified storage',async()=>{
+  const token=signAdmin({role:'admin'});
+  for(const id of [3,4]){
+    const response=await fetch(origin+`/api/admin/export?event=${id}&session_id=1&recorded_only=true`,{headers:{Authorization:`Bearer ${token}`}});
+    assert.equal(response.status,200);
+    const csv=await response.text();
+    assert.ok(csv.includes(`Person ${id}`));
+    assert.ok(!csv.includes(`Person ${id===3?4:3}`));
+  }
+});
 test('upserts and updates only modify the selected event',async()=>{
   await scoped(3,()=>q("INSERT INTO people(code,name,role) VALUES('B-12345678','Updated','peserta') ON CONFLICT(lower(code)) DO UPDATE SET name=EXCLUDED.name"));
   assert.equal((await scoped(3,()=>q('SELECT name FROM people'))).rows[0].name,'Updated');

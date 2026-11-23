@@ -43,6 +43,9 @@ app.use((err, req, res, next) => {
   const message = String(err.message || 'Unknown error')
     .replace(/postgres(?:ql)?:\/\/[^\s]+/gi, '[database URL redacted]');
   console.error('Request failed', { method: req.method, path: req.path, code: err.code || err.name, message });
+  if (req.path === '/api/admin/export' && (err.code === '57014' || err.message === 'Query read timeout')) {
+    return res.status(504).json({ error: 'Pengambilan data ekspor melewati batas waktu. Coba unduh per venue atau ulangi beberapa saat lagi.' });
+  }
   res.status(500).json({ error: 'Terjadi kesalahan server' });
 });
 
