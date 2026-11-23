@@ -6,11 +6,16 @@ import { personName } from '../../lib/personName.js';
 import { groupPksVerifiers } from '../../lib/pksVerifiers.js';
 import FilterField from '../../components/FilterField.jsx';
 import PksRanking from './PksRanking.jsx';
+import WhatsAppLink from '../../components/WhatsAppLink.jsx';
 import './Pks.css';
 
 const statuses = { belum_diterima: 'Belum diterima', menunggu_verifikasi: 'Menunggu verifikasi', perlu_perbaikan: 'Perlu perbaikan', lengkap: 'Lengkap' };
 const views = { schools: 'Sekolah', verifiers: 'Verifikator', lo: 'LO', ranking: 'Peringkat LO' };
 const number = new Intl.NumberFormat('id-ID');
+
+function Contact({ phone, email, name }) {
+  return <>{phone && <small>{phone} <WhatsAppLink phone={phone} name={name} /></small>}{email && <small>{email}</small>}</>;
+}
 
 export default function Pks() {
   const [data, setData] = useState(null);
@@ -45,7 +50,7 @@ export default function Pks() {
   }
   function reset() { setQuery(''); setVenue(''); setOwner(''); setStatus(''); setPage(1); }
   const search = query.trim().toLocaleLowerCase('id');
-  const verifiers = groupPksVerifiers(data?.verifiers);
+  const verifiers = groupPksVerifiers(data?.verifiers, data?.schools);
   const rows = (view === 'verifiers' ? verifiers : data?.[view] || []).filter(row => (!status || view !== 'schools' || row.pks.status === status)
     && (!venue || row.venue === venue) && (!owner || (view === 'verifiers' ? row.los.includes(owner) : (view === 'lo' ? row.name : row.lo) === owner))
     && [row.npsn, row.name, row.provinsi, row.kab_kota, row.venue, row.facilitator, row.coordinator, row.head_name, row.lo, ...(row.los || []), row.pks?.nomor_pks]
@@ -82,15 +87,22 @@ export default function Pks() {
         <div className="pks-results"><span><b>{number.format(rows.length)}</b> {view === 'schools' ? 'sekolah' : view === 'verifiers' ? 'verifikator' : 'LO'}{filtered ? ' sesuai filter' : ''}</span>{filtered && <button type="button" onClick={reset}>Reset filter</button>}</div>
         <div className="pks-table-scroll" tabIndex={0} role="region" aria-label={`Tabel ${views[view]}`}>
           <table className={`table pks-table${view !== 'schools' ? ` pks-table--people${view === 'verifiers' ? ' pks-table--verifiers' : ''}` : ''}`}>
-            <thead><tr>{(view === 'schools' ? ['Sekolah / NPSN', 'Wilayah', 'Venue', 'Verifikator', 'LO bertugas', 'Status PKS', 'Tindakan'] : ['Nama', 'Venue', ...(view === 'verifiers' ? ['LO bertugas'] : [])]).map(label => <th key={label} scope="col">{label}</th>)}</tr></thead>
+            <thead><tr>{(view === 'schools' ? ['Sekolah / NPSN', 'Wilayah', 'Venue', 'Verifikator', 'LO bertugas', 'Status PKS', 'Tindakan'] : ['Nama', 'Venue', ...(view === 'verifiers' ? ['Koordinator', 'LO bertugas'] : [])]).map(label => <th key={label} scope="col">{label}</th>)}</tr></thead>
             <tbody>{rows.slice(start, start + pageSize).map(row => <tr key={row.npsn || `${row.venue}:${row.name}:${row.lo || ''}`}>
               {view === 'schools' ? <>
-                <td><b>{personName(row.name)}</b><small className="pks-npsn">{row.npsn}</small></td>
+                <td><b>{personName(row.name)}</b><small className="pks-npsn">{row.npsn}</small>{row.head_name && <small>Kepsek: {personName(row.head_name)}</small>}<Contact phone={row.head_phone} name={row.head_name} /></td>
                 <td>{row.kab_kota}<small>{row.provinsi}</small></td><td>{row.venue}</td>
-                <td>{personName(row.facilitator)}{row.coordinator && <small>Koordinator: {personName(row.coordinator)}</small>}</td><td>{personName(row.lo)}</td>
+                <td>{personName(row.facilitator)}<Contact phone={row.facilitator_phone} email={row.facilitator_email} name={row.facilitator} />{row.coordinator && <small>Koordinator: {personName(row.coordinator)}</small>}<Contact phone={row.coordinator_phone} email={row.coordinator_email} name={row.coordinator} /></td><td>{personName(row.lo)}</td>
                 <td><span className="pks-status" data-status={row.pks.status}>{statuses[row.pks.status]}</span></td>
                 <td><button className="pks-edit" onClick={() => { setEditing({ ...row, pks: { ...row.pks } }); setError(''); }} aria-label={`Perbarui PKS ${row.name}`}>Perbarui</button></td>
-              </> : <><td><b>{personName(row.name)}</b>{row.coordinator && <small>Koordinator: {personName(row.coordinator)}</small>}</td><td>{row.venue}</td>{view === 'verifiers' && <td><div className="pks-verifier-los">{row.los.map(name => personName(name)).join(', ')}</div></td>}</>}
+              </> : <>
+                <td><b>{personName(row.name)}</b><Contact phone={row.phone} email={row.email} name={row.name} /></td>
+                <td>{row.venue}</td>
+                {view === 'verifiers' && <>
+                  <td><b>{personName(row.coordinator) || '—'}</b><Contact phone={row.coordinator_phone} email={row.coordinator_email} name={row.coordinator} /></td>
+                  <td><div className="pks-verifier-los">{row.los.map(name => personName(name)).join(', ')}</div></td>
+                </>}
+              </>}
             </tr>)}</tbody>
           </table>
           {!rows.length && <div className="pks-empty"><b>Tidak ada hasil</b><p>Coba kata pencarian lain atau ubah filter.</p><button className="btn btn--sm" onClick={reset}>Reset filter</button></div>}

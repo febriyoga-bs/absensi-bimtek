@@ -10,6 +10,7 @@ import AttendanceDownloadDialog from './AttendanceDownloadDialog.jsx';
 import SessionStatusDialog from './SessionStatusDialog.jsx';
 import { venueAttendanceGroups as venueGroups } from '../../lib/venueAttendanceGroups.js';
 import { useEvents } from '../../components/EventScope.jsx';
+import { attendanceSessionGroups, attendanceSessionTarget } from '../../lib/attendanceSessionGroups.js';
 
 const number = new Intl.NumberFormat('id-ID');
 const sessionStatuses = [
@@ -30,7 +31,7 @@ function VenueAttendanceCard({ venue, day, testSession, onDetails, visibleGroups
         <div>
           <h4>{venue.name}</h4>
           <div className="muted small"><b>{number.format(attended + (visibleGroups.some(([key]) => key === 'lo') ? venue.lo.recorded : 0))}</b> dari {number.format(total + (visibleGroups.some(([key]) => key === 'lo') ? venue.lo.total : 0))} orang sudah dicatat</div>
-          <div className="muted small">{number.format(total)} peserta{visibleGroups.some(([key]) => key === 'lo') && ` dan ${number.format(venue.lo.total)} LO`}</div>
+          <div className="muted small">{[participantGroups.length > 0 && `${number.format(total)} peserta`, visibleGroups.some(([key]) => key === 'lo') && `${number.format(venue.lo.total)} LO`].filter(Boolean).join(' dan ')}</div>
         </div>
       </header>
       <div className="venue-attendance__groups">
@@ -82,7 +83,9 @@ export default function Dashboard() {
       return Array.isArray(saved) ? saved.filter((key) => venueGroups.some(([group]) => group === key)) : [];
     } catch { return []; }
   });
-  const visibleGroups = venueGroups.filter(([key]) => !hiddenGroups.includes(key));
+  const sessionGroups = attendanceSessionGroups(venueGroups, sessions.map(session => session.role));
+  const chosenGroups = sessionGroups.filter(([key]) => !hiddenGroups.includes(key));
+  const visibleGroups = chosenGroups.length ? chosenGroups : sessionGroups;
   useEffect(() => {
     try { localStorage.setItem('bimtek-venue-hidden-groups', JSON.stringify(hiddenGroups)); } catch { /* storage unavailable */ }
   }, [hiddenGroups]);
@@ -187,9 +190,7 @@ export default function Dashboard() {
         {sessions.map((s) => {
           const checkedIn = s.valid + s.review;
           const totalRecords = checkedIn + s.rejected + s.unavailable;
-          const targetVenues = shownVenues.filter((venue) => !s.venue_ids?.length || s.venue_ids.includes(venue.id));
-          const expected = venueAttendance ? targetVenues.reduce((total, venue) => total
-            + venueGroups.reduce((count, [key]) => count + venue[key].total, 0), 0) : null;
+          const expected = venueAttendance ? attendanceSessionTarget(s, shownVenues, venueGroups) : null;
           const pct = expected ? Math.round((totalRecords / expected) * 100) : 0;
           return (
             <div key={s.id} className={`stat session-row ${s.is_open ? 'stat--open' : ''}`}>
@@ -238,10 +239,10 @@ export default function Dashboard() {
         <p className="muted small">{day === null ? 'Menentukan hari absensi…' : selectedTest ? `Ringkasan sesi test: ${sessionTitle(selectedTest)}. Tidak digabung dengan sesi resmi.` : selectedDay ? `Ringkasan ${checkInDayLabel(selectedDay)}.` : 'Gabungan semua sesi resmi.'} Jumlah catatan mengikuti sesi: Valid, Perlu dicek, Ditolak, dan Berhalangan.</p>
         <div className="scan-display-controls">
           <details className="scan-column-picker">
-            <summary className="btn btn--sm">Atur jenis peserta ({visibleGroups.length}/{venueGroups.length})</summary>
+            <summary className="btn btn--sm">Atur jenis peserta ({visibleGroups.length}/{sessionGroups.length})</summary>
             <div className="scan-column-options">
-              {venueGroups.map(([key, label]) => <label className="check" key={key}>
-                <input type="checkbox" checked={!hiddenGroups.includes(key)} disabled={visibleGroups.length === 1 && !hiddenGroups.includes(key)}
+              {sessionGroups.map(([key, label]) => <label className="check" key={key}>
+                <input type="checkbox" checked={visibleGroups.some(([group]) => group === key)} disabled={visibleGroups.length === 1 && visibleGroups.some(([group]) => group === key)}
                   onChange={(event) => setHiddenGroups((current) => event.target.checked ? current.filter((item) => item !== key) : [...current, key])} />
                 <span>{label}</span>
               </label>)}
@@ -249,7 +250,7 @@ export default function Dashboard() {
           </details>
           <button type="button" className="btn btn--sm" onClick={() => setHiddenGroups([])}>Tampilkan semua</button>
         </div>
-        {hiddenGroups.length > 0 && <p className="muted small">Total pada kartu mengikuti jenis peserta yang ditampilkan.</p>}
+        {visibleGroups.length < sessionGroups.length && <p className="muted small">Total pada kartu mengikuti jenis peserta yang ditampilkan.</p>}
         {summaryError && <p className="alert alert--warn" role="status">Ringkasan venue gagal diperbarui.</p>}
         {!venueAttendance && !summaryError && <div className="stats"><SkelCards n={2} h={190} /></div>}
         {venueAttendance && !shownVenues.length && <p className="muted">Belum ada venue untuk ditampilkan.</p>}
