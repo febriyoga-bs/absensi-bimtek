@@ -14,7 +14,7 @@ const views = { schools: 'Sekolah', verifiers: 'Verifikator', lo: 'LO', ranking:
 const number = new Intl.NumberFormat('id-ID');
 
 function Contact({ phone, email, name }) {
-  return <>{phone && <small>{phone} <WhatsAppLink phone={phone} name={name} /></small>}{email && <small>{email}</small>}</>;
+  return <>{phone && <small className="pks-contact-phone"><span>{phone}</span><WhatsAppLink phone={phone} name={name} /></small>}{email && <small className="pks-contact-email"><a href={`mailto:${email}`}>{email}</a></small>}</>;
 }
 
 export default function Pks() {
@@ -90,17 +90,17 @@ export default function Pks() {
             <thead><tr>{(view === 'schools' ? ['Sekolah / NPSN', 'Wilayah', 'Venue', 'Verifikator', 'LO bertugas', 'Status PKS', 'Tindakan'] : ['Nama', 'Venue', ...(view === 'verifiers' ? ['Koordinator', 'LO bertugas'] : [])]).map(label => <th key={label} scope="col">{label}</th>)}</tr></thead>
             <tbody>{rows.slice(start, start + pageSize).map(row => <tr key={row.npsn || `${row.venue}:${row.name}:${row.lo || ''}`}>
               {view === 'schools' ? <>
-                <td><b>{personName(row.name)}</b><small className="pks-npsn">{row.npsn}</small>{row.head_name && <small>Kepsek: {personName(row.head_name)}</small>}<Contact phone={row.head_phone} name={row.head_name} /></td>
-                <td>{row.kab_kota}<small>{row.provinsi}</small></td><td>{row.venue}</td>
-                <td>{personName(row.facilitator)}<Contact phone={row.facilitator_phone} email={row.facilitator_email} name={row.facilitator} />{row.coordinator && <small>Koordinator: {personName(row.coordinator)}</small>}<Contact phone={row.coordinator_phone} email={row.coordinator_email} name={row.coordinator} /></td><td>{personName(row.lo)}</td>
-                <td><span className="pks-status" data-status={row.pks.status}>{statuses[row.pks.status]}</span></td>
-                <td><button className="pks-edit" onClick={() => { setEditing({ ...row, pks: { ...row.pks } }); setError(''); }} aria-label={`Perbarui PKS ${row.name}`}>Perbarui</button></td>
+                <td data-label="Sekolah / NPSN"><b>{personName(row.name)}</b><small className="pks-npsn">{row.npsn}</small>{row.head_name && <small>Kepsek: {personName(row.head_name)}</small>}<Contact phone={row.head_phone} name={row.head_name} /></td>
+                <td data-label="Wilayah">{row.kab_kota}<small>{row.provinsi}</small></td><td data-label="Venue">{row.venue}</td>
+                <td data-label="Verifikator">{personName(row.facilitator)}<Contact phone={row.facilitator_phone} email={row.facilitator_email} name={row.facilitator} />{row.coordinator && <small>Koordinator: {personName(row.coordinator)}</small>}<Contact phone={row.coordinator_phone} email={row.coordinator_email} name={row.coordinator} /></td><td data-label="LO bertugas">{personName(row.lo)}</td>
+                <td data-label="Status PKS"><span className="pks-status" data-status={row.pks.status}>{statuses[row.pks.status]}</span></td>
+                <td data-label="Tindakan"><button className="pks-edit" onClick={() => { setEditing({ ...row, pks: { ...row.pks } }); setError(''); }} aria-label={`Perbarui PKS ${row.name}`}>Perbarui</button></td>
               </> : <>
-                <td><b>{personName(row.name)}</b><Contact phone={row.phone} email={row.email} name={row.name} /></td>
-                <td>{row.venue}</td>
+                <td className="pks-person-cell" data-label={view === 'verifiers' ? 'Verifikator' : 'LO'}><span className="pks-person-avatar" aria-hidden="true">{personName(row.name).split(/\s+/).slice(0, 2).map(word => word[0]).join('')}</span><b>{personName(row.name)}</b><Contact phone={row.phone} email={row.email} name={row.name} /></td>
+                <td data-label="Venue"><span className="pks-venue-name">{row.venue}</span></td>
                 {view === 'verifiers' && <>
-                  <td><b>{personName(row.coordinator) || '—'}</b><Contact phone={row.coordinator_phone} email={row.coordinator_email} name={row.coordinator} /></td>
-                  <td><div className="pks-verifier-los">{row.los.map(name => personName(name)).join(', ')}</div></td>
+                  <td className="pks-coordinator-cell" data-label="Koordinator"><b>{personName(row.coordinator) || '—'}</b><Contact phone={row.coordinator_phone} email={row.coordinator_email} name={row.coordinator} /></td>
+                  <td data-label="LO bertugas"><div className="pks-verifier-los">{row.los.map(name => <span key={name}>{personName(name)}</span>)}</div></td>
                 </>}
               </>}
             </tr>)}</tbody>

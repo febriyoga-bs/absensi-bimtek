@@ -75,6 +75,35 @@ html[data-theme="dark"] .pks-summary__total { --metric-bg: #244b7d; }
 .pks-table--people.table { min-width: 600px; }
 .pks-table--verifiers td:first-child b { white-space: nowrap; }
 .pks-verifier-los { white-space: normal; }
+.pks-verifier-los > span:not(:last-child)::after { content: ', '; }
+.pks-person-avatar { display: none; }
+.pks-contact-email a { color: inherit; text-decoration: none; }
+.pks-contact-email a:hover { text-decoration: underline; }
+@media (max-width: 700px) {
+  .pks-table-scroll { overflow: visible; }
+  .pks-table.table { display: block; width: 100%; min-width: 0; }
+  .pks-table.table thead { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .pks-table.table tbody { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 4px 14px 20px; background: var(--pks-filter); }
+  .pks-table.table tbody tr { display: block; min-width: 0; padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 3px 12px #102e5010; }
+  .pks-table.table tbody tr:nth-child(n) td { display: block; width: auto; min-width: 0; max-width: 100%; padding: 12px 0 0; border: 0; background: transparent; white-space: normal; overflow-wrap: anywhere; }
+  .pks-table.table tbody tr td:first-child { padding-top: 0; }
+  .pks-table.table tbody tr td + td { margin-top: 12px; border-top: 1px solid var(--line); }
+  .pks-table.table tbody tr td::before { content: attr(data-label); display: block; margin-bottom: 6px; color: var(--muted); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; font-weight: 700; }
+  .pks-table.table tbody tr:nth-child(n) td:first-child { padding: 0; }
+  .pks-table.table .pks-person-cell { position: relative; }
+  .pks-table.table .pks-person-cell::before, .pks-table.table .pks-person-cell > b { padding-left: 56px; }
+  .pks-person-avatar { position: absolute; top: 0; left: 0; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 14px; background: var(--accent-soft); color: var(--accent); font-size: 16px; font-weight: 700; }
+  .pks-table--people.table td:first-child b { white-space: normal; font-size: 18px; line-height: 1.35; margin-bottom: 12px; }
+  .pks-table.table td .pks-contact-phone { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; font-variant-numeric: tabular-nums; color: var(--text); }
+  .pks-table.table .whatsapp-link { flex: 0 0 44px; width: 44px; height: 44px; border-radius: 12px; }
+  .pks-table.table td .pks-contact-email { margin-top: 4px; font-size: 13px; }
+  .pks-venue-name { display: inline-block; padding: 5px 10px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); font-size: 13px; font-weight: 600; }
+  .pks-table.table tbody tr:nth-child(n) td.pks-coordinator-cell { padding: 12px; border: 0; border-radius: 12px; background: var(--pks-filter); }
+  .pks-verifier-los { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pks-verifier-los > span { padding: 5px 9px; border: 1px solid var(--line); border-radius: 7px; font-size: 12px; line-height: 1.5; }
+  .pks-verifier-los > span:not(:last-child)::after { content: none; }
+  .pks-table.table .pks-edit { min-height: 44px; }
+}
 .pks-ranking { padding: 20px; }
 .pks-ranking__heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .pks-ranking h2 { margin: 0; font-size: 20px; }
