@@ -285,9 +285,7 @@ export default function Pks({ publicView = false }) {
                 <td className="pks-school-support" data-label="Verifikator"><b>{personName(row.facilitator)}</b><Contact phone={row.facilitator_phone} email={row.facilitator_email} name={row.facilitator} /><div className="pks-school-coordinator">{row.coordinator && <small>Koordinator <strong>{personName(row.coordinator)}</strong></small>}<Contact phone={row.coordinator_phone} email={row.coordinator_email} name={row.coordinator} /></div></td><td className="pks-school-lo" data-label="LO bertugas"><div className="pks-verifier-los"><span>{personName(row.lo)}<LoRepresentation name={row.lo}/></span></div></td>
                 <td className="pks-school-status" data-label="Status"><SchoolRevitStatus status={schoolStatuses?.[row.npsn]} loading={!schoolStatuses} failed={schoolStatusesError} />{(row.bimtek?.note || row.pks?.catatan) && <small>Catatan: {[row.bimtek?.note,row.pks?.catatan].filter(Boolean).join(' · ')}</small>}</td>
                 <td data-label="Kehadiran">
-                  {publicView && row.arrival_statuses?.length
-                    ? row.arrival_statuses.map(status => <div key={status}><ArrivalChip status={status} /></div>)
-                    : row.arrival_attendees?.length ? [...row.arrival_attendees]
+                  {row.arrival_attendees?.length ? [...row.arrival_attendees]
                     .sort((a, b) => (arrivalRoleOrder[a.role] ?? 2) - (arrivalRoleOrder[b.role] ?? 2))
                     .map(attendee => (
                     <div key={attendee.name}>
@@ -295,7 +293,9 @@ export default function Pks({ publicView = false }) {
                       <b>{personName(attendee.name)}</b>
                       <ArrivalChip status={attendee.status} />
                     </div>
-                  )) : <ArrivalChip status={row.arrival_status} />}
+                  )) : row.arrival_statuses?.length
+                    ? row.arrival_statuses.map(status => <div key={status}><ArrivalChip status={status} /></div>)
+                    : <ArrivalChip status={row.arrival_status} />}
                 </td>
               </> : <>
                 <td className="pks-person-cell" data-label={view === 'verifiers' ? 'Verifikator' : 'LO'}><span className="pks-person-avatar" aria-hidden="true">{personName(row.name).split(/\s+/).slice(0, 2).map(word => word[0]).join('')}</span><b>{personName(row.name)}</b><LoRepresentation name={row.name}/><Contact phone={row.phone} email={row.email} name={row.name} /></td>

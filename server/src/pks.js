@@ -20,6 +20,7 @@ publicPksRoutes.get('/', ah(async (_req, res) => {
   res.json({
     schools: schools.map(({ npsn, name, provinsi, kab_kota, venue, facilitator, coordinator, lo, arrival_attendees }) => ({
       npsn, name, provinsi, kab_kota, venue, facilitator, coordinator, lo,
+      arrival_attendees: arrival_attendees.map(({ name, role, status }) => ({ name, role, status })),
       arrival_statuses: [...new Set(arrival_attendees.map(({ status }) =>
         status === 'selesai' ? 'sudah_tiba' : status))],
       pks: { status: data.pks_records?.[npsn]?.status || 'belum_diterima' },
