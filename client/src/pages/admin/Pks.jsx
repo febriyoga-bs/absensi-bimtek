@@ -12,6 +12,13 @@ import './Pks.css';
 
 const views = { schools: 'Sekolah', verifiers: 'Verifikator', lo: 'LO', ranking: 'Peringkat LO', verifierRanking: 'Peringkat Verifikator' };
 const number = new Intl.NumberFormat('id-ID');
+const arrivalLabels = {
+  selesai: 'Selesai',
+  sudah_tiba: 'Sudah tiba',
+  sedang_antre: 'Sedang antre',
+  belum_tiba: 'Belum tiba',
+  belum_tercatat: 'Belum tercatat',
+};
 const progressGroups = [
   { label: 'Biodata', className: 'pks-progress-group--bio', metrics: ['belum_login', 'bio_belum', 'bio_proses', 'bio_tunggu', 'bio_ok'] },
   { label: 'RAB & BA', className: 'pks-progress-group--rab', metrics: ['sepakat_rab', 'ba'] },
@@ -240,13 +247,22 @@ export default function Pks({ publicView = false }) {
         <div className="pks-results"><span><b>{number.format(rows.length)}</b> {view === 'schools' ? 'sekolah' : view === 'verifiers' ? 'verifikator' : 'LO'}{filtered ? ' sesuai filter' : ''}</span>{filtered && <button type="button" onClick={reset}>Reset filter</button>}</div>
         <div className="pks-table-scroll" tabIndex={0} role="region" aria-label={`Tabel ${views[view]}`}>
           <table className={`table pks-table${view !== 'schools' ? ` pks-table--people${view === 'verifiers' ? ' pks-table--verifiers' : ''}` : ''}`}>
-            <thead><tr>{(view === 'schools' ? ['Sekolah / NPSN', 'Wilayah', 'Venue', 'Verifikator', 'LO bertugas', 'Status'] : ['Nama', 'Venue', ...(view === 'verifiers' ? ['Koordinator', 'LO bertugas'] : [])]).map(label => <th key={label} scope="col">{label}</th>)}</tr></thead>
+            <thead><tr>{(view === 'schools' ? ['Sekolah / NPSN', 'Wilayah', 'Venue', 'Verifikator', 'LO bertugas', 'Status', ...(publicView ? [] : ['Kehadiran'])] : ['Nama', 'Venue', ...(view === 'verifiers' ? ['Koordinator', 'LO bertugas'] : [])]).map(label => <th key={label} scope="col">{label}</th>)}</tr></thead>
             <tbody>{rows.slice(start, start + pageSize).map(row => <tr className={view === 'schools' ? 'pks-school-card' : undefined} key={row.npsn || `${row.venue}:${row.name}:${row.lo || ''}`}>
               {view === 'schools' ? <>
                 <td className="pks-school-identity" data-label="Sekolah"><b>{personName(row.name)}</b><small className="pks-npsn">NPSN {row.npsn}</small><div className="pks-school-head">{row.head_name && <small>Kepala Sekolah <strong>{personName(row.head_name)}</strong></small>}<Contact phone={row.head_phone} name={row.head_name} /></div></td>
                 <td className="pks-school-region" data-label="Wilayah">{row.kab_kota}<small>{row.provinsi}</small></td><td className="pks-school-venue" data-label="Venue"><span className="pks-venue-name">{row.venue}</span></td>
                 <td className="pks-school-support" data-label="Verifikator"><b>{personName(row.facilitator)}</b><Contact phone={row.facilitator_phone} email={row.facilitator_email} name={row.facilitator} /><div className="pks-school-coordinator">{row.coordinator && <small>Koordinator <strong>{personName(row.coordinator)}</strong></small>}<Contact phone={row.coordinator_phone} email={row.coordinator_email} name={row.coordinator} /></div></td><td className="pks-school-lo" data-label="LO bertugas"><div className="pks-verifier-los"><span>{personName(row.lo)}<LoRepresentation name={row.lo}/></span></div></td>
                 <td className="pks-school-status" data-label="Status"><SchoolRevitStatus status={schoolStatuses?.[row.npsn]} loading={!schoolStatuses} failed={schoolStatusesError} />{(row.bimtek?.note || row.pks?.catatan) && <small>Catatan: {[row.bimtek?.note,row.pks?.catatan].filter(Boolean).join(' · ')}</small>}</td>
+                {!publicView && <td data-label="Kehadiran">
+                  {row.arrival_attendees?.length ? row.arrival_attendees.map(attendee => (
+                    <div key={attendee.name}>
+                      <small>{attendee.role}</small>
+                      <b>{personName(attendee.name)}</b>
+                      <span>{arrivalLabels[attendee.status] || 'Belum tercatat'}</span>
+                    </div>
+                  )) : arrivalLabels[row.arrival_status] || 'Belum ada data'}
+                </td>}
               </> : <>
                 <td className="pks-person-cell" data-label={view === 'verifiers' ? 'Verifikator' : 'LO'}><span className="pks-person-avatar" aria-hidden="true">{personName(row.name).split(/\s+/).slice(0, 2).map(word => word[0]).join('')}</span><b>{personName(row.name)}</b><LoRepresentation name={row.name}/><Contact phone={row.phone} email={row.email} name={row.name} /></td>
                 <td data-label="Venue"><span className="pks-venue-name">{row.venue}</span></td>

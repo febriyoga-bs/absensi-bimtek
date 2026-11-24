@@ -16,6 +16,6 @@ export function personName(value) {
   text = text.replace(/(^|[^\p{L}\p{N}])(prof|drg|dr|ir|ar)\.(?!\p{L})/giu, (_, prefix, title) =>
     prefix + preserve(title === 'dr' ? 'dr.' : ({prof:'Prof.',drg:'drg.',dr:'Dr.',ir:'Ir.',ar:'Ar.'})[title.toLowerCase()]));
   return text.toLocaleLowerCase('id').replace(/(^|[\s'-])(\p{L})/gu,
-    (_, prefix, letter) => prefix + letter.toLocaleUpperCase('id')).replace(/\b(?:lo|sd|sdn|it|pks|upt|uptd)\b/gi, (abbreviation) => abbreviation.toUpperCase()).replace(/\bBb\/bpmp\b/gi, 'BB/BPMP')
+    (_, prefix, letter) => prefix + letter.toLocaleUpperCase('id')).replace(/\bupdt(?=\s+spf\b)/gi, 'UPTD').replace(/\b(?:lo|sd|sdn|it|pks|upt|uptd|spf)\b/gi, (abbreviation) => abbreviation.toUpperCase()).replace(/\bBb\/bpmp\b/gi, 'BB/BPMP')
     .replace(/\uE000(\d+)\uE001/g, (_, index) => preserved[Number(index)]);
 }

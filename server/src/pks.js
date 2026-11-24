@@ -4,6 +4,7 @@ import { eventId } from './eventContext.js';
 import { ah, HttpError } from './util.js';
 import { cleanBimtekRecord } from './pksBimtek.js';
 import { createAsyncCache } from './asyncCache.js';
+import { getSchoolArrivalStatuses } from './arrivalRecap.js';
 
 export const pksRoutes = Router();
 export const publicPksRoutes = Router();
@@ -172,7 +173,8 @@ pksRoutes.get('/', ah(async (req, res) => {
   if (!data) return res.json({ schools: [], verifiers: [], lo: [], venues: [] });
   const own = req.user.role === 'lo' ? data.lo.find(row => row.account_id === req.user.lo) : null;
   const allowed = row => req.user.role === 'admin' || own && row.venue === own.venue && row.lo === own.name;
-  res.json({ schools: data.schools.filter(allowed).map(row => ({ ...row, bimtek: data.bimtek_records?.[row.npsn] || null, pks: data.pks_records?.[row.npsn] || { status: 'belum_diterima' } })), verifiers: data.facilitators.filter(allowed),
+  const schools = await getSchoolArrivalStatuses(data.schools.filter(allowed));
+  res.json({ schools: schools.map(row => ({ ...row, bimtek: data.bimtek_records?.[row.npsn] || null, pks: data.pks_records?.[row.npsn] || { status: 'belum_diterima' } })), verifiers: data.facilitators.filter(allowed),
     lo: req.user.role === 'admin' ? data.lo.map(({ account_id, venue_id, ...row }) => row) : own ? [{ name: own.name, venue: own.venue }] : [],
     venues: req.user.role === 'admin' ? data.venues : own ? [own.venue] : [],
     coordinators: (data.coordinators || []).filter(row => req.user.role === 'admin'

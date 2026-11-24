@@ -1,6 +1,7 @@
 import { q } from './db.js';
 import { HttpError } from './util.js';
 import { eventVenueScope } from './eventVenues.js';
+import { eventId } from './eventContext.js';
 
 const key = (value) => String(value ?? '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 const schoolKey = (value) => key(String(value ?? '').toLowerCase().replace(/\bsd\s*n(?=\s|\d|[.-])/g, 'sd negeri '));
@@ -17,14 +18,51 @@ export const arrivalVenueKey = (value) => {
 };
 const roles = {
   sekolah: 'bendahara', bendahara: 'bendahara', pengawas: 'pengawas', dinaspendidikan: 'dinaspendidikan',
-  fasil: 'fasilitator', fasilitator: 'fasilitator', bbpmp: 'bbpmp', bpmp: 'bbpmp',
+  kepalasekolah: 'kepalasekolah', fasil: 'fasilitator', fasilitator: 'fasilitator', bbpmp: 'bbpmp', bpmp: 'bbpmp',
 };
 const priority = { sedang_antre: 1, sudah_tiba: 2, selesai: 3 };
 const states = { selesai: 'selesai', sudahtiba: 'sudah_tiba', sedangantri: 'sedang_antre', sedangantre: 'sedang_antre' };
 const sourcePositions = {
   bendahara: 'Bendahara', pengawas: 'Pengawas', dinaspendidikan: 'Dinas Pendidikan',
-  fasilitator: 'Fasilitator', bbpmp: 'BB/BPMP',
+  kepalasekolah: 'Kepala Sekolah', fasilitator: 'Fasilitator', bbpmp: 'BB/BPMP',
 };
+
+export async function getSchoolArrivalStatuses(schools) {
+  const { rows } = await q(`SELECT v.name AS venue, p.name, p.position, p.institution, p.arrival_status
+    FROM venue_arrival_recap r JOIN venues v ON v.id=r.venue_id
+    CROSS JOIN LATERAL jsonb_to_recordset(r.detail_rows)
+      AS p(name text, position text, institution text, arrival_status text)
+    WHERE ${eventVenueScope('v')} AND p.position IN ('Bendahara', 'Kepala Sekolah')`);
+  const schoolIdentity = (venue, name) => JSON.stringify([arrivalVenueKey(venue), schoolKey(name)]);
+  const bySchool = new Map();
+  const attendeeKey = value => key(String(value ?? '').split(',')[0]);
+  for (const row of rows) {
+    if (!schoolKey(row.institution)) continue;
+    const identity = schoolIdentity(row.venue, row.institution);
+    if (!bySchool.has(identity)) bySchool.set(identity, new Map());
+    const attendees = bySchool.get(identity);
+    const name = attendeeKey(row.name);
+    if (!name) continue;
+    const previous = attendees.get(name);
+    if (!previous || (priority[row.arrival_status] || 0) > (priority[previous.arrival_status] || 0)) {
+      attendees.set(name, row);
+    }
+  }
+  return schools.map(school => {
+    const attendees = bySchool.get(schoolIdentity(school.venue, school.name)) || new Map();
+    const head = attendeeKey(school.head_name);
+    const isHead = (name, row) => row.position === 'Kepala Sekolah' || name === head;
+    const canInferTreasurer = attendees.size === 2 && [...attendees].filter(([name, row]) => isHead(name, row)).length === 1;
+    const arrival_attendees = [...attendees].map(([name, row]) => ({
+      name: row.name,
+      role: isHead(name, row) ? 'Kepala Sekolah' : canInferTreasurer ? 'Bendahara' : 'Peserta sekolah',
+      status: row.arrival_status || 'belum_tercatat',
+    }));
+    const arrival_status = arrival_attendees.reduce((best, { status }) =>
+      !best || (priority[status] || 0) > (priority[best] || 0) ? status : best, null);
+    return { ...school, arrival_status, arrival_attendees };
+  });
+}
 export function validateArrivalSummaryRow(row) {
   if (!row || typeof row.hotel !== 'string' || !row.hotel.trim() || !['Bendahara','Pengawas','Dinas Pendidikan'].includes(row.position)
     || ['invited','arrived','queued'].some((field) => !Number.isInteger(row[field]) || row[field] < 0 || row[field] > 20000)
@@ -141,6 +179,17 @@ export async function importArrivalRecap(rows, summary = null) {
   }
   const snapshots = new Map();
   const proposals = [];
+  const genericSchoolNames = new Map();
+  const schoolAttendanceKey = (venue, institution) => JSON.stringify([arrivalVenueKey(venue), schoolKey(institution)]);
+  const attendeeNameKey = (name) => key(String(name ?? '').split(',')[0]);
+  if (eventId() === 5) {
+    for (const [hotel, rawRole, name, institution] of rows) {
+      if (key(rawRole) !== 'sekolah' || !attendeeNameKey(name)) continue;
+      const identity = schoolAttendanceKey(hotel, institution);
+      if (!genericSchoolNames.has(identity)) genericSchoolNames.set(identity, new Set());
+      genericSchoolNames.get(identity).add(attendeeNameKey(name));
+    }
+  }
   let unmatched = 0;
   for (const [hotel, rawRole, name, institution, rawArrival, confirmation] of rows) {
     const venue = resolveVenue(hotel);
@@ -154,12 +203,23 @@ export async function importArrivalRecap(rows, summary = null) {
         && (p.institution || '').split(';').some(part => schoolKey(part) === schoolKey(institution)))));
     if (unconfirmed && !recorded) continue;
     const arrival = states[key(rawArrival)];
-    const role = roles[key(rawRole)];
+    let role = roles[key(rawRole)];
+    if (eventId() === 5 && key(rawRole) === 'sekolah') {
+      const heads = people.filter(p => p.venue_id === venue.id && roles[key(p.position)] === 'kepalasekolah'
+        && (p.institution || '').split(';').some(part => schoolKey(part) === schoolKey(institution)));
+      if (heads.length === 1) {
+        const headName = attendeeNameKey(heads[0].name);
+        const sourceNames = genericSchoolNames.get(schoolAttendanceKey(hotel, institution));
+        if (headName && attendeeNameKey(name) === headName) role = 'kepalasekolah';
+        else if ((sourceNames?.size ?? 0) > 1 && !(sourceNames.size === 2 && sourceNames.has(headName))) role = null;
+      }
+    }
     snapshot.detail_rows.push({
       id: snapshot.detail_rows.length + 1,
-      name, institution, position: sourcePositions[role] || rawRole,
-      arrival_status: arrival || null,
+      name, institution, position: sourcePositions[role || roles[key(rawRole)]] || rawRole,
+      arrival_status: arrival || (key(rawArrival) === 'belumtiba' ? 'belum_tiba' : null),
     });
+    if (!role && eventId() === 5 && key(rawRole) === 'sekolah') { unmatched++; continue; }
     if (!arrival && !['dinaspendidikan', 'bbpmp'].includes(role)) continue;
     const identity = ['bendahara', 'dinaspendidikan', 'bbpmp'].includes(role) ? schoolKey(institution) : key(name);
     let matches = index.get(`${venue.id}:${role}:${identity}`) || [];
@@ -194,8 +254,12 @@ export async function importArrivalRecap(rows, summary = null) {
     }
   }
   const snapshotsToSave = [...snapshots.values()];
-  if (summary !== null && (summaries.size !== snapshots.size || [...summaries].some(([id, entries]) => !snapshots.has(id) || entries.length !== 3))) {
-    throw new HttpError(400, 'Ringkasan dan Detail Peserta harus mencakup venue yang sama dan tiga peran lengkap.');
+  const pks = eventId() === 5;
+  if (summary !== null && (summaries.size !== snapshots.size || [...summaries].some(([id, entries]) =>
+    !snapshots.has(id) || (pks ? !entries.some(entry => entry.position === 'Bendahara') : entries.length !== 3)))) {
+    throw new HttpError(400, pks
+      ? 'Ringkasan dan Detail Peserta harus mencakup venue yang sama, dengan ringkasan Sekolah di setiap venue.'
+      : 'Ringkasan dan Detail Peserta harus mencakup venue yang sama dan tiga peran lengkap.');
   }
   for (const snapshot of snapshotsToSave) snapshot.source_summary = summaries.get(snapshot.venue_id) || null;
   await q(`INSERT INTO venue_arrival_recap (venue_id,marks,detail_rows,source_summary,representatives)
