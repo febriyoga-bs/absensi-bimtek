@@ -1,3 +1,4 @@
+import { loRepresentationLabel } from '../components/LoRepresentation.jsx';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
@@ -273,7 +274,7 @@ export function CaptureStep({ role, info, ch, onDone, onRestart, selfLo = false 
       `${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })} WIB${area?.inside ? ' • ' + area.venue : ''}`,
       `${last.lat.toFixed(6)}, ${last.lng.toFixed(6)} ±${Math.round(last.accuracy)} m • #${ch.nonce}`,
     ];
-    const img = camRef.current?.capture(lines);
+    const img = camRef.current?.capture([...lines, loRepresentationLabel(ch.person.name)].filter(Boolean));
     if (!img) return setError('Kamera belum siap.');
     setCaptureSamples(geo.samples.slice(-15));
     setPhoto(img);

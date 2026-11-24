@@ -1,7 +1,11 @@
 import {selectedEvent} from '../event.js';
 
-export default function LoRepresentation({name}) {
+export function loRepresentationLabel(name) {
   const key=String(name || '').trim().toLocaleLowerCase('id').replace(/\s+/g,' ');
-  if (selectedEvent()?.id!==5 || key!=='immanuel adhi pratama maturbongs') return null;
-  return <span className="lo-representation-tag">Diwakili Sista</span>;
+  return selectedEvent()?.id === 5 && /^immanuel adhi pratama mar?turbongs$/.test(key) ? 'Diwakili Sista' : '';
+}
+
+export default function LoRepresentation({name}) {
+  const label = loRepresentationLabel(name);
+  return label ? <span className="lo-representation-tag">{label}</span> : null;
 }

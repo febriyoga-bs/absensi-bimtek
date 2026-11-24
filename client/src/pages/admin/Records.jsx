@@ -1,3 +1,4 @@
+import LoRepresentation from '../../components/LoRepresentation.jsx';
 import { eventLabel } from '../../event.js';
 import { personName } from '../../lib/personName.js';
 import FilterField from '../../components/FilterField.jsx';
@@ -231,12 +232,15 @@ export default function Records() {
         <div className="grid attendance-grid" style={loading && rows.length ? { opacity: 0.5, transition: 'opacity .2s' } : undefined}>
           {rows.map((r) => (
             <div key={r.id} className={`rec rec--${r.status}`}>
-              <div>
+              <div style={{ position: 'relative' }}>
                 {!r.has_photo
                   ? <div className="rec__qr"><Icon name={r.status === 'berhalangan' ? 'clock' : r.method === 'qr' ? 'qr' : 'users'} size={40} />
                     <b>{r.status === 'berhalangan' ? ST_LABEL.berhalangan : r.method === 'qr' ? 'Scan QR' : 'Diabsenkan LO'}</b><small>{personName(r.scanned_by) || 'LO / panitia'}</small></div>
                   : <img src={r.photo_url || adminUrl(`/photo/${r.id}`)} alt={personName(r.name)} loading="lazy" title="Klik untuk memperbesar"
                     onClick={() => setZoom(r.photo_url || adminUrl(`/photo/${r.id}`))} />}
+                {r.has_photo && <div style={{ position: 'absolute', top: 8, right: 8, pointerEvents: 'none' }}>
+                  <LoRepresentation name={r.name} />
+                </div>}
               </div>
               <div className="rec__body">
                 <div className="rec__status-bar">
@@ -247,7 +251,7 @@ export default function Records() {
                   </span>
                 </div>
                 {r.method === 'manual' && r.has_photo && <span className="rec__by"><Icon name="users" size={13} /> Diabsenkan {personName(r.scanned_by) || 'LO'}</span>}
-                <div className="rec__name">{personName(r.representative?.name || r.name)} <span className={`tag tag--${r.role}`}>{r.role}</span>
+                <div className="rec__name">{personName(r.representative?.name || r.name)} <span className={`tag tag--${r.role}`}>{r.role}</span> <LoRepresentation name={r.name} />
                   {r.representative?.name && <span className="tag tag--venue">Mewakili</span>}</div>
                 {r.representative?.name && <div className="muted small">Mewakili {personName(r.name)}</div>}
                 <div className="muted small">{r.code} · {r.institution || '-'}</div>

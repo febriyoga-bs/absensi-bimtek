@@ -1,3 +1,4 @@
+import { loRepresentationLabel } from '../../components/LoRepresentation.jsx';
 import { eventLabel, selectedEvent } from '../../event.js';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
@@ -591,7 +592,7 @@ export function LoShot({ target, user, busy, onSend, onClose }) {
       `${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })} WIB${user?.venue ? ' • ' + user.venue.name : ''}`,
       `Diabsenkan oleh ${personName(user?.name) || 'LO'}`,
     ];
-    const img = camRef.current?.capture(lines);
+    const img = camRef.current?.capture([...lines, loRepresentationLabel(target.originalName || target.name)].filter(Boolean));
     if (!img) return setErr('Kamera belum siap.');
     setErr(null); setPhoto(img);
   }
