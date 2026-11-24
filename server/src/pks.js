@@ -16,9 +16,12 @@ publicPksRoutes.get('/', ah(async (_req, res) => {
   if (eventId() !== 5) throw new HttpError(404, 'Rekap ini hanya tersedia untuk Bimtek PKS SPAB.');
   const { rows: [roster] } = await q('SELECT data FROM assignment_roster WHERE id=1');
   const data = roster?.data;
+  const schools = data?.schools?.length ? await getSchoolArrivalStatuses(data.schools) : [];
   res.json({
-    schools: (data?.schools || []).map(({ npsn, name, provinsi, kab_kota, venue, facilitator, coordinator, lo }) => ({
+    schools: schools.map(({ npsn, name, provinsi, kab_kota, venue, facilitator, coordinator, lo, arrival_attendees }) => ({
       npsn, name, provinsi, kab_kota, venue, facilitator, coordinator, lo,
+      arrival_statuses: [...new Set(arrival_attendees.map(({ status }) =>
+        status === 'selesai' ? 'sudah_tiba' : status))],
       pks: { status: data.pks_records?.[npsn]?.status || 'belum_diterima' },
     })),
     verifiers: (data?.facilitators || []).map(({ name, venue, lo, coordinator }) => ({ name, venue, lo, coordinator })),
