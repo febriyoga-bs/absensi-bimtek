@@ -14,6 +14,12 @@ import './Pks.css';
 const views = { schools: 'Sekolah', verifiers: 'Verifikator', lo: 'LO', ranking: 'Peringkat LO', verifierRanking: 'Peringkat Verifikator' };
 const number = new Intl.NumberFormat('id-ID');
 const arrivalRoleOrder = { 'Kepala Sekolah': 0, Bendahara: 1 };
+const arrivalOptions = ['sudah_tiba', 'sedang_antre', 'belum_tiba', 'belum_tercatat'].map(code => arrivalBadge(code)[0]);
+function matchesArrival(school, label) {
+  return school.arrival_attendees?.length
+    ? school.arrival_attendees.some(attendee => arrivalBadge(attendee.status)[0] === label)
+    : arrivalBadge(school.arrival_status)[0] === label;
+}
 function ArrivalChip({ status }) {
   const [label, style] = arrivalBadge(status);
   return <span className={`tag ${style}`}>{label.toLocaleUpperCase('id')}</span>;
@@ -66,6 +72,7 @@ export default function Pks({ publicView = false }) {
   const [verifier, setVerifier] = useState('');
   const [view, setView] = useState('schools');
   const [status, setStatus] = useState('');
+  const [arrivalFilter, setArrivalFilter] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   async function load() {
@@ -155,7 +162,8 @@ export default function Pks({ publicView = false }) {
   useEffect(() => { if (publicView || selectedEvent()?.id === 5) { load(); loadSource(); } }, []);
   useEffect(() => { if (loView && selectedEvent()?.id === 5) loadGlobalRoster(); }, [loView]);
   if (!publicView && selectedEvent()?.id !== 5) return <Navigate to="/admin/pelaporan" replace />;
-  function reset() { setQuery(''); setVenue(''); setOwner(''); setVerifier(''); setStatus(''); setPage(1); }
+  function reset() { setQuery(''); setVenue(''); setOwner(''); setVerifier(''); setStatus(''); setArrivalFilter(''); setPage(1); }
+  const showArrivalFilter = view === 'schools' && !publicView;
   const search = query.trim().toLocaleLowerCase('id');
   const verifiers = groupPksVerifiers(data?.verifiers, data?.schools);
   const rankingData = loView ? globalRoster : data;
@@ -171,6 +179,7 @@ export default function Pks({ publicView = false }) {
     : null;
   const rows = (view === 'verifiers' ? verifiers : data?.[view] || []).filter(row => (!status || view !== 'schools' || schoolStatuses?.[row.npsn]?.stage === status)
     && (!verifier || view !== 'schools' || row.facilitator === verifier)
+    && (!showArrivalFilter || !arrivalFilter || matchesArrival(row, arrivalFilter))
     && (!venue || row.venue === venue) && (!owner || (view === 'verifiers' ? row.los.includes(owner) : (view === 'lo' ? row.name : row.lo) === owner))
     && [row.npsn, row.name, row.provinsi, row.kab_kota, row.venue, row.facilitator, row.coordinator, row.head_name, row.lo, ...(row.los || []), row.pks?.nomor_pks]
       .some(value => String(value || '').toLocaleLowerCase('id').includes(search)));
@@ -181,7 +190,7 @@ export default function Pks({ publicView = false }) {
   const pages = Math.max(1, Math.ceil(rows.length / pageSize));
   const active = Math.min(page, pages);
   const start = (active - 1) * pageSize;
-  const filtered = query || venue || owner || (view === 'schools' && (status || verifier));
+  const filtered = query || venue || owner || (view === 'schools' && (status || verifier)) || (showArrivalFilter && arrivalFilter);
   const progressMetrics = new Map((sourceData?.metrics || []).map(item => [item.metric, item]));
   const progressTotal = progressMetrics.get('total')?.value || 0;
   return <div className="pks-page">
@@ -207,17 +216,26 @@ export default function Pks({ publicView = false }) {
             })}
           </div>
           <div className="pks-progress-table-section">
-            <div className="pks-progress-table-scroll" tabIndex={0} role="region" aria-label="Progres dashboard SPAB per hotel">
+            <div className="pks-progress-table-scroll" tabIndex={0} role="region" aria-label="Progres dashboard SPAB per venue">
               <table className="pks-progress-table">
                 <colgroup><col className="pks-progress-hotel-column" />{progressMetricLabels.map(([key]) => <col key={key} />)}</colgroup>
                 <thead>
-                  <tr><th rowSpan="2" scope="col">Hotel</th><th rowSpan="2" scope="col">Total sekolah</th>{progressGroups.map(group => <th className={group.className} colSpan={group.metrics.length} scope="colgroup" key={group.label}>{group.label}</th>)}<th rowSpan="2" scope="col">Tidak terdata</th></tr>
+                  <tr><th rowSpan="2" scope="col">Venue</th><th rowSpan="2" scope="col">Total sekolah</th>{progressGroups.map(group => <th className={group.className} colSpan={group.metrics.length} scope="colgroup" key={group.label}>{group.label}</th>)}<th rowSpan="2" scope="col">Tidak terdata</th></tr>
                   <tr>{progressMetricLabels.slice(1, -1).map(([key, label]) => <th scope="col" key={key}>{label}</th>)}</tr>
                 </thead>
                 <tbody>{sourceData.hotels.map(hotel => <tr key={hotel.hotel}><th scope="row">{hotel.hotel}</th>{progressMetricLabels.map(([key]) => { const value = hotel.metrics[key] || 0; return <td key={key}><button type="button" className="pks-progress-count" onClick={() => openSchoolDetail(key, hotel.hotel)} aria-label={`Lihat ${number.format(value)} sekolah: ${key} di ${hotel.hotel}`}><strong>{number.format(value)}</strong></button>{key !== 'tidak_terdata' && <small>{percent(value, hotel.metrics.total || 0)}</small>}</td>; })}</tr>)}</tbody>
                 <tfoot><tr><th scope="row">TOTAL</th>{progressMetricLabels.map(([key]) => <td key={key}>{number.format(progressMetrics.get(key)?.value || 0)}</td>)}</tr></tfoot>
               </table>
             </div>
+          </div>
+          <div className="pks-progress-mobile">
+            {sourceData.hotels.map((hotel, index) => (
+              <MobileVenueProgress key={hotel.hotel} venue={hotel.hotel} open={index === 0}
+                metrics={hotel.metrics} onShowSchools={openSchoolDetail} />
+            ))}
+            <MobileVenueProgress
+              metrics={Object.fromEntries(progressMetricLabels.map(([key]) => [key, progressMetrics.get(key)?.value]))}
+              onShowSchools={openSchoolDetail} />
           </div>
           <p className="pks-progress-footnote">Sumber data: <a href={sourceData.source} target="_blank" rel="noreferrer">revitsd.kemendikdasmen.go.id</a>{sourceData.updatedAt ? ` · diperbarui ${sourceData.updatedAt}` : ''}</p>
         </>}
@@ -227,7 +245,7 @@ export default function Pks({ publicView = false }) {
           <div className="pks-tabs" role="group" aria-label="Tampilan pemetaan">{Object.entries(views).map(([key, label]) => <button key={key} aria-pressed={view === key} onClick={() => { if (loView && rankingView !== (key === 'ranking' || key === 'verifierRanking')) reset(); setView(key); setPage(1); }}>{label}<span>{number.format(key === 'verifiers' ? verifiers.length : key === 'verifierRanking' ? rankingVerifiers.length : key === 'ranking' ? (rankingData?.lo.length ?? 0) : data[key].length)}</span></button>)}</div>
           <p>Status progres sekolah dari Dashboard Revit.</p>
         </div>
-        <div className={view === 'schools' ? 'pks-filters pks-filters--schools' : 'pks-filters'}>
+        <div className={`pks-filters${view === 'schools' ? ' pks-filters--schools' : ''}${showArrivalFilter ? ' pks-filters--with-arrival' : ''}`}>
           <FilterField label="Pencarian"><input type="search" value={query} placeholder={view === 'schools' ? 'Nama sekolah, NPSN, atau nomor PKS' : 'Cari nama atau venue'} onChange={e => { setQuery(e.target.value); setPage(1); }} /></FilterField>
           <FilterField label="Venue"><select value={venue} onChange={e => { setVenue(e.target.value); setOwner(''); setVerifier(''); setPage(1); }}><option value="">Semua venue</option>{(filterData?.venues || []).map(name => <option key={name}>{name}</option>)}</select></FilterField>
           <FilterField label="LO bertugas"><select value={owner} onChange={e => { setOwner(e.target.value); setVerifier(''); setPage(1); }}><option value="">Semua LO</option>{(filterData?.lo || []).filter(row => !venue || row.venue === venue).map(row => <option value={row.name} key={row.venue + row.name}>{personName(row.name)}</option>)}</select></FilterField>
@@ -243,6 +261,12 @@ export default function Pks({ publicView = false }) {
               {progressMetricLabels.slice(1, -1).map(([key, label]) => (
                 <option key={key} value={key}>{label.replace(/^\d+\.\s*/, '')}</option>
               ))}
+            </select>
+          </FilterField>}
+          {showArrivalFilter && <FilterField label="Kehadiran">
+            <select value={arrivalFilter} onChange={e => { setArrivalFilter(e.target.value); setPage(1); }}>
+              <option value="">Semua kehadiran</option>
+              {arrivalOptions.map(label => <option key={label}>{label}</option>)}
             </select>
           </FilterField>}
         </div>
@@ -301,6 +325,43 @@ export default function Pks({ publicView = false }) {
         : loadSchoolDetail(detailContext.metric, detailContext.hotel, page, detailQuery.trim())}
     />}
   </div>;
+}
+
+function MobileVenueProgress({ venue, metrics, open, onShowSchools }) {
+  const groups = [
+    { metrics: ['total'] },
+    ...progressGroups,
+    { metrics: ['tidak_terdata'] },
+  ];
+  const total = metrics.total || 0;
+  const venueLabel = venue || 'Semua venue';
+  const labels = new Map(progressMetricLabels);
+
+  return <details className="pks-progress-mobile__venue" open={open}>
+    <summary>{venueLabel} <small>{number.format(total)} sekolah</small></summary>
+    {groups.map(group => (
+      <div key={group.metrics[0]}>
+        {group.label && <h3 className={group.className}>{group.label}</h3>}
+        <dl>
+          {group.metrics.map(key => {
+            const value = metrics[key] || 0;
+            const label = labels.get(key);
+            return <div key={key}>
+              <dt>{label}</dt>
+              <dd>
+                <button type="button" className="pks-progress-count"
+                  onClick={() => onShowSchools(key, venue)}
+                  aria-label={`Lihat ${number.format(value)} sekolah: ${label} · ${venueLabel}`}>
+                  <strong>{number.format(value)}</strong>
+                </button>
+                {key !== 'tidak_terdata' && <small>{percent(value, total)}</small>}
+              </dd>
+            </div>;
+          })}
+        </dl>
+      </div>
+    ))}
+  </details>;
 }
 
 function SchoolRevitStatus({ status, loading, failed }) {

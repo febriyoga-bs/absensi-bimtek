@@ -38,6 +38,26 @@ html[data-theme="dark"] .pks-page {
 .pks-ranking-stages h4 { margin: 0; padding: 5px 8px; border-radius: 5px; background: var(--pks-filter); color: var(--text); font-size: 11px; }
 .pks-bimtek-owners .pks-ranking-stages dl { margin-top: 0; }
 .pks-progress-table-section { min-width: 0; }
+.pks-progress-mobile { display: none; }
+
+@media (max-width: 900px) {
+  .pks-progress-table-section { display: none; }
+  .pks-progress-mobile { display: grid; gap: 8px; }
+  .pks-progress-mobile__venue { min-width: 0; border: 1px solid var(--line); border-radius: 10px; }
+  .pks-progress-mobile__venue summary { padding: 12px; font-weight: 700; cursor: pointer; }
+  .pks-progress-mobile__venue summary small { margin-inline-start: 4px; color: var(--muted); font-weight: 400; }
+  .pks-progress-mobile__venue[open] summary { border-bottom: 1px solid var(--line); }
+  .pks-progress-mobile__venue h3 { margin: 0; padding: 6px 12px; background: var(--pks-filter); font-size: 12px; }
+  .pks-progress-mobile__venue dl { margin: 0; }
+  .pks-progress-mobile__venue dl > div {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
+    gap: 10px; padding: 3px 12px; font-size: 13px;
+  }
+  .pks-progress-mobile__venue dl > div + div { border-top: 1px solid var(--line); }
+  .pks-progress-mobile__venue dd { display: flex; align-items: center; gap: 6px; margin: 0; white-space: nowrap; }
+  .pks-progress-mobile__venue dd small { min-width: 32px; color: var(--muted); text-align: end; }
+  .pks-progress-mobile__venue .pks-progress-count { min-width: 32px; min-height: 38px; }
+}
 .pks-progress-table-scroll { width: 100%; min-width: 0; }
 .pks-progress-table { width: 100%; table-layout: fixed; border-collapse: collapse; color: var(--text); font-size: 12px; }
 .pks-progress-table col.pks-progress-hotel-column { width: 13%; }
@@ -107,6 +127,7 @@ html[data-theme="dark"] .pks-summary__total { --metric-bg: #244b7d; }
 .pks-filters .filter-field > span { font-weight: 500; font-size: 14px; }
 @media (min-width: 1151px) {
   .pks-filters--schools { grid-template-columns: minmax(180px, 1.5fr) repeat(4, minmax(0, 1fr)); }
+  .pks-filters--with-arrival { grid-template-columns: minmax(180px, 1.5fr) repeat(5, minmax(0, 1fr)); }
 }
 .pks-filters :is(input, select) { height: 44px; min-height: 44px; font-size: 14px; border-radius: 6px; padding-block: 8px; background-color: var(--surface); }
 .pks-filters :is(input, select):focus { border-color: var(--accent); outline: 2px solid var(--accent-soft); outline-offset: 1px; }
