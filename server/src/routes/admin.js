@@ -650,12 +650,16 @@ r.get('/scan/participants', ah(async (req, res) => {
     arrival: "CASE WHEN arrival_status IN ('selesai','sudah_tiba') THEN 'Sudah tiba' WHEN arrival_status='sedang_antre' THEN 'Sedang antre' ELSE 'Belum terdata' END",
     attendance: "CASE WHEN selected_session_id IS NULL THEN 'Belum ada sesi' WHEN selected_status IS NULL THEN 'Belum absen' WHEN selected_status='valid' THEN 'Sudah absen' WHEN selected_status='review' THEN 'Perlu dicek' WHEN selected_status='ditolak' THEN 'Ditolak' ELSE 'Mundur/Berhalangan Hadir' END",
   };
-  const sort = req.query.sort || 'name';
+  const pksSchools = eventId() === 5 && category === 'sekolah';
+  const sort = req.query.sort || (pksSchools ? 'institution' : 'name');
   const direction = req.query.direction || 'asc';
   if (typeof sort !== 'string' || !Object.hasOwn(sortColumns,sort) || !['asc','desc'].includes(direction)) {
     throw new HttpError(400, 'Urutan kolom tidak valid.');
   }
-  const order = `${sortColumns[sort]} ${direction.toUpperCase()} NULLS LAST,id ASC`;
+  const schoolOrder = pksSchools && sort === 'institution'
+    ? ", npsn ASC NULLS LAST, venue_id ASC NULLS LAST, CASE lower(trim(position)) WHEN 'kepala sekolah' THEN 0 WHEN 'bendahara' THEN 1 ELSE 2 END"
+    : '';
+  const order = `${sortColumns[sort]} ${direction.toUpperCase()} NULLS LAST${schoolOrder}, id ASC`;
   if ((ownerId !== null && (!Number.isInteger(ownerId) || ownerId < 1 || ownerId > 2147483647))
     || !['','checked_in','not_checked_in','review','ditolak','berhalangan','no_session'].includes(attendanceFilter)) {
     throw new HttpError(400, 'Filter LO atau status absensi tidak valid.');

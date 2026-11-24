@@ -132,7 +132,7 @@ export async function getArrivalRecapDetails(rawVenueId, group) {
   return rows;
 }
 
-export async function importArrivalRecap(rows, summary = null) {
+export async function importArrivalRecap(rows, summary = null, { audit = false } = {}) {
   if (!Array.isArray(rows) || !rows.length || rows.length > 20_000 ||
     rows.some((row) => !Array.isArray(row) || ![5, 6].includes(row.length) || row.some((value) => typeof value !== 'string' || value.length > 400))) {
     throw new HttpError(400, 'Data Detail Peserta tidak valid.');
@@ -191,6 +191,17 @@ export async function importArrivalRecap(rows, summary = null) {
     }
   }
   let unmatched = 0;
+  const unmatchedGroups = new Map();
+  function recordUnmatched({ venue, institution, rawRole }, reason) {
+    unmatched++;
+    if (!audit) return;
+    const group = JSON.stringify([venue, key(institution), key(rawRole), reason]);
+    const entry = unmatchedGroups.get(group) || {
+      venue, instansi: institution || '(kosong)', peranExcel: rawRole, alasan: reason, baris: 0,
+    };
+    entry.baris++;
+    unmatchedGroups.set(group, entry);
+  }
   for (const [hotel, rawRole, name, institution, rawArrival, confirmation] of rows) {
     const venue = resolveVenue(hotel);
     if (!venue) throw new HttpError(400, `Venue di Excel tidak ditemukan di aplikasi: ${hotel || '(kosong)'}.`);
@@ -219,7 +230,11 @@ export async function importArrivalRecap(rows, summary = null) {
       name, institution, position: sourcePositions[role || roles[key(rawRole)]] || rawRole,
       arrival_status: arrival || (key(rawArrival) === 'belumtiba' ? 'belum_tiba' : null),
     });
-    if (!role && eventId() === 5 && key(rawRole) === 'sekolah') { unmatched++; continue; }
+    const source = { venue: venue.name, institution, rawRole };
+    if (!role && eventId() === 5 && key(rawRole) === 'sekolah') {
+      recordUnmatched(source, 'Peran peserta sekolah belum dapat dipastikan');
+      continue;
+    }
     if (!arrival && !['dinaspendidikan', 'bbpmp'].includes(role)) continue;
     const identity = ['bendahara', 'dinaspendidikan', 'bbpmp'].includes(role) ? schoolKey(institution) : key(name);
     let matches = index.get(`${venue.id}:${role}:${identity}`) || [];
@@ -232,20 +247,23 @@ export async function importArrivalRecap(rows, summary = null) {
         p.institution?.split(';').some((part) => schoolKey(part) === schoolKey(institution)));
     }
     if (matches.length !== 1) {
-      unmatched++;
+      recordUnmatched(source, matches.length ? 'Lebih dari satu profil cocok' : 'Profil tidak ditemukan');
       continue;
     }
-    proposals.push({ snapshot, person: matches[0], name, arrival });
+    proposals.push({ snapshot, person: matches[0], name, arrival, source });
   }
   const namesByProfile = new Map();
   for (const { person, name } of proposals) {
     if (!namesByProfile.has(person.id)) namesByProfile.set(person.id, new Set());
     namesByProfile.get(person.id).add(key(name));
   }
-  for (const { snapshot, person, name, arrival } of proposals) {
+  for (const { snapshot, person, name, arrival, source } of proposals) {
     // Do not choose a representative when the source lists different attendees
     // against the same profile. These entries still need a manual check.
-    if (namesByProfile.get(person.id).size !== 1) { unmatched++; continue; }
+    if (namesByProfile.get(person.id).size !== 1) {
+      recordUnmatched(source, 'Beberapa nama mengarah ke profil yang sama');
+      continue;
+    }
     const id = person.id;
     if (priority[arrival] > (priority[snapshot.marks[id]] || 0)) snapshot.marks[id] = arrival;
     const plainName = (value) => key(String(value).split(',')[0].replace(/\s+(?:s\.?pd|s\.?t|m\.?pd|m\.?t)\.?$/i, ''));
@@ -262,6 +280,10 @@ export async function importArrivalRecap(rows, summary = null) {
       : 'Ringkasan dan Detail Peserta harus mencakup venue yang sama dan tiga peran lengkap.');
   }
   for (const snapshot of snapshotsToSave) snapshot.source_summary = summaries.get(snapshot.venue_id) || null;
+  if (audit) {
+    return { unmatched, groups: [...unmatchedGroups.values()].sort((a, b) =>
+      a.venue.localeCompare(b.venue, 'id') || a.instansi.localeCompare(b.instansi, 'id')) };
+  }
   await q(`INSERT INTO venue_arrival_recap (venue_id,marks,detail_rows,source_summary,representatives)
     SELECT venue_id,marks,detail_rows,source_summary,representatives
     FROM jsonb_to_recordset($1::jsonb) AS v(venue_id int,marks jsonb,detail_rows jsonb,source_summary jsonb,representatives jsonb) ORDER BY venue_id

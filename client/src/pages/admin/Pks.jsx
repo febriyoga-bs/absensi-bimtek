@@ -8,17 +8,16 @@ import { groupPksVerifiers } from '../../lib/pksVerifiers.js';
 import FilterField from '../../components/FilterField.jsx';
 import PksRanking, { rankVerifiers } from './PksRanking.jsx';
 import WhatsAppLink from '../../components/WhatsAppLink.jsx';
+import { arrivalBadge } from './shared.js';
 import './Pks.css';
 
 const views = { schools: 'Sekolah', verifiers: 'Verifikator', lo: 'LO', ranking: 'Peringkat LO', verifierRanking: 'Peringkat Verifikator' };
 const number = new Intl.NumberFormat('id-ID');
-const arrivalLabels = {
-  selesai: 'Selesai',
-  sudah_tiba: 'Sudah tiba',
-  sedang_antre: 'Sedang antre',
-  belum_tiba: 'Belum tiba',
-  belum_tercatat: 'Belum tercatat',
-};
+const arrivalRoleOrder = { 'Kepala Sekolah': 0, Bendahara: 1 };
+function ArrivalChip({ status }) {
+  const [label, style] = arrivalBadge(status);
+  return <span className={`tag ${style}`}>{label}</span>;
+}
 const progressGroups = [
   { label: 'Biodata', className: 'pks-progress-group--bio', metrics: ['belum_login', 'bio_belum', 'bio_proses', 'bio_tunggu', 'bio_ok'] },
   { label: 'RAB & BA', className: 'pks-progress-group--rab', metrics: ['sepakat_rab', 'ba'] },
@@ -175,6 +174,10 @@ export default function Pks({ publicView = false }) {
     && (!venue || row.venue === venue) && (!owner || (view === 'verifiers' ? row.los.includes(owner) : (view === 'lo' ? row.name : row.lo) === owner))
     && [row.npsn, row.name, row.provinsi, row.kab_kota, row.venue, row.facilitator, row.coordinator, row.head_name, row.lo, ...(row.los || []), row.pks?.nomor_pks]
       .some(value => String(value || '').toLocaleLowerCase('id').includes(search)));
+  if (view === 'schools') {
+    rows.sort((a, b) => personName(a.name).localeCompare(personName(b.name), 'id')
+      || String(a.npsn).localeCompare(String(b.npsn)));
+  }
   const pages = Math.max(1, Math.ceil(rows.length / pageSize));
   const active = Math.min(page, pages);
   const start = (active - 1) * pageSize;
@@ -255,13 +258,15 @@ export default function Pks({ publicView = false }) {
                 <td className="pks-school-support" data-label="Verifikator"><b>{personName(row.facilitator)}</b><Contact phone={row.facilitator_phone} email={row.facilitator_email} name={row.facilitator} /><div className="pks-school-coordinator">{row.coordinator && <small>Koordinator <strong>{personName(row.coordinator)}</strong></small>}<Contact phone={row.coordinator_phone} email={row.coordinator_email} name={row.coordinator} /></div></td><td className="pks-school-lo" data-label="LO bertugas"><div className="pks-verifier-los"><span>{personName(row.lo)}<LoRepresentation name={row.lo}/></span></div></td>
                 <td className="pks-school-status" data-label="Status"><SchoolRevitStatus status={schoolStatuses?.[row.npsn]} loading={!schoolStatuses} failed={schoolStatusesError} />{(row.bimtek?.note || row.pks?.catatan) && <small>Catatan: {[row.bimtek?.note,row.pks?.catatan].filter(Boolean).join(' · ')}</small>}</td>
                 {!publicView && <td data-label="Kehadiran">
-                  {row.arrival_attendees?.length ? row.arrival_attendees.map(attendee => (
+                  {row.arrival_attendees?.length ? [...row.arrival_attendees]
+                    .sort((a, b) => (arrivalRoleOrder[a.role] ?? 2) - (arrivalRoleOrder[b.role] ?? 2))
+                    .map(attendee => (
                     <div key={attendee.name}>
                       <small>{attendee.role}</small>
                       <b>{personName(attendee.name)}</b>
-                      <span>{arrivalLabels[attendee.status] || 'Belum tercatat'}</span>
+                      <ArrivalChip status={attendee.status} />
                     </div>
-                  )) : arrivalLabels[row.arrival_status] || 'Belum ada data'}
+                  )) : <ArrivalChip status={row.arrival_status} />}
                 </td>}
               </> : <>
                 <td className="pks-person-cell" data-label={view === 'verifiers' ? 'Verifikator' : 'LO'}><span className="pks-person-avatar" aria-hidden="true">{personName(row.name).split(/\s+/).slice(0, 2).map(word => word[0]).join('')}</span><b>{personName(row.name)}</b><LoRepresentation name={row.name}/><Contact phone={row.phone} email={row.email} name={row.name} /></td>

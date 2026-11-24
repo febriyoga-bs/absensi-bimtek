@@ -65,6 +65,13 @@ function attendanceStatus(person) {
   return [person.session ? 'Belum absen' : 'Belum ada sesi', 'tag--off'];
 }
 
+function representedPersonName(person) {
+  const name = person.name?.trim();
+  if (!person.representative || !name || /^[-–—]+$/.test(name)) return null;
+  const prefix = name.split(/\s+[-–—]\s*/u, 1)[0].trim().toLocaleLowerCase('id');
+  return prefix === person.position?.trim().toLocaleLowerCase('id') ? null : name;
+}
+
 export default function Scan() {
   const { lo, user } = useOutletContext();
   const videoRef = useRef(null);
@@ -95,7 +102,8 @@ export default function Scan() {
   const columnHidden = (name) => fixedHiddenColumns.includes(name) || hiddenColumns.includes(name);
   const [filterFacilitator, setFilterFacilitator] = useState('');
   const [filterAttendance, setFilterAttendance] = useState('');
-  const [sort, setSort] = useState('name');
+  const [chosenSort, setSort] = useState(null);
+  const sort = chosenSort ?? (tab === 'sekolah' && selectedEvent()?.id === 5 ? 'institution' : 'name');
   const [direction, setDirection] = useState('asc');
   const [page, setPage] = useState(1);
   const [list, setList] = useState(null);
@@ -176,7 +184,7 @@ export default function Scan() {
 
   function absenkan(p) {
     setShot({ code: p.code, name: p.representative ? personName(p.representative.name) : personName(p.name),
-      originalName: p.representative ? p.name : null, position: p.position, school: p.institution?.split('; ')[0],
+      originalName: representedPersonName(p), position: p.position, school: p.institution?.split('; ')[0],
       sessionId: p.session?.id, sessionName: sessionTitle(p.session), isTest: p.session?.is_test });
   }
 
@@ -402,7 +410,7 @@ export default function Scan() {
                     return (
                       <tr key={p.id} role="row">
                         <td role="cell"><b>{p.representative ? personName(p.representative.name) : personName(p.name)}</b>
-                          {p.representative && tab !== 'dinas' && <><span className="tag tag--venue">Mewakili</span>
+                          {representedPersonName(p) && tab !== 'dinas' && <><span className="tag tag--venue">Mewakili</span>
                             <div className="muted small">Mewakili {personName(p.name)}</div></>}
                           {!p.representative && <WhatsAppLink name={p.name} phone={p.phone} />}
                           <div className="muted small">{[p.position, !organizationTab && p.code].filter(Boolean).join(' · ')}</div></td>
