@@ -80,6 +80,7 @@ export default function PksRanking({
         <summary>Cara hitung <b>Point Progress</b></summary>
         <p>Sekolah dicocokkan dengan data Revit berdasarkan NPSN. Point Progress adalah rata-rata skor sekolah binaan yang tahapnya dikenali di Revit.</p>
         <p>Ada 10 tahap dengan poin 0 sampai 9. Belum login bernilai 0 poin, Belum mengisi biodata 1 poin, Proses mengisi biodata 2 poin, Menunggu verifikasi biodata 3 poin, dan seterusnya hingga E-Meterai 9 poin.</p>
+        <p>Setiap NPSN dihitung satu kali berdasarkan tahap tertinggi yang dilaporkan Revit. Jika satu sekolah muncul di beberapa kolom capaian, poinnya tetap berasal dari tahap tertingginya. Contohnya, sekolah yang sudah mencapai E-Meterai mendapat 9 dari 9 poin.</p>
         <p><strong>Rumus</strong> = jumlah poin seluruh sekolah yang dihitung ÷ (jumlah sekolah yang dihitung × 9) × 100%.</p>
         <p><strong>Contoh</strong> — dari 28 sekolah, 2 belum mengisi biodata, 6 sedang mengisi, dan 20 menunggu verifikasi. Skornya ((2 × 1) + (6 × 2) + (20 × 3)) ÷ (28 × 9) × 100% = 29,4% setelah dibulatkan.</p>
         <p>Persentase di samping tiap tahap menunjukkan bagian dari seluruh sekolah binaan yang berada pada tahap tersebut. Peringkat ditentukan dari skor sebelum pembulatan, dan skor yang sama mendapat peringkat yang sama.</p>

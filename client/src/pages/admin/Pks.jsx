@@ -10,7 +10,6 @@ import PksRanking, { rankVerifiers } from './PksRanking.jsx';
 import WhatsAppLink from '../../components/WhatsAppLink.jsx';
 import './Pks.css';
 
-const statuses = { belum_diterima: 'Belum diterima', menunggu_verifikasi: 'Menunggu verifikasi', perlu_perbaikan: 'Perlu perbaikan', lengkap: 'Lengkap' };
 const views = { schools: 'Sekolah', verifiers: 'Verifikator', lo: 'LO', ranking: 'Peringkat LO', verifierRanking: 'Peringkat Verifikator' };
 const number = new Intl.NumberFormat('id-ID');
 const progressGroups = [
@@ -55,6 +54,7 @@ export default function Pks({ publicView = false }) {
   const [query, setQuery] = useState('');
   const [venue, setVenue] = useState('');
   const [owner, setOwner] = useState('');
+  const [verifier, setVerifier] = useState('');
   const [view, setView] = useState('schools');
   const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
@@ -136,20 +136,25 @@ export default function Pks({ publicView = false }) {
   }
   useEffect(() => { if (publicView || selectedEvent()?.id === 5) { load(); loadSource(); } }, []);
   if (!publicView && selectedEvent()?.id !== 5) return <Navigate to="/admin/pelaporan" replace />;
-  function reset() { setQuery(''); setVenue(''); setOwner(''); setStatus(''); setPage(1); }
+  function reset() { setQuery(''); setVenue(''); setOwner(''); setVerifier(''); setStatus(''); setPage(1); }
   const search = query.trim().toLocaleLowerCase('id');
   const verifiers = groupPksVerifiers(data?.verifiers, data?.schools);
+  const verifierOptions = [...new Set((data?.schools || [])
+    .filter(row => (!venue || row.venue === venue) && (!owner || row.lo === owner))
+    .map(row => row.facilitator).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'id'));
   const verifierRanking = view === 'verifierRanking' && schoolStatuses
     ? { owners: rankVerifiers(verifiers, data.schools, schoolStatuses) }
     : null;
-  const rows = (view === 'verifiers' ? verifiers : data?.[view] || []).filter(row => (!status || view !== 'schools' || row.pks.status === status)
+  const rows = (view === 'verifiers' ? verifiers : data?.[view] || []).filter(row => (!status || view !== 'schools' || schoolStatuses?.[row.npsn]?.stage === status)
+    && (!verifier || view !== 'schools' || row.facilitator === verifier)
     && (!venue || row.venue === venue) && (!owner || (view === 'verifiers' ? row.los.includes(owner) : (view === 'lo' ? row.name : row.lo) === owner))
     && [row.npsn, row.name, row.provinsi, row.kab_kota, row.venue, row.facilitator, row.coordinator, row.head_name, row.lo, ...(row.los || []), row.pks?.nomor_pks]
       .some(value => String(value || '').toLocaleLowerCase('id').includes(search)));
   const pages = Math.max(1, Math.ceil(rows.length / pageSize));
   const active = Math.min(page, pages);
   const start = (active - 1) * pageSize;
-  const filtered = query || venue || owner || (view === 'schools' && status);
+  const filtered = query || venue || owner || (view === 'schools' && (status || verifier));
   const progressMetrics = new Map((sourceData?.metrics || []).map(item => [item.metric, item]));
   const progressTotal = progressMetrics.get('total')?.value || 0;
   return <div className="pks-page">
@@ -175,7 +180,6 @@ export default function Pks({ publicView = false }) {
             })}
           </div>
           <div className="pks-progress-table-section">
-            <h3 className="pks-progress-table-title">Hasil Pemeriksaan Revit per Venue</h3>
             <div className="pks-progress-table-scroll" tabIndex={0} role="region" aria-label="Progres dashboard SPAB per hotel">
               <table className="pks-progress-table">
                 <colgroup><col className="pks-progress-hotel-column" />{progressMetricLabels.map(([key]) => <col key={key} />)}</colgroup>
@@ -196,11 +200,24 @@ export default function Pks({ publicView = false }) {
           <div className="pks-tabs" role="group" aria-label="Tampilan pemetaan">{Object.entries(views).map(([key, label]) => <button key={key} aria-pressed={view === key} onClick={() => { setView(key); setPage(1); }}>{label}<span>{number.format((key === 'verifiers' || key === 'verifierRanking') ? verifiers.length : key === 'ranking' ? data.lo.length : data[key].length)}</span></button>)}</div>
           <p>Status progres sekolah dari Dashboard Revit.</p>
         </div>
-        <div className="pks-filters">
+        <div className={view === 'schools' ? 'pks-filters pks-filters--schools' : 'pks-filters'}>
           <FilterField label="Pencarian"><input type="search" value={query} placeholder={view === 'schools' ? 'Nama sekolah, NPSN, atau nomor PKS' : 'Cari nama atau venue'} onChange={e => { setQuery(e.target.value); setPage(1); }} /></FilterField>
-          <FilterField label="Venue"><select value={venue} onChange={e => { setVenue(e.target.value); setOwner(''); setPage(1); }}><option value="">Semua venue</option>{data.venues.map(name => <option key={name}>{name}</option>)}</select></FilterField>
-          <FilterField label="LO bertugas"><select value={owner} onChange={e => { setOwner(e.target.value); setPage(1); }}><option value="">Semua LO</option>{data.lo.filter(row => !venue || row.venue === venue).map(row => <option value={row.name} key={row.venue + row.name}>{personName(row.name)}</option>)}</select></FilterField>
-          {view === 'schools' && <FilterField label="Status PKS"><select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}><option value="">Semua status</option>{Object.entries(statuses).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></FilterField>}
+          <FilterField label="Venue"><select value={venue} onChange={e => { setVenue(e.target.value); setOwner(''); setVerifier(''); setPage(1); }}><option value="">Semua venue</option>{data.venues.map(name => <option key={name}>{name}</option>)}</select></FilterField>
+          <FilterField label="LO bertugas"><select value={owner} onChange={e => { setOwner(e.target.value); setVerifier(''); setPage(1); }}><option value="">Semua LO</option>{data.lo.filter(row => !venue || row.venue === venue).map(row => <option value={row.name} key={row.venue + row.name}>{personName(row.name)}</option>)}</select></FilterField>
+          {view === 'schools' && <FilterField label="Verifikator">
+            <select value={verifier} onChange={e => { setVerifier(e.target.value); setPage(1); }}>
+              <option value="">Semua verifikator</option>
+              {verifierOptions.map(name => <option key={name} value={name}>{personName(name)}</option>)}
+            </select>
+          </FilterField>}
+          {view === 'schools' && <FilterField label="Status">
+            <select value={status} disabled={!schoolStatuses || schoolStatusesError} onChange={e => { setStatus(e.target.value); setPage(1); }}>
+              <option value="">Semua status</option>
+              {progressMetricLabels.slice(1, -1).map(([key, label]) => (
+                <option key={key} value={key}>{label.replace(/^\d+\.\s*/, '')}</option>
+              ))}
+            </select>
+          </FilterField>}
         </div>
         {view === 'verifierRanking' ? <PksRanking verifierMode onShowSchools={openRankingSchools} data={data} venue={venue} query={search} owner={owner} sourceRanking={verifierRanking} sourceRankingLoading={!schoolStatuses && !schoolStatusesError} sourceRankingError={schoolStatusesError ? 'Peringkat Verifikator dari Revit belum dapat dimuat.' : ''} onReloadSourceRanking={loadSchoolStatuses} /> : view === 'ranking' ? <PksRanking publicView={publicView} onShowSchools={openRankingSchools} data={data} venue={venue} query={search} owner={owner} onReload={load} sourceRanking={sourceRanking} sourceRankingError={sourceRankingError} sourceRankingLoading={sourceRankingLoading} onLoadSourceRanking={loadSourceRanking} onReloadSourceRanking={loadSourceRankingAgain} /> : <>
         <div className="pks-results"><span><b>{number.format(rows.length)}</b> {view === 'schools' ? 'sekolah' : view === 'verifiers' ? 'verifikator' : 'LO'}{filtered ? ' sesuai filter' : ''}</span>{filtered && <button type="button" onClick={reset}>Reset filter</button>}</div>

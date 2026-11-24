@@ -31,7 +31,6 @@ html[data-theme="dark"] .pks-page {
 .pks-progress-card span, .pks-progress-card small { color: var(--muted); font-size: 12px; line-height: 1.35; }
 .pks-progress-card strong { color: var(--text); font-size: 21px; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .pks-progress-table-section { overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
-.pks-progress-table-title { margin: 0; padding: 12px 14px; color: var(--text); font-size: 14px; }
 .pks-revit-school-stage { display: grid; gap: 4px; padding: 8px 10px; border-radius: 8px; background: var(--pks-filter); }
 .pks-revit-school-stage strong { color: var(--accent); }
 .pks-revit-school-stage > div { display: grid; gap: 2px; }
@@ -106,6 +105,9 @@ html[data-theme="dark"] .pks-summary__total { --metric-bg: #244b7d; }
 .pks-tabs button span { color: var(--muted); font-size: 14px; font-weight: 400; font-variant-numeric: tabular-nums; }
 .pks-filters { display: grid; grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(150px, 1fr)); align-items: end; gap: 14px; padding: 20px 20px 14px; background: var(--pks-filter); }
 .pks-filters .filter-field > span { font-weight: 500; font-size: 14px; }
+@media (min-width: 1151px) {
+  .pks-filters--schools { grid-template-columns: minmax(180px, 1.5fr) repeat(4, minmax(0, 1fr)); }
+}
 .pks-filters :is(input, select) { height: 44px; min-height: 44px; font-size: 14px; border-radius: 6px; padding-block: 8px; background-color: var(--surface); }
 .pks-filters :is(input, select):focus { border-color: var(--accent); outline: 2px solid var(--accent-soft); outline-offset: 1px; }
 .pks-results { display: flex; align-items: center; justify-content: space-between; min-height: 36px; padding: 0 20px 12px; font-size: 14px; color: var(--muted); }
