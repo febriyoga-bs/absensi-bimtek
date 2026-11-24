@@ -8,17 +8,11 @@ import { groupPksVerifiers } from '../../lib/pksVerifiers.js';
 import FilterField from '../../components/FilterField.jsx';
 import PksRanking, { rankVerifiers } from './PksRanking.jsx';
 import WhatsAppLink from '../../components/WhatsAppLink.jsx';
+import { arrivalBadge } from './shared.js';
 import './Pks.css';
 
 const views = { schools: 'Sekolah', verifiers: 'Verifikator', lo: 'LO', ranking: 'Peringkat LO', verifierRanking: 'Peringkat Verifikator' };
 const number = new Intl.NumberFormat('id-ID');
-const arrivalLabels = {
-  selesai: 'Selesai',
-  sudah_tiba: 'Sudah tiba',
-  sedang_antre: 'Sedang antre',
-  belum_tiba: 'Belum tiba',
-  belum_tercatat: 'Belum tercatat',
-};
 const progressGroups = [
   { label: 'Biodata', className: 'pks-progress-group--bio', metrics: ['belum_login', 'bio_belum', 'bio_proses', 'bio_tunggu', 'bio_ok'] },
   { label: 'RAB & BA', className: 'pks-progress-group--rab', metrics: ['sepakat_rab', 'ba'] },
@@ -204,17 +198,26 @@ export default function Pks({ publicView = false }) {
             })}
           </div>
           <div className="pks-progress-table-section">
-            <div className="pks-progress-table-scroll" tabIndex={0} role="region" aria-label="Progres dashboard SPAB per hotel">
+            <div className="pks-progress-table-scroll" tabIndex={0} role="region" aria-label="Progres dashboard SPAB per venue">
               <table className="pks-progress-table">
                 <colgroup><col className="pks-progress-hotel-column" />{progressMetricLabels.map(([key]) => <col key={key} />)}</colgroup>
                 <thead>
-                  <tr><th rowSpan="2" scope="col">Hotel</th><th rowSpan="2" scope="col">Total sekolah</th>{progressGroups.map(group => <th className={group.className} colSpan={group.metrics.length} scope="colgroup" key={group.label}>{group.label}</th>)}<th rowSpan="2" scope="col">Tidak terdata</th></tr>
+                  <tr><th rowSpan="2" scope="col">Venue</th><th rowSpan="2" scope="col">Total sekolah</th>{progressGroups.map(group => <th className={group.className} colSpan={group.metrics.length} scope="colgroup" key={group.label}>{group.label}</th>)}<th rowSpan="2" scope="col">Tidak terdata</th></tr>
                   <tr>{progressMetricLabels.slice(1, -1).map(([key, label]) => <th scope="col" key={key}>{label}</th>)}</tr>
                 </thead>
                 <tbody>{sourceData.hotels.map(hotel => <tr key={hotel.hotel}><th scope="row">{hotel.hotel}</th>{progressMetricLabels.map(([key]) => { const value = hotel.metrics[key] || 0; return <td key={key}><button type="button" className="pks-progress-count" onClick={() => openSchoolDetail(key, hotel.hotel)} aria-label={`Lihat ${number.format(value)} sekolah: ${key} di ${hotel.hotel}`}><strong>{number.format(value)}</strong></button>{key !== 'tidak_terdata' && <small>{percent(value, hotel.metrics.total || 0)}</small>}</td>; })}</tr>)}</tbody>
                 <tfoot><tr><th scope="row">TOTAL</th>{progressMetricLabels.map(([key]) => <td key={key}>{number.format(progressMetrics.get(key)?.value || 0)}</td>)}</tr></tfoot>
               </table>
             </div>
+          </div>
+          <div className="pks-progress-mobile">
+            {sourceData.hotels.map((hotel, index) => (
+              <MobileVenueProgress key={hotel.hotel} venue={hotel.hotel} open={index === 0}
+                metrics={hotel.metrics} onShowSchools={openSchoolDetail} />
+            ))}
+            <MobileVenueProgress
+              metrics={Object.fromEntries(progressMetricLabels.map(([key]) => [key, progressMetrics.get(key)?.value]))}
+              onShowSchools={openSchoolDetail} />
           </div>
           <p className="pks-progress-footnote">Sumber data: <a href={sourceData.source} target="_blank" rel="noreferrer">revitsd.kemendikdasmen.go.id</a>{sourceData.updatedAt ? ` · diperbarui ${sourceData.updatedAt}` : ''}</p>
         </>}
@@ -259,9 +262,9 @@ export default function Pks({ publicView = false }) {
                     <div key={attendee.name}>
                       <small>{attendee.role}</small>
                       <b>{personName(attendee.name)}</b>
-                      <span>{arrivalLabels[attendee.status] || 'Belum tercatat'}</span>
+                      <ArrivalChip status={attendee.status} />
                     </div>
-                  )) : arrivalLabels[row.arrival_status] || 'Belum ada data'}
+                  )) : <ArrivalChip status={row.arrival_status} />}
                 </td>}
               </> : <>
                 <td className="pks-person-cell" data-label={view === 'verifiers' ? 'Verifikator' : 'LO'}><span className="pks-person-avatar" aria-hidden="true">{personName(row.name).split(/\s+/).slice(0, 2).map(word => word[0]).join('')}</span><b>{personName(row.name)}</b><LoRepresentation name={row.name}/><Contact phone={row.phone} email={row.email} name={row.name} /></td>
@@ -296,6 +299,48 @@ export default function Pks({ publicView = false }) {
         : loadSchoolDetail(detailContext.metric, detailContext.hotel, page, detailQuery.trim())}
     />}
   </div>;
+}
+
+function ArrivalChip({ status }) {
+  const [label, className] = arrivalBadge(status);
+  return <span className={`tag ${className}`}>{label}</span>;
+}
+
+function MobileVenueProgress({ venue, metrics, open, onShowSchools }) {
+  const groups = [
+    { metrics: ['total'] },
+    ...progressGroups,
+    { metrics: ['tidak_terdata'] },
+  ];
+  const total = metrics.total || 0;
+  const venueLabel = venue || 'Semua venue';
+  const labels = new Map(progressMetricLabels);
+
+  return <details className="pks-progress-mobile__venue" open={open}>
+    <summary>{venueLabel} <small>{number.format(total)} sekolah</small></summary>
+    {groups.map(group => (
+      <div key={group.metrics[0]}>
+        {group.label && <h3 className={group.className}>{group.label}</h3>}
+        <dl>
+          {group.metrics.map(key => {
+            const value = metrics[key] || 0;
+            const label = labels.get(key);
+            return <div key={key}>
+              <dt>{label}</dt>
+              <dd>
+                <button type="button" className="pks-progress-count"
+                  onClick={() => onShowSchools(key, venue)}
+                  aria-label={`Lihat ${number.format(value)} sekolah: ${label} · ${venueLabel}`}>
+                  <strong>{number.format(value)}</strong>
+                </button>
+                {key !== 'tidak_terdata' && <small>{percent(value, total)}</small>}
+              </dd>
+            </div>;
+          })}
+        </dl>
+      </div>
+    ))}
+  </details>;
 }
 
 function SchoolRevitStatus({ status, loading, failed }) {
