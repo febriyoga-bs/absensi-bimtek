@@ -40,6 +40,8 @@ html[data-theme="dark"] .pks-page {
 .pks-progress-table-section { min-width: 0; }
 .pks-progress-mobile { display: none; }
 
+.pks-register td[data-label="Kehadiran"] .tag { text-transform: uppercase; }
+
 @media (max-width: 900px) {
   .pks-progress-table-section { display: none; }
   .pks-progress-mobile { display: grid; gap: 8px; }
