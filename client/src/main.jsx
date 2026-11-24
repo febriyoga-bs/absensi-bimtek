@@ -38,6 +38,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/dashboard/:section?" element={<PublicDashboard />} />
+        <Route path="/pks" element={<AdminLayout publicView />}>
+          <Route index element={<Pks publicView />} />
+        </Route>
         <Route path="/qr/:token" element={<QrCard />} />
         <Route path="/admin/login" element={<Login />} />
         <Route path="/admin" element={<AdminLayout />}>

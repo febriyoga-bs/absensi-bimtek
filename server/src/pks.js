@@ -6,6 +6,26 @@ import { cleanBimtekRecord } from './pksBimtek.js';
 import { createAsyncCache } from './asyncCache.js';
 
 export const pksRoutes = Router();
+export const publicPksRoutes = Router();
+const progressRoutes = Router();
+pksRoutes.use('/progress', progressRoutes);
+publicPksRoutes.use('/progress', progressRoutes);
+
+publicPksRoutes.get('/', ah(async (_req, res) => {
+  if (eventId() !== 5) throw new HttpError(404, 'Rekap ini hanya tersedia untuk Bimtek PKS SPAB.');
+  const { rows: [roster] } = await q('SELECT data FROM assignment_roster WHERE id=1');
+  const data = roster?.data;
+  res.json({
+    schools: (data?.schools || []).map(({ npsn, name, provinsi, kab_kota, venue, facilitator, coordinator, lo }) => ({
+      npsn, name, provinsi, kab_kota, venue, facilitator, coordinator, lo,
+      pks: { status: data.pks_records?.[npsn]?.status || 'belum_diterima' },
+    })),
+    verifiers: (data?.facilitators || []).map(({ name, venue, lo, coordinator }) => ({ name, venue, lo, coordinator })),
+    lo: (data?.lo || []).map(({ name, venue }) => ({ name, venue })),
+    venues: data?.venues || [],
+    coordinators: (data?.coordinators || []).map(({ name, venue }) => ({ name, venue })),
+  });
+}));
 export const pksStatuses = ['belum_diterima', 'menunggu_verifikasi', 'perlu_perbaikan', 'lengkap'];
 
 const progressSourceUrl = 'https://revitsd.kemendikdasmen.go.id/spab/dashboard-progress?jenis=pks&bimtek=1';
@@ -159,7 +179,7 @@ pksRoutes.get('/', ah(async (req, res) => {
       || data.schools.some(school => allowed(school) && school.venue === row.venue && school.coordinator === row.name)) });
 }));
 
-pksRoutes.get('/progress', ah(async (_req, res) => {
+progressRoutes.get('/', ah(async (_req, res) => {
   if (eventId() !== 5) throw new HttpError(404, 'Rekap ini hanya tersedia untuk Bimtek PKS SPAB.');
   const response = await fetch(progressSourceUrl, { headers: { Accept: 'text/html' }, signal: AbortSignal.timeout(15000) });
   if (!response.ok) throw new HttpError(502, 'Dashboard progress sumber tidak dapat diakses.');
@@ -168,7 +188,7 @@ pksRoutes.get('/progress', ah(async (_req, res) => {
   res.json(parseProgressPage(html));
 }));
 
-pksRoutes.get('/progress/schools', ah(async (req, res) => {
+progressRoutes.get('/schools', ah(async (req, res) => {
   if (eventId() !== 5) throw new HttpError(404, 'Rekap ini hanya tersedia untuk Bimtek PKS SPAB.');
   const metric = String(req.query.metric || 'total');
   const hotel = String(req.query.hotel || '');
@@ -181,7 +201,7 @@ pksRoutes.get('/progress/schools', ah(async (req, res) => {
   res.json({ ...result, metric, hotel, page, pageSize: result.rows.length });
 }));
 
-pksRoutes.get('/progress/lo-ranking', ah(async (_req, res) => {
+progressRoutes.get('/lo-ranking', ah(async (_req, res) => {
   if (eventId() !== 5) throw new HttpError(404, 'Rekap ini hanya tersedia untuk Bimtek PKS SPAB.');
   const ranking = await progressCache.get('lo-ranking', async () => {
     const [rosterResult, sourceResponse] = await Promise.all([
@@ -236,7 +256,7 @@ pksRoutes.get('/progress/lo-ranking', ah(async (_req, res) => {
   res.json(ranking);
 }));
 
-pksRoutes.get('/progress/statuses', ah(async (req, res) => {
+progressRoutes.get('/statuses', ah(async (req, res) => {
   if (eventId() !== 5) throw new HttpError(404, 'Rekap ini hanya tersedia untuk Bimtek PKS SPAB.');
   const [rosterResult, response] = await Promise.all([
     q('SELECT data FROM assignment_roster WHERE id=1'),
@@ -245,9 +265,9 @@ pksRoutes.get('/progress/statuses', ah(async (req, res) => {
   if (!response.ok) throw new HttpError(502, 'Dashboard progress sumber tidak dapat diakses.');
   const { hotels } = parseProgressPage(await response.text());
   const roster = rosterResult.rows[0]?.data;
-  const own = roster?.lo?.find(row => row.account_id === req.user.lo);
+  const own = req.user?.role === 'lo' ? roster?.lo?.find(row => row.account_id === req.user.lo) : null;
   const allowed = new Set((roster?.schools || [])
-    .filter(row => req.user.role === 'admin' || (own && row.venue === own.venue && row.lo === own.name))
+    .filter(row => !req.user || req.user.role === 'admin' || (own && row.venue === own.venue && row.lo === own.name))
     .map(row => String(row.npsn)));
   const schools = await loadProgressSchools(hotels);
   res.json(Object.fromEntries(schools.filter(row => allowed.has(row.npsn)).map(row => [row.npsn, {

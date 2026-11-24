@@ -10,22 +10,22 @@ import EventTabs from '../../components/EventTabs.jsx';
 import { selectedEvent } from '../../event.js';
 import { useEvents } from '../../components/EventScope.jsx';
 
-export default function AdminLayout() {
+export default function AdminLayout({ publicView = false }) {
   const nav = useNavigate();
   const loc = useLocation();
   const eventScope = useEvents();
-  const pks = eventScope?.event.id === 5;
-  const home = pks ? '/admin/pks' : '/admin/pelaporan';
+  const pks = publicView || eventScope?.event.id === 5;
+  const home = publicView ? '/pks' : pks ? '/admin/pks' : '/admin/pelaporan';
   const activeAttendancePage = loc.pathname === '/admin/absen-saya' || loc.pathname.startsWith('/admin/scan');
   const needsActiveEvent = activeAttendancePage && !pks && eventScope?.event.status !== 'active';
   const activeEvent = eventScope?.events.find((event) => event.status === 'active');
-  const [user, setUser] = useState(adminUser.get());
+  const [user, setUser] = useState(() => publicView ? null : adminUser.get());
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButton = useRef(null);
 
   // Segarkan info akun (LO yang dinonaktifkan langsung keluar)
   useEffect(() => {
-    if (!adminToken.get()) return;
+    if (publicView || !adminToken.get()) return;
     api('/admin/me', { admin: true }).then((u) => { adminUser.set(u); setUser(u); }).catch(() => {});
   }, []);
   useEffect(() => { setMenuOpen(false); }, [loc.pathname]);
@@ -33,10 +33,10 @@ export default function AdminLayout() {
     if (needsActiveEvent && activeEvent) eventScope.change(String(activeEvent.id));
   }, [needsActiveEvent, activeEvent?.id]);
 
-  if (!adminToken.get()) return <Navigate to="/admin/login" state={{ next: loc.pathname + loc.search }} replace />;
+  if (!publicView && !adminToken.get()) return <Navigate to="/admin/login" state={{ next: loc.pathname + loc.search }} replace />;
 
   const lo = user?.role === 'lo';
-  const items = menuForEvent(pks).filter((n) => (lo ? n.lo && (!user.no_assignment
+  const items = publicView ? [{ to: home, icon: 'chart-line', label: 'Pantau Rekap PKS', end: true }] : menuForEvent(pks).filter((n) => (lo ? n.lo && (!user.no_assignment
     || [home,'/admin/rekap-absensi'].includes(n.to)) : !n.loOnly));
   if (['/admin', '/admin/', '/admin/pendampingan', '/admin/pendampingan/saya'].includes(loc.pathname)) {
     return <Navigate to={home} replace />;
@@ -59,7 +59,7 @@ export default function AdminLayout() {
         <div className="admin__nav-head">
           <div className="admin__brand">
             <BrandMark size={38} />
-            <span>{lo ? 'Dashboard LO' : pks ? 'Admin PKS' : 'Admin BIMTEK'}<small>{pks ? <>BIMTEK PKS SPAB<br />23–28 November 2026</> : 'BIMTEK Revitalisasi SD'}</small></span>
+            <span>{publicView ? 'Rekap PKS' : lo ? 'Dashboard LO' : pks ? 'Admin PKS' : 'Admin BIMTEK'}<small>{pks ? <>BIMTEK PKS SPAB<br />23-28 November 2026</> : 'BIMTEK Revitalisasi SD'}</small></span>
           </div>
           <button ref={menuButton} className="admin__menu-toggle" type="button" aria-expanded={menuOpen}
             aria-controls="admin-menu" onClick={() => setMenuOpen(!menuOpen)}>
@@ -82,14 +82,14 @@ export default function AdminLayout() {
           {!lo && !pks && <NavLink to="/#public-verval" onClick={() => setMenuOpen(false)}>
             <FontIcon name="map-location-dot" /> Peta Revitalisasi
           </NavLink>}
-          <button className="link" onClick={() => { adminToken.clear(); nav('/admin/login'); }}>
+          {!publicView && <button className="link" onClick={() => { adminToken.clear(); nav('/admin/login'); }}>
             <Icon name="logout" size={18} /> Keluar
-          </button>
+          </button>}
         </nav>
       </aside>
       <section className="admin__main">
-        {loc.pathname !== '/admin/pelaporan' && user?.scope !== 'pks' && <EventTabs activeOnly={activeAttendancePage} />}
-        {!activeAttendancePage && selectedEvent()?.status === 'archived' && <p className="alert">{selectedEvent().name} sudah diarsipkan. Data hanya dapat dilihat dan diunduh.</p>}
+        {!publicView && loc.pathname !== '/admin/pelaporan' && user?.scope !== 'pks' && <EventTabs activeOnly={activeAttendancePage} />}
+        {!publicView && !activeAttendancePage && selectedEvent()?.status === 'archived' && <p className="alert">{selectedEvent().name} sudah diarsipkan. Data hanya dapat dilihat dan diunduh.</p>}
         {needsActiveEvent ? <p role="status">{activeEvent ? 'Membuka tahap aktif…' : 'Belum ada tahap aktif untuk pencatatan absensi.'}</p> : <Outlet context={{ user, lo }} />}
       </section>
     </div>

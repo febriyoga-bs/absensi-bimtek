@@ -30,7 +30,13 @@ function Contact({ phone, email, name }) {
   return <>{phone && <small className="pks-contact-phone"><span>{phone}</span><WhatsAppLink phone={phone} name={name} /></small>}{email && <small className="pks-contact-email"><a href={`mailto:${email}`}>{email}</a></small>}</>;
 }
 
-export default function Pks() {
+export default function Pks({ publicView = false }) {
+  function request(suffix = '', params = new URLSearchParams()) {
+    if (publicView) params.set('event', '5');
+    const query = params.size ? '?' + params : '';
+    return api((publicView ? '/pks' : '/admin/pks') + suffix + query, { admin: !publicView });
+  }
+
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [sourceData, setSourceData] = useState(null);
@@ -55,20 +61,20 @@ export default function Pks() {
   const [pageSize, setPageSize] = useState(25);
   async function load() {
     setError('');
-    try { setData(await api('/admin/pks', { admin: true })); } catch (e) { setError(e.message); }
+    try { setData(await request()); } catch (e) { setError(e.message); }
   }
   async function loadSource() {
     loadSchoolStatuses();
     setSourceLoading(true);
     setSourceError('');
-    try { setSourceData(await api('/admin/pks/progress', { admin: true })); }
+    try { setSourceData(await request('/progress')); }
     catch (e) { setSourceError(e.message || 'Data dari dashboard sumber belum dapat dimuat.'); }
     finally { setSourceLoading(false); }
   }
   async function loadSchoolStatuses() {
     setSchoolStatusesError(false);
     try {
-      setSchoolStatuses(await api('/admin/pks/progress/statuses', { admin: true }));
+      setSchoolStatuses(await request('/progress/statuses'));
     } catch {
       setSchoolStatusesError(true);
     }
@@ -77,7 +83,7 @@ export default function Pks() {
     if (sourceRankingLoading) return;
     setSourceRankingLoading(true);
     setSourceRankingError('');
-    try { setSourceRanking(await api('/admin/pks/progress/lo-ranking', { admin: true })); }
+    try { setSourceRanking(await request('/progress/lo-ranking')); }
     catch (e) { setSourceRankingError(e.message || 'Peringkat LO dari Revit belum dapat dimuat.'); }
     finally { setSourceRankingLoading(false); }
   }
@@ -88,7 +94,7 @@ export default function Pks() {
       const params = new URLSearchParams({ metric, page: String(page) });
       if (hotel) params.set('hotel', hotel);
       if (query) params.set('q', query);
-      setDetailData(await api(`/admin/pks/progress/schools?${params}`, { admin: true }));
+      setDetailData(await request('/progress/schools', params));
     } catch (e) { setDetailError(e.message || 'Daftar sekolah dari Revit belum dapat dimuat.'); }
     finally { setDetailLoading(false); }
   }
@@ -128,8 +134,8 @@ export default function Pks() {
     loadSourceRanking();
     loadSchoolStatuses();
   }
-  useEffect(() => { if (selectedEvent()?.id === 5) { load(); loadSource(); } }, []);
-  if (selectedEvent()?.id !== 5) return <Navigate to="/admin/pelaporan" replace />;
+  useEffect(() => { if (publicView || selectedEvent()?.id === 5) { load(); loadSource(); } }, []);
+  if (!publicView && selectedEvent()?.id !== 5) return <Navigate to="/admin/pelaporan" replace />;
   function reset() { setQuery(''); setVenue(''); setOwner(''); setStatus(''); setPage(1); }
   const search = query.trim().toLocaleLowerCase('id');
   const verifiers = groupPksVerifiers(data?.verifiers, data?.schools);
@@ -196,7 +202,7 @@ export default function Pks() {
           <FilterField label="LO bertugas"><select value={owner} onChange={e => { setOwner(e.target.value); setPage(1); }}><option value="">Semua LO</option>{data.lo.filter(row => !venue || row.venue === venue).map(row => <option value={row.name} key={row.venue + row.name}>{personName(row.name)}</option>)}</select></FilterField>
           {view === 'schools' && <FilterField label="Status PKS"><select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}><option value="">Semua status</option>{Object.entries(statuses).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></FilterField>}
         </div>
-        {view === 'verifierRanking' ? <PksRanking verifierMode onShowSchools={openRankingSchools} data={data} venue={venue} query={search} owner={owner} sourceRanking={verifierRanking} sourceRankingLoading={!schoolStatuses && !schoolStatusesError} sourceRankingError={schoolStatusesError ? 'Peringkat Verifikator dari Revit belum dapat dimuat.' : ''} onReloadSourceRanking={loadSchoolStatuses} /> : view === 'ranking' ? <PksRanking onShowSchools={openRankingSchools} data={data} venue={venue} query={search} owner={owner} onReload={load} sourceRanking={sourceRanking} sourceRankingError={sourceRankingError} sourceRankingLoading={sourceRankingLoading} onLoadSourceRanking={loadSourceRanking} onReloadSourceRanking={loadSourceRankingAgain} /> : <>
+        {view === 'verifierRanking' ? <PksRanking verifierMode onShowSchools={openRankingSchools} data={data} venue={venue} query={search} owner={owner} sourceRanking={verifierRanking} sourceRankingLoading={!schoolStatuses && !schoolStatusesError} sourceRankingError={schoolStatusesError ? 'Peringkat Verifikator dari Revit belum dapat dimuat.' : ''} onReloadSourceRanking={loadSchoolStatuses} /> : view === 'ranking' ? <PksRanking publicView={publicView} onShowSchools={openRankingSchools} data={data} venue={venue} query={search} owner={owner} onReload={load} sourceRanking={sourceRanking} sourceRankingError={sourceRankingError} sourceRankingLoading={sourceRankingLoading} onLoadSourceRanking={loadSourceRanking} onReloadSourceRanking={loadSourceRankingAgain} /> : <>
         <div className="pks-results"><span><b>{number.format(rows.length)}</b> {view === 'schools' ? 'sekolah' : view === 'verifiers' ? 'verifikator' : 'LO'}{filtered ? ' sesuai filter' : ''}</span>{filtered && <button type="button" onClick={reset}>Reset filter</button>}</div>
         <div className="pks-table-scroll" tabIndex={0} role="region" aria-label={`Tabel ${views[view]}`}>
           <table className={`table pks-table${view !== 'schools' ? ` pks-table--people${view === 'verifiers' ? ' pks-table--verifiers' : ''}` : ''}`}>

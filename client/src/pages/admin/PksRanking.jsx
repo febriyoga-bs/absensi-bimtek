@@ -49,7 +49,7 @@ export function rankVerifiers(verifiers, schools, statuses) {
 
 export default function PksRanking({
   data, venue, query, owner, onReload, sourceRanking, sourceRankingError,
-  sourceRankingLoading, onLoadSourceRanking, onReloadSourceRanking, verifierMode = false, onShowSchools,
+  sourceRankingLoading, onLoadSourceRanking, onReloadSourceRanking, verifierMode = false, onShowSchools, publicView = false,
 }) {
   const [selectedTab, setTab] = useState('progress');
   const tab = verifierMode ? 'bimtek' : selectedTab;
@@ -73,7 +73,7 @@ export default function PksRanking({
     <div className="pks-tabs" role="group" aria-label="Jenis peringkat LO">
       {!verifierMode && <button aria-pressed={tab === 'progress'} onClick={() => setTab('progress')}>Kelengkapan PKS</button>}
       <button aria-pressed={tab === 'bimtek'} onClick={() => setTab('bimtek')}>Pendampingan BIMTEK</button>
-      {!verifierMode && <button aria-pressed={tab === 'attendance'} onClick={() => setTab('attendance')}>Absensi</button>}
+      {!verifierMode && !publicView && <button aria-pressed={tab === 'attendance'} onClick={() => setTab('attendance')}>Absensi</button>}
     </div>
     {tab === 'attendance' ? <AttendanceRanking venue={venue} query={query} owner={owner} facilitatorLabel="verifikator" compact /> : tab === 'bimtek' ? <>
       <details className="pks-overall-help">

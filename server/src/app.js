@@ -4,6 +4,7 @@ import publicRoutes from './routes/public.js';
 import adminRoutes, { loginHandler, loginLimiter } from './routes/admin.js';
 import { requestLimiter, securityHeaders } from './security.js';
 import { eventRoutes, selectEvent, invalidateEventMetadata } from './events.js';
+import { publicPksRoutes } from './pks.js';
 
 /**
  * Aplikasi Express tanpa listen().
@@ -29,6 +30,7 @@ app.post('/api/admin/login', loginLimiter, loginHandler);
 app.use('/api', selectEvent);
 
 app.use('/api/admin', adminRoutes);
+app.use('/api/pks', publicPksRoutes);
 app.use('/api', publicRoutes);
 app.use('/api', (req, res) => res.status(404).json({ error: 'Tidak ditemukan' }));
 
