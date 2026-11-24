@@ -55,9 +55,10 @@ export async function getSchoolArrivalStatuses(schools) {
     const head = attendeeNameKey(school.head_name);
     const isHead = (name, row) => row.position === 'Kepala Sekolah' || name === head;
     const canInferTreasurer = attendees.size === 2 && [...attendees].filter(([name, row]) => isHead(name, row)).length === 1;
+    const fallbackRole = head && attendees.size === 1 ? 'Perwakilan Sekolah' : 'Peserta sekolah';
     const arrival_attendees = [...attendees].map(([name, row]) => ({
       name: row.name,
-      role: isHead(name, row) ? 'Kepala Sekolah' : canInferTreasurer ? 'Bendahara' : 'Peserta sekolah',
+      role: isHead(name, row) ? 'Kepala Sekolah' : canInferTreasurer ? 'Bendahara' : fallbackRole,
       status: row.arrival_status || 'belum_tercatat',
     }));
     const arrival_status = arrival_attendees.reduce((best, { status }) =>
