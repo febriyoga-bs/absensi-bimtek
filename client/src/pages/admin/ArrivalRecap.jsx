@@ -190,6 +190,7 @@ export default function ArrivalRecap() {
               <option value="">Semua status kedatangan</option>
               <option>Sudah tiba</option>
               <option>Sedang antre</option>
+              <option>Belum tiba</option>
               <option>Belum terdata</option>
             </select></FilterField>}
           </div>}

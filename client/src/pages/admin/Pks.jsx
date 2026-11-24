@@ -16,7 +16,7 @@ const number = new Intl.NumberFormat('id-ID');
 const arrivalRoleOrder = { 'Kepala Sekolah': 0, Bendahara: 1 };
 function ArrivalChip({ status }) {
   const [label, style] = arrivalBadge(status);
-  return <span className={`tag ${style}`}>{label}</span>;
+  return <span className={`tag ${style}`}>{label.toLocaleUpperCase('id')}</span>;
 }
 const progressGroups = [
   { label: 'Biodata', className: 'pks-progress-group--bio', metrics: ['belum_login', 'bio_belum', 'bio_proses', 'bio_tunggu', 'bio_ok'] },

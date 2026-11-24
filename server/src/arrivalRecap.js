@@ -5,6 +5,9 @@ import { eventId } from './eventContext.js';
 
 const key = (value) => String(value ?? '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 const schoolKey = (value) => key(String(value ?? '').toLowerCase().replace(/\bsd\s*n(?=\s|\d|[.-])/g, 'sd negeri '));
+// Nama di rekap bisa memuat beberapa gelar yang tidak ada di daftar sekolah.
+const attendeeNameKey = (value) => key(String(value ?? '').split(',')[0].trim()
+  .replace(/(?:\s+(?:s\.?ag|s\.?pd(?:\.?i)?|s\.?t|m\.?pd(?:\.?i)?|m\.?t)\.?)+$/i, ''));
 const aliases = {
   hotelatriatangerang: 'atriatangerang', holidayinn: 'holidayinnjakarta',
   mercurebatavia: 'mercurebataviajakarta', mercurejakartabatavia: 'mercurebataviajakarta',
@@ -20,7 +23,7 @@ const roles = {
   sekolah: 'bendahara', bendahara: 'bendahara', pengawas: 'pengawas', dinaspendidikan: 'dinaspendidikan',
   kepalasekolah: 'kepalasekolah', fasil: 'fasilitator', fasilitator: 'fasilitator', bbpmp: 'bbpmp', bpmp: 'bbpmp',
 };
-const priority = { sedang_antre: 1, sudah_tiba: 2, selesai: 3 };
+const priority = { belum_tiba: 1, sedang_antre: 2, sudah_tiba: 3, selesai: 4 };
 const states = { selesai: 'selesai', sudahtiba: 'sudah_tiba', sedangantri: 'sedang_antre', sedangantre: 'sedang_antre' };
 const sourcePositions = {
   bendahara: 'Bendahara', pengawas: 'Pengawas', dinaspendidikan: 'Dinas Pendidikan',
@@ -35,13 +38,12 @@ export async function getSchoolArrivalStatuses(schools) {
     WHERE ${eventVenueScope('v')} AND p.position IN ('Bendahara', 'Kepala Sekolah')`);
   const schoolIdentity = (venue, name) => JSON.stringify([arrivalVenueKey(venue), schoolKey(name)]);
   const bySchool = new Map();
-  const attendeeKey = value => key(String(value ?? '').split(',')[0]);
   for (const row of rows) {
     if (!schoolKey(row.institution)) continue;
     const identity = schoolIdentity(row.venue, row.institution);
     if (!bySchool.has(identity)) bySchool.set(identity, new Map());
     const attendees = bySchool.get(identity);
-    const name = attendeeKey(row.name);
+    const name = attendeeNameKey(row.name);
     if (!name) continue;
     const previous = attendees.get(name);
     if (!previous || (priority[row.arrival_status] || 0) > (priority[previous.arrival_status] || 0)) {
@@ -50,7 +52,7 @@ export async function getSchoolArrivalStatuses(schools) {
   }
   return schools.map(school => {
     const attendees = bySchool.get(schoolIdentity(school.venue, school.name)) || new Map();
-    const head = attendeeKey(school.head_name);
+    const head = attendeeNameKey(school.head_name);
     const isHead = (name, row) => row.position === 'Kepala Sekolah' || name === head;
     const canInferTreasurer = attendees.size === 2 && [...attendees].filter(([name, row]) => isHead(name, row)).length === 1;
     const arrival_attendees = [...attendees].map(([name, row]) => ({
@@ -181,7 +183,6 @@ export async function importArrivalRecap(rows, summary = null, { audit = false }
   const proposals = [];
   const genericSchoolNames = new Map();
   const schoolAttendanceKey = (venue, institution) => JSON.stringify([arrivalVenueKey(venue), schoolKey(institution)]);
-  const attendeeNameKey = (name) => key(String(name ?? '').split(',')[0]);
   if (eventId() === 5) {
     for (const [hotel, rawRole, name, institution] of rows) {
       if (key(rawRole) !== 'sekolah' || !attendeeNameKey(name)) continue;
@@ -207,13 +208,17 @@ export async function importArrivalRecap(rows, summary = null, { audit = false }
     if (!venue) throw new HttpError(400, `Venue di Excel tidak ditemukan di aplikasi: ${hotel || '(kosong)'}.`);
     if (!snapshots.has(venue.id)) snapshots.set(venue.id, { venue_id: venue.id, marks: {}, representatives: {}, detail_rows: [] });
     const snapshot = snapshots.get(venue.id);
-    const unconfirmed = key(confirmation) === 'belumkonfirmasi' || (!confirmation && key(rawArrival) === 'belumkonfirmasi');
+    const arrivalKey = key(rawArrival);
+    const confirmationKey = key(confirmation);
+    const unconfirmed = confirmationKey === 'belumkonfirmasi' || (!confirmationKey && arrivalKey === 'belumkonfirmasi');
     const recorded = unconfirmed && people.some(p => p.has_attendance && p.venue_id === venue.id
       && roles[key(p.position)] === roles[key(rawRole)]
       && (key(p.name) === key(name) || (roles[key(rawRole)] === 'bendahara' && schoolKey(institution)
         && (p.institution || '').split(';').some(part => schoolKey(part) === schoolKey(institution)))));
     if (unconfirmed && !recorded) continue;
-    const arrival = states[key(rawArrival)];
+    const arrival = states[arrivalKey];
+    const notArrived = arrivalKey === 'belumtiba' ||
+      (confirmationKey === 'bersediahadir' && (!arrivalKey || arrivalKey === 'belumkonfirmasi'));
     let role = roles[key(rawRole)];
     if (eventId() === 5 && key(rawRole) === 'sekolah') {
       const heads = people.filter(p => p.venue_id === venue.id && roles[key(p.position)] === 'kepalasekolah'
@@ -228,7 +233,7 @@ export async function importArrivalRecap(rows, summary = null, { audit = false }
     snapshot.detail_rows.push({
       id: snapshot.detail_rows.length + 1,
       name, institution, position: sourcePositions[role || roles[key(rawRole)]] || rawRole,
-      arrival_status: arrival || (key(rawArrival) === 'belumtiba' ? 'belum_tiba' : null),
+      arrival_status: arrival || (notArrived ? 'belum_tiba' : null),
     });
     const source = { venue: venue.name, institution, rawRole };
     if (!role && eventId() === 5 && key(rawRole) === 'sekolah') {
@@ -266,8 +271,7 @@ export async function importArrivalRecap(rows, summary = null, { audit = false }
     }
     const id = person.id;
     if (priority[arrival] > (priority[snapshot.marks[id]] || 0)) snapshot.marks[id] = arrival;
-    const plainName = (value) => key(String(value).split(',')[0].replace(/\s+(?:s\.?pd|s\.?t|m\.?pd|m\.?t)\.?$/i, ''));
-    if (key(name) && name.trim() !== '-' && plainName(name) !== plainName(person.name)) {
+    if (key(name) && name.trim() !== '-' && attendeeNameKey(name) !== attendeeNameKey(person.name)) {
       snapshot.representatives[id] = { name: name.trim(), original_name: person.name };
     }
   }

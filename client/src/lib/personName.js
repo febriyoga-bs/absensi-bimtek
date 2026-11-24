@@ -1,5 +1,5 @@
 const degrees = ['S.Pd.I', 'M.Pd.I', 'S.Tr.T', 'S.Tr.Kom', 'A.Md.Kom', 'A.Md.Kep', 'A.Md.T',
-  'S.Si', 'S.Pd', 'S.T', 'S.E', 'S.H', 'S.Kom', 'S.Sos', 'S.Ak', 'S.AP', 'S.Kep', 'S.KM',
+  'S.Si', 'S.Pd', 'S.T', 'S.E', 'S.H', 'S.Kom', 'S.Sos', 'S.Ak', 'S.Ag', 'S.AP', 'S.Kep', 'S.KM',
   'M.Si', 'M.Pd', 'M.T', 'M.E', 'M.H', 'M.Kom', 'M.Sos', 'M.Ak', 'M.AP', 'M.M', 'M.Ars',
   'M.Sc', 'B.Sc', 'M.Eng', 'B.Eng', 'Ph.D', 'D.Eng', 'A.Md'];
 const degreeNames = new Map(degrees.map((degree) => [degree.toLowerCase(), degree]));
@@ -17,5 +17,6 @@ export function personName(value) {
     prefix + preserve(title === 'dr' ? 'dr.' : ({prof:'Prof.',drg:'drg.',dr:'Dr.',ir:'Ir.',ar:'Ar.'})[title.toLowerCase()]));
   return text.toLocaleLowerCase('id').replace(/(^|[\s'-])(\p{L})/gu,
     (_, prefix, letter) => prefix + letter.toLocaleUpperCase('id')).replace(/\bupdt(?=\s+spf\b)/gi, 'UPTD').replace(/\b(?:lo|sd|sdn|it|pks|upt|uptd|spf)\b/gi, (abbreviation) => abbreviation.toUpperCase()).replace(/\bBb\/bpmp\b/gi, 'BB/BPMP')
+    .replace(/^hj\.(\s*)(\p{L})/iu, (_, gap, letter) => 'HJ.' + gap + letter.toLocaleUpperCase('id'))
     .replace(/\uE000(\d+)\uE001/g, (_, index) => preserved[Number(index)]);
 }
