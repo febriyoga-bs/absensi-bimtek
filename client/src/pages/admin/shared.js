@@ -13,6 +13,7 @@ export function sessionTitle(session) {
 export function arrivalBadge(status) {
   if (status === 'sedang_antre') return ['Sedang antre', 'tag--venue'];
   if (status === 'selesai' || status === 'sudah_tiba') return ['Sudah tiba', 'tag--arrival'];
+  if (status === 'belum_tiba') return ['Belum tiba', 'tag--off'];
   return ['Belum terdata', 'tag--off'];
 }
 
