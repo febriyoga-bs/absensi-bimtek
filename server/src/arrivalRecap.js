@@ -20,7 +20,7 @@ const roles = {
   sekolah: 'bendahara', bendahara: 'bendahara', pengawas: 'pengawas', dinaspendidikan: 'dinaspendidikan',
   kepalasekolah: 'kepalasekolah', fasil: 'fasilitator', fasilitator: 'fasilitator', bbpmp: 'bbpmp', bpmp: 'bbpmp',
 };
-const priority = { sedang_antre: 1, sudah_tiba: 2, selesai: 3 };
+const priority = { belum_tiba: 1, sedang_antre: 2, sudah_tiba: 3, selesai: 4 };
 const states = { selesai: 'selesai', sudahtiba: 'sudah_tiba', sedangantri: 'sedang_antre', sedangantre: 'sedang_antre' };
 const sourcePositions = {
   bendahara: 'Bendahara', pengawas: 'Pengawas', dinaspendidikan: 'Dinas Pendidikan',
@@ -202,7 +202,10 @@ export async function importArrivalRecap(rows, summary = null) {
       && (key(p.name) === key(name) || (roles[key(rawRole)] === 'bendahara' && schoolKey(institution)
         && (p.institution || '').split(';').some(part => schoolKey(part) === schoolKey(institution)))));
     if (unconfirmed && !recorded) continue;
-    const arrival = states[key(rawArrival)];
+    const arrivalKey = key(rawArrival);
+    const arrival = states[arrivalKey];
+    const confirmed = key(confirmation) === 'bersediahadir';
+    const notArrived = arrivalKey === 'belumtiba' || (confirmed && !arrivalKey);
     let role = roles[key(rawRole)];
     if (eventId() === 5 && key(rawRole) === 'sekolah') {
       const heads = people.filter(p => p.venue_id === venue.id && roles[key(p.position)] === 'kepalasekolah'
@@ -217,7 +220,7 @@ export async function importArrivalRecap(rows, summary = null) {
     snapshot.detail_rows.push({
       id: snapshot.detail_rows.length + 1,
       name, institution, position: sourcePositions[role || roles[key(rawRole)]] || rawRole,
-      arrival_status: arrival || (key(rawArrival) === 'belumtiba' ? 'belum_tiba' : null),
+      arrival_status: arrival || (notArrived ? 'belum_tiba' : null),
     });
     if (!role && eventId() === 5 && key(rawRole) === 'sekolah') { unmatched++; continue; }
     if (!arrival && !['dinaspendidikan', 'bbpmp'].includes(role)) continue;
