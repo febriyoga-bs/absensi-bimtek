@@ -490,13 +490,16 @@ select:disabled { background-color: var(--surface-2); color: var(--muted); curso
 @media (min-width: 1300px) {
   .dashboard-overview--single .venue-attendance__groups { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 }
-.venue-attendance__groups > button { min-height: 44px; padding: 8px 9px; border: 1px solid transparent; border-radius: 8px;
+.venue-attendance__group { background: var(--surface-2); border-radius: 8px; }
+.venue-attendance__main { width: 100%; min-height: 44px; padding: 8px 9px; border: 1px solid transparent; border-radius: 8px;
   background: var(--surface-2); color: var(--text); font: inherit; text-align: left; overflow-wrap: anywhere; cursor: pointer; }
-.venue-attendance__groups > button:hover, .venue-attendance__groups > button:focus-visible { border-color: var(--accent); background: var(--accent-soft); }
+.venue-attendance__main:hover, .venue-attendance__main:focus-visible { border-color: var(--accent); background: var(--accent-soft); }
 .venue-attendance__label { display: block; color: var(--accent); font-size: 12px; font-weight: 700; text-decoration: underline; }
 .venue-attendance__count { display: block; color: var(--muted); font-size: 13px; }
 .venue-attendance__count b { color: var(--text); font-size: 17px; font-variant-numeric: tabular-nums; }
 .venue-attendance__groups small { font-size: 11px; }
+.venue-attendance__main > small { display: block; margin-top: 4px; line-height: 1.45; }
+.venue-attendance__outside { display: block; padding: 0 9px 8px; border: 0; background: transparent; color: var(--accent); font: inherit; font-size: 11px; line-height: 1.45; text-align: left; text-decoration: underline; cursor: pointer; }
 .arrival-venue-icon { display: grid; place-items: center; width: 36px; height: 36px; flex: none; border-radius: 10px; color: var(--accent); background: var(--accent-soft); }
 .arrival-venue-heading { min-width: 0; }
 .arrival-venue-heading h3 { margin: 0; overflow-wrap: anywhere; }

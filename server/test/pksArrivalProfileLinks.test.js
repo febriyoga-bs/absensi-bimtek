@@ -15,10 +15,24 @@ test('two representatives replace two unused slots and keep their generic role',
  const again=planArrivalProfileLinks([school],profiles.map(p=>({...p,has_attendance:true})),[patch]);
  assert.equal(again.length,0);
 });
-test('ambiguous same-name schools, excess attendees, and recorded old identities are not reassigned',()=>{
+test('ambiguous same-name schools and excess attendees are not reassigned',()=>{
  assert.equal(planArrivalProfileLinks([school,{...school,npsn:'99999999'}],profiles,[{venue_id:1}]).length,0);
  assert.equal(planArrivalProfileLinks([{...school,arrival_attendees:[...school.arrival_attendees,{name:'Third'}]}],profiles,[{venue_id:1}]).length,0);
- assert.equal(planArrivalProfileLinks([school],profiles.map(p=>({...p,has_attendance:true})),[{venue_id:1}]).length,0);
+});
+test('latest recap replaces recorded old identities within the same NPSN and venue',()=>{
+ const source={npsn:'10107859',name:'SD NEGERI ARONGAN WOYLA',venue:'Lumire Jakarta',arrival_attendees:[
+  {name:'Zainiyah',role:'Perwakilan Sekolah',status:'selesai'},
+  {name:'Dosis',role:'Perwakilan Sekolah',status:'selesai'},
+ ]};
+ const people=profiles.map((p,index)=>({...p,npsn:source.npsn,venue:source.venue,has_attendance:true,
+  name:index ? 'Bendahara - SD Negeri Arongan Woyla' : 'Adi Darmawan'}));
+ const [patch]=planArrivalProfileLinks([source],people,[{venue_id:1,marks:{},representatives:{}}]);
+ assert.deepEqual(Object.values(patch.representatives).map(p=>p.name).sort(),['Dosis','Zainiyah']);
+ assert.ok(Object.values(patch.representatives).every(p=>p.role==='Perwakilan Sekolah' && p.npsn==='10107859'));
+ assert.deepEqual(patch.marks,{1:'selesai',2:'selesai'});
+ assert.equal(people[0].name,'Adi Darmawan');
+ assert.equal(planArrivalProfileLinks([source],people,[patch]).length,0);
+ assert.equal(planArrivalProfileLinks([source],people.map(p=>({...p,npsn:'99999999'})),[{venue_id:1}]).length,0);
 });
 test('degree punctuation matches Fidaini without changing the person identity',()=>{
  assert.equal(arrivalPersonKey('Fidaini S,pd'),arrivalPersonKey('fidaini spd'));

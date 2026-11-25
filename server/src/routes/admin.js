@@ -93,7 +93,9 @@ r.get('/arrival-recap/:venueId/participants', requireSuper, ah(async (req, res) 
   res.json(await getArrivalRecapDetails(req.params.venueId, req.query.group));
 }));
 r.post('/arrival-recap/import', requireSuper, ah(async (req, res) => {
-  res.json(await importArrivalRecap(req.body?.rows, req.body?.summary));
+  const result = await importArrivalRecap(req.body?.rows, req.body?.summary);
+  await linkPksArrivalProfiles();
+  res.json(result);
 }));
 
 const publicLoAssignment = ({ account_id, venue_id, ...lo }) => lo;
@@ -481,7 +483,9 @@ r.get('/venue-attendance/:venueId/:group', ah(async (req, res) => {
     throw new HttpError(400, 'Venue tidak valid.');
   }
   if (req.user.role === 'lo' && venueId !== req.user.venue) throw new HttpError(403, 'Bukan venue Anda.');
-  res.json(await getVenueAttendanceDetails(venueId, req.params.group, scopeDay(req), await scopeTestSession(req)));
+  const scope = req.query.scope || 'all';
+  if (!['all', 'arrival_target', 'outside_target'].includes(scope)) throw new HttpError(400, 'Cakupan tidak valid.');
+  res.json(await getVenueAttendanceDetails(venueId, req.params.group, scopeDay(req), await scopeTestSession(req), scope));
 }));
 
 /**

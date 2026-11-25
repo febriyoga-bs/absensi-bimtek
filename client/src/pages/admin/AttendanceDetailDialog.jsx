@@ -34,18 +34,21 @@ function AssignmentSchools({ entry }) {
 export default function AttendanceDetailDialog({ details, onClose }) {
   const [detailResult, setDetailResult] = useState(null);
   const [attendanceFilter, setAttendanceFilter] = useState('checked_in');
+  const [showAllRecords, setShowAllRecords] = useState(false);
   const dialog = useRef(null);
   const recentDetails = useRef(new Map());
+  useEffect(() => { setShowAllRecords(false); }, [details]);
 
   useEffect(() => {
     if (!details) return;
     if (!dialog.current.open) dialog.current.showModal();
     let current = true;
-    const cacheKey = `${adminToken.get()}:${eventPath(details.path)}`;
+    const path = showAllRecords && details.allPath ? details.allPath : details.path;
+    const cacheKey = `${adminToken.get()}:${eventPath(path)}`;
     const cached = recentDetails.current.get(cacheKey);
     setDetailResult(cached && Date.now() - cached.at < 30_000 ? { entries: cached.entries } : null);
     setAttendanceFilter('checked_in');
-    api(details.path, { admin: true })
+    api(path, { admin: true })
       .then((entries) => {
         recentDetails.current.set(cacheKey, { entries, at: Date.now() });
         if (recentDetails.current.size > 24) recentDetails.current.delete(recentDetails.current.keys().next().value);
@@ -53,10 +56,10 @@ export default function AttendanceDetailDialog({ details, onClose }) {
       })
       .catch(() => { if (current) setDetailResult({ error: true }); });
     return () => { current = false; };
-  }, [details]);
+  }, [details, showAllRecords]);
 
   const allEntries = detailResult?.entries ?? details?.entries;
-  const detailEntries = details?.arrivedOnly ? allEntries?.filter(arrivedAtVenue) : allEntries;
+  const detailEntries = details?.arrivedOnly && !showAllRecords ? allEntries?.filter(arrivedAtVenue) : allEntries;
   const checkedIn = details?.filterByCheckIn ? detailEntries?.filter((entry) =>
     entry.people?.some((person) => ['valid', 'review', 'ditolak', 'berhalangan'].includes(person.status))) : null;
   const notCheckedIn = details?.filterByCheckIn ? detailEntries?.filter((entry) =>
@@ -77,7 +80,11 @@ export default function AttendanceDetailDialog({ details, onClose }) {
           </header>
           {!detailResult && <p className="muted small" role="status">Memuat status absensi...</p>}
           {detailResult?.error && <p className="alert alert--warn" role="status">Status absensi gagal dimuat. Tutup dan buka kembali daftar untuk mencoba lagi.</p>}
-          {details.sourceTotal != null && detailEntries && <p className="muted small">
+          {details.allPath && <button type="button" className="btn btn--sm" onClick={() => setShowAllRecords(value => !value)}>
+            {showAllRecords ? 'Lihat target kedatangan' : 'Lihat semua catatan dan peserta sesi'}
+          </button>}
+          {showAllRecords && <p className="muted small">Daftar lengkap termasuk catatan yang belum cocok dengan nama dan NPSN pada target kedatangan. Catatan ini tetap tersimpan.</p>}
+          {!showAllRecords && details.sourceTotal != null && detailEntries && <p className="muted small">
             {details.arrivedOnly ? 'Sudah tiba atau sedang antre di venue' : 'Acuan undangan sumber kehadiran'}: {number.format(details.sourceTotal)}.
             {detailEntries.length !== details.sourceTotal && ` Detail sumber memuat ${number.format(detailEntries.length)} entri; selisih dengan ringkasan sumber perlu diperiksa.`}
             {' '}Status absensi ditautkan hanya jika profil cocok; entri yang belum cocok tetap ditampilkan.

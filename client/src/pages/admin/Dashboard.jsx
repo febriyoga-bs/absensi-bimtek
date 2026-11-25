@@ -40,15 +40,21 @@ function VenueAttendanceCard({ venue, day, testSession, onDetails, visibleGroups
           const schoolOrDinas = ['bendahara', 'pengawas', 'dinas'].includes(key);
           const assumedArrived = ['lo', 'fasil'].includes(key);
           const target = (schoolOrDinas || key === 'representative') && arrivalTarget !== undefined ? arrivalTarget : total;
+          const scoped = venue[key].recorded_all !== undefined;
+          const params = new URLSearchParams(testSession ? { test_session_id: testSession.id } : day ? { day: day.date } : {});
+          const allPath = `/admin/venue-attendance/${venue.id}/${key}?${params}`;
+          if (scoped) params.set('scope', 'arrival_target');
           return (
-            <button type="button" key={key} aria-haspopup="dialog" aria-label={`Lihat daftar ${label} di ${venue.name}`}
+            <div key={key} className="venue-attendance__group">
+            <button type="button" className="venue-attendance__main" aria-haspopup="dialog" aria-label={`Lihat daftar ${label} di ${venue.name}`}
               onClick={() => onDetails({
                 label, subtitle: [venue.name, testSession ? sessionTitle(testSession) : day && checkInDayLabel(day)].filter(Boolean).join(' · '),
-                path: `/admin/venue-attendance/${venue.id}/${key}${testSession ? `?test_session_id=${testSession.id}` : day ? `?day=${day.date}` : ''}`,
+                path: `/admin/venue-attendance/${venue.id}/${key}?${params}`,
+                allPath: scoped ? allPath : undefined,
                 sessionDay: testSession ? sessionTitle(testSession) : day && checkInDayLabel(day),
                 filterByCheckIn: true,
-                arrivedOnly: key === 'representative',
-                sourceTotal: key === 'representative' ? arrivalTarget : venue[key].source === 'arrival' ? total : undefined,
+                arrivedOnly: key === 'representative' || scoped,
+                sourceTotal: scoped ? target : key === 'representative' ? arrivalTarget : venue[key].source === 'arrival' ? total : undefined,
               })}>
               <span className="venue-attendance__label">{label} <FontIcon name="chevron-right" /></span>
               <span className="venue-attendance__count"><b>{number.format(attended)}</b> / {number.format(target)} <small>sudah dicatat</small></span>
@@ -58,6 +64,15 @@ function VenueAttendanceCard({ venue, day, testSession, onDetails, visibleGroups
                 {registered === 0 ? 'Belum ada profil absensi' : `${number.format(registered)} punya profil absensi`}
               </small>}
             </button>
+            {venue[key].recorded_outside_target > 0 && <button type="button" className="venue-attendance__outside" aria-haspopup="dialog"
+              onClick={() => {
+                const outsideParams = new URLSearchParams(params);
+                outsideParams.set('scope', 'outside_target');
+                onDetails({label: `${label} di luar target kedatangan`, subtitle: venue.name,
+                  path: `/admin/venue-attendance/${venue.id}/${key}?${outsideParams}`,
+                  sessionDay: testSession ? sessionTitle(testSession) : day && checkInDayLabel(day), filterByCheckIn: true});
+              }}>{number.format(venue[key].recorded_outside_target)} catatan di luar target kedatangan</button>}
+            </div>
           );
         })}
       </div>

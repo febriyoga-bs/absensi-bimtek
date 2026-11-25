@@ -1,4 +1,5 @@
 import { eventId } from './eventContext.js';
+import {schoolRoleAttendance,schoolRoleDetails} from './schoolRoleAttendance.js';
 import { arrivedAtVenue } from '../../shared/venueArrival.js';
 import { pksVerifierArrivalSql } from './pksVerifierArrival.js';
 import { schoolIdentity, similarSchool } from './schoolIdentity.js';
@@ -151,7 +152,23 @@ SELECT a.id,a.person_id,a.venue_id,a.status,
     AND (CASE WHEN $3::int IS NULL THEN NOT s.is_test ELSE s.is_test AND s.id=$3 END)
   ORDER BY p.name,a.id`, [venueId,day,testSession]);
 
-export async function getVenueAttendanceDetails(venueId, group, day = null, testSession = null) {
+export async function getVenueAttendanceDetails(venueId, group, day = null, testSession = null, scope = 'all') {
+  if (['arrival_target','outside_target'].includes(scope) && eventId() === 5 && ['bendahara','pengawas'].includes(group)) {
+    const [{rows:[roster]},{rows:[venue]},{rows:records}] = await Promise.all([
+      q("SELECT data->'schools' AS schools FROM assignment_roster WHERE id=1"),
+      q('SELECT name FROM venues WHERE id=$1',[venueId]),loadSessionRecords(venueId,day,testSession),
+    ]);
+    const schools=(roster?.schools || []).filter(s=>arrivalVenueKey(s.venue)===arrivalVenueKey(venue?.name));
+    const details = schoolRoleDetails(await getSchoolArrivalStatuses(schools,venueId),group==='bendahara'?'Bendahara':'Kepala Sekolah',records);
+    if (scope === 'arrival_target') return details;
+    const selected = new Set(details.map(entry => entry.source_person_id).filter(Boolean));
+    const representatives = await getVenueAttendanceDetails(venueId,'representative',day,testSession);
+    const matchRepresentative = representativeMatcher(representatives);
+    return records.filter(record => recordGroup(record) === group && !selected.has(record.person_id) && !matchRepresentative(record))
+      .map(record => ({name:record.name,institution:record.institution,npsn:record.npsn,
+        profile_issue:'Catatan sesi ini belum masuk target kedatangan dengan nama, NPSN, dan peran yang cocok.',
+        people:[{name:record.name,registered:true,status:record.status}]}));
+  }
   if (group === 'representative' && eventId() === 5) {
     const [{ rows: [roster] }, { rows: [venue] }, { rows: records }] = await Promise.all([
       q("SELECT data->'schools' AS schools FROM assignment_roster WHERE id=1"), q('SELECT name FROM venues WHERE id=$1', [venueId]), loadSessionRecords(venueId, day, testSession),
@@ -320,10 +337,12 @@ export async function getVenueAttendance(venueId, day = null, testSession = null
     }
   }
   const representativesByVenue = new Map();
+  const schoolsByVenue = new Map();
   if (eventId() === 5) {
     const schools = await getSchoolArrivalStatuses(roster?.schools || []);
     for (const card of cards.values()) {
       const assigned = schools.filter(school => arrivalVenueKey(school.venue) === arrivalVenueKey(card.name));
+      schoolsByVenue.set(card.id,assigned);
       const representatives = schoolRepresentatives(assigned, card.name);
       representativesByVenue.set(card.id, representatives);
       card.representative = { ...emptyCount(), arrivalTarget: representatives.filter(arrivedAtVenue).length };
@@ -369,6 +388,14 @@ export async function getVenueAttendance(venueId, day = null, testSession = null
       card[group].recorded = Math.max(0, card[group].recorded - 1);
       if (group === 'other') card.other.total = Math.max(0, card.other.total - 1);
       card.representative.recorded++;
+    }
+    const card=cards.get(id);
+    for(const [group,role] of [['bendahara','Bendahara'],['pengawas','Kepala Sekolah']]) {
+      const scoped=schoolRoleAttendance(schoolsByVenue.get(id) || [],role,records);
+      card[group].recorded_all=card[group].recorded;
+      card[group].recorded_outside_target=Math.max(0,card[group].recorded-scoped.recorded);
+      card.other.recorded+=Math.max(0,card[group].recorded-scoped.recorded);
+      Object.assign(card[group],scoped);
     }
   }
   return [...cards.values()];

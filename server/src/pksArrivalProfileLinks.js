@@ -37,13 +37,14 @@ export function planArrivalProfileLinks(schools, profiles, recaps) {
     for (const person of arrivals) {
       if (assigned.has(person) || person.role === 'Perwakilan Sekolah') continue;
       const role = String(person.role).toLowerCase().replace(/\s/g, '');
-      const slots = candidates.filter(p => !used.has(p.id) && String(p.position).toLowerCase().replace(/\s/g, '') === role
-        && (!p.has_attendance || /^bendahara\s*[—–-]/i.test(p.name || '')));
+      const slots = candidates.filter(p => !used.has(p.id) && String(p.position).toLowerCase().replace(/\s/g, '') === role);
       if (slots.length === 1) { assigned.set(person, slots[0]); used.add(slots[0].id); }
     }
     const remaining = arrivals.filter(p => !assigned.has(p) && p.role === 'Perwakilan Sekolah')
       .sort((a,b) => arrivalPersonKey(a.name).localeCompare(arrivalPersonKey(b.name)));
-    const empty = candidates.filter(p => !used.has(p.id) && !p.has_attendance && !recap.representatives?.[p.id])
+    // The uploaded recap is authoritative for the current attendee names.
+    // Reuse the same school slots even when an older identity has attendance.
+    const empty = candidates.filter(p => !used.has(p.id))
       .sort((a,b) => a.id - b.id);
     if (remaining.length <= empty.length) remaining.forEach((person,index) => assigned.set(person, empty[index]));
     for (const [person, profile] of assigned) {
