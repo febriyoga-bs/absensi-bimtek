@@ -2,7 +2,7 @@ import { q } from './db.js';
 import { HttpError } from './util.js';
 import { eventVenueScope } from './eventVenues.js';
 import { eventId } from './eventContext.js';
-import { arrivalSchoolOverride } from './arrivalSchoolOverrides.js';
+import { arrivalSchoolOverride, schoolHeadOverride } from './arrivalSchoolOverrides.js';
 
 const key = (value) => String(value ?? '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 const schoolKey = (value) => key(String(value ?? '').toLowerCase().replace(/\bsd\s*n(?=\s|\d|[.-])/g, 'sd negeri '));
@@ -57,7 +57,8 @@ export async function getSchoolArrivalStatuses(schools, venueId = null) {
       ...(bySchool.get(schoolIdentity(school.venue, school.name)) || []),
       ...(bySchool.get(JSON.stringify(['npsn', arrivalVenueKey(school.venue), String(school.npsn)])) || []),
     ]);
-    const head = attendeeNameKey(school.head_name);
+    const headName = schoolHeadOverride(school.npsn) || school.head_name;
+    const head = attendeeNameKey(headName);
     const isHead = (name, row) => row.position === 'Kepala Sekolah' || name === head;
     const canInferTreasurer = attendees.size === 2 && [...attendees].filter(([name, row]) => isHead(name, row)).length === 1;
     const fallbackRole = head && attendees.size === 1 ? 'Perwakilan Sekolah' : 'Peserta sekolah';
@@ -68,7 +69,7 @@ export async function getSchoolArrivalStatuses(schools, venueId = null) {
     }));
     const arrival_status = arrival_attendees.reduce((best, { status }) =>
       !best || (priority[status] || 0) > (priority[best] || 0) ? status : best, null);
-    return { ...school, arrival_status, arrival_attendees };
+    return { ...school, head_name: headName, arrival_status, arrival_attendees };
   });
 }
 export function validateArrivalSummaryRow(row) {

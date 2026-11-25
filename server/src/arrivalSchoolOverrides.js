@@ -8,3 +8,8 @@ export function arrivalSchoolOverride(row) {
     && key(row.institution) === 'uptdsdnegeri153003hudopanauuli1') return '10206644';
   return null;
 }
+
+// Current head confirmed against the user's school mapping, keyed by NPSN.
+export function schoolHeadOverride(npsn) {
+  return String(npsn) === '10101744' ? 'Ramatsyah' : null;
+}
