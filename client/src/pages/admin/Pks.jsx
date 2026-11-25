@@ -53,7 +53,7 @@ function summarizeAttendance(schools) {
   };
 }
 
-function ArrivalTotalsRow({ title, totalLabel, total, counts, onSelect }) {
+function ArrivalTotalsRow({ title, totalLabel, total, counts, onSelect, activeLabel }) {
   return <div className="pks-arrival-row">
     <h3>{title}</h3>
     <div className="pks-arrival-totals">
@@ -63,6 +63,7 @@ function ArrivalTotalsRow({ title, totalLabel, total, counts, onSelect }) {
       </button>
       {arrivalStatuses.map((code, index) => (
         <button key={code} type="button" onClick={() => onSelect(arrivalOptions[index])}
+          aria-pressed={activeLabel === arrivalOptions[index]}
           aria-label={`${title}, ${arrivalOptions[index]}, ${number.format(counts[index])}`}>
           <ArrivalChip status={code} />
           <strong>{number.format(counts[index])}</strong>
@@ -72,15 +73,14 @@ function ArrivalTotalsRow({ title, totalLabel, total, counts, onSelect }) {
   </div>;
 }
 
-function PksAttendanceSummary({ schools, onSelect }) {
+function PksAttendanceSummary({ schools, onSelect, arrivalFilter, arrivalByParticipant }) {
   const totals = summarizeAttendance(schools);
-  return <section className="pks-progress-source-panel" aria-labelledby="pks-arrival-heading">
-    <div className="pks-progress-source-heading">
-      <div><h2 id="pks-arrival-heading">Rekap Kehadiran</h2></div>
-    </div>
-    <ArrivalTotalsRow title="Jumlah sekolah" totalLabel="Total sekolah" total={schools.length} counts={totals.schools} onSelect={onSelect} />
+  return <section className="pks-attendance-summary" aria-labelledby="pks-arrival-heading">
+    <h2 id="pks-arrival-heading">Rekap Kehadiran</h2>
+    <ArrivalTotalsRow title="Jumlah sekolah" totalLabel="Total sekolah" total={schools.length} counts={totals.schools}
+      onSelect={onSelect} activeLabel={arrivalByParticipant ? '' : arrivalFilter} />
     <ArrivalTotalsRow title="Jumlah peserta sekolah" totalLabel="Total peserta" total={totals.participantTotal} counts={totals.participants}
-      onSelect={label => onSelect(label, true)} />
+      onSelect={label => onSelect(label, true)} activeLabel={arrivalByParticipant ? arrivalFilter : ''} />
   </section>;
 }
 
@@ -135,7 +135,7 @@ export default function Pks({ publicView = false }) {
   const [status, setStatus] = useState('');
   const [arrivalFilter, setArrivalFilter] = useState('');
   const [arrivalByParticipant, setArrivalByParticipant] = useState(false);
-  const registerRef = useRef(null);
+  const resultsRef = useRef(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   async function load() {
@@ -239,7 +239,7 @@ export default function Pks({ publicView = false }) {
   function showAttendanceResults(label, byParticipant) {
     setView('schools');
     changeArrivalFilter(label, byParticipant);
-    registerRef.current?.scrollIntoView({
+    resultsRef.current?.scrollIntoView({
       behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
       block: 'start',
     });
@@ -259,14 +259,17 @@ export default function Pks({ publicView = false }) {
   const verifierRanking = view === 'verifierRanking' && schoolStatuses && rankingData
     ? { owners: rankVerifiers(rankingVerifiers, rankingData.schools, schoolStatuses) }
     : null;
-  const rows = (view === 'verifiers' ? verifiers : data?.[view] || []).filter(row => (!status || view !== 'schools' || schoolStatuses?.[row.npsn]?.stage === status)
-    && (!verifier || view !== 'schools' || row.facilitator === verifier)
-    && (!showArrivalFilter || !arrivalFilter || (arrivalByParticipant
+  const matchesDirectoryFilters = (row, rowView) => (!status || rowView !== 'schools' || schoolStatuses?.[row.npsn]?.stage === status)
+    && (!verifier || rowView !== 'schools' || row.facilitator === verifier)
+    && (!venue || row.venue === venue) && (!owner || (rowView === 'verifiers' ? row.los.includes(owner) : (rowView === 'lo' ? row.name : row.lo) === owner))
+    && [row.npsn, row.name, row.provinsi, row.kab_kota, row.venue, row.facilitator, row.coordinator, row.head_name, row.lo, ...(row.los || []), row.pks?.nomor_pks]
+      .some(value => String(value || '').toLocaleLowerCase('id').includes(search));
+  const filteredSchools = showArrivalFilter ? (data?.schools || []).filter(row => matchesDirectoryFilters(row, 'schools')) : [];
+  const rows = showArrivalFilter
+    ? filteredSchools.filter(row => !arrivalFilter || (arrivalByParticipant
       ? participantStatusIndexes(row).includes(arrivalOptions.indexOf(arrivalFilter))
       : matchesArrival(row, arrivalFilter)))
-    && (!venue || row.venue === venue) && (!owner || (view === 'verifiers' ? row.los.includes(owner) : (view === 'lo' ? row.name : row.lo) === owner))
-    && [row.npsn, row.name, row.provinsi, row.kab_kota, row.venue, row.facilitator, row.coordinator, row.head_name, row.lo, ...(row.los || []), row.pks?.nomor_pks]
-      .some(value => String(value || '').toLocaleLowerCase('id').includes(search)));
+    : (view === 'verifiers' ? verifiers : data?.[view] || []).filter(row => matchesDirectoryFilters(row, view));
   if (view === 'schools') {
     rows.sort((a, b) => personName(a.name).localeCompare(personName(b.name), 'id')
       || String(a.npsn).localeCompare(String(b.npsn)));
@@ -325,8 +328,7 @@ export default function Pks({ publicView = false }) {
           <p className="pks-progress-footnote">Sumber data: <a href={sourceData.source} target="_blank" rel="noreferrer">revitsd.kemendikdasmen.go.id</a>{sourceData.updatedAt ? ` · diperbarui ${sourceData.updatedAt}` : ''}</p>
         </>}
       </section>
-      <PksAttendanceSummary schools={data.schools} onSelect={showAttendanceResults} />
-      <section ref={registerRef} className="pks-register" aria-label="Daftar pemetaan PKS">
+      <section className="pks-register" aria-label="Daftar pemetaan PKS">
         <div className="pks-register__head">
           <div className="pks-tabs" role="group" aria-label="Tampilan pemetaan">{Object.entries(views).map(([key, label]) => <button key={key} aria-pressed={view === key} onClick={() => { if (loView && rankingView !== (key === 'ranking' || key === 'verifierRanking')) reset(); setView(key); setPage(1); }}>{label}<span>{number.format(key === 'verifiers' ? verifiers.length : key === 'verifierRanking' ? rankingVerifiers.length : key === 'ranking' ? (rankingData?.lo.length ?? 0) : data[key].length)}</span></button>)}</div>
           <p>Status progres sekolah dari Dashboard Revit.</p>
@@ -357,7 +359,9 @@ export default function Pks({ publicView = false }) {
           </FilterField>}
         </div>
         {rankingView && !rankingData ? (globalRosterError ? <p role="alert">{globalRosterError} <button type="button" onClick={loadGlobalRoster}>Coba lagi</button></p> : <p role="status">Memuat data peringkat…</p>) : view === 'verifierRanking' ? <PksRanking verifierMode onShowSchools={openRankingSchools} data={rankingData} venue={venue} query={search} owner={owner} sourceRanking={verifierRanking} sourceRankingLoading={!schoolStatuses && !schoolStatusesError} sourceRankingError={schoolStatusesError ? 'Peringkat Verifikator dari Revit belum dapat dimuat.' : ''} onReloadSourceRanking={loadSchoolStatuses} /> : view === 'ranking' ? <PksRanking publicView={publicView} onShowSchools={openRankingSchools} data={rankingData} venue={venue} query={search} owner={owner} onReload={loView ? loadGlobalRoster : load} sourceRanking={sourceRanking} sourceRankingError={sourceRankingError} sourceRankingLoading={sourceRankingLoading} onLoadSourceRanking={loadSourceRanking} onReloadSourceRanking={loadSourceRankingAgain} /> : <>
-        <div className="pks-results"><span><b>{number.format(rows.length)}</b> {view === 'schools' ? 'sekolah' : view === 'verifiers' ? 'verifikator' : 'LO'}{filtered ? ' sesuai filter' : ''}</span>{filtered && <button type="button" onClick={reset}>Reset filter</button>}</div>
+        {showArrivalFilter && <PksAttendanceSummary schools={filteredSchools} onSelect={showAttendanceResults}
+          arrivalFilter={arrivalFilter} arrivalByParticipant={arrivalByParticipant} />}
+        <div ref={resultsRef} className="pks-results"><span><b>{number.format(rows.length)}</b> {view === 'schools' ? 'sekolah' : view === 'verifiers' ? 'verifikator' : 'LO'}{filtered ? ' sesuai filter' : ''}</span>{filtered && <button type="button" onClick={reset}>Reset filter</button>}</div>
         <div className="pks-table-scroll" tabIndex={0} role="region" aria-label={`Tabel ${views[view]}`}>
           <table className={`table pks-table${view !== 'schools' ? ` pks-table--people${view === 'verifiers' ? ' pks-table--verifiers' : ''}` : ''}`}>
             <thead><tr>{(view === 'schools' ? ['Sekolah / NPSN', 'Wilayah', 'Venue', 'Verifikator', 'LO bertugas', 'Status', 'Kehadiran'] : ['Nama', 'Venue', ...(view === 'verifiers' ? ['Koordinator', 'LO bertugas'] : [])]).map(label => <th key={label} scope="col">{label}</th>)}</tr></thead>

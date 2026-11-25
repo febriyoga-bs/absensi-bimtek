@@ -30,12 +30,28 @@ html[data-theme="dark"] .pks-page {
 .pks-progress-card { display: flex; min-height: 92px; flex-direction: column; justify-content: space-between; gap: 6px; padding: 13px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .pks-progress-card span, .pks-progress-card small { color: var(--muted); font-size: 12px; line-height: 1.35; }
 .pks-progress-card strong { color: var(--text); font-size: 21px; line-height: 1.1; font-variant-numeric: tabular-nums; }
-.pks-arrival-totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 144px), 1fr)); gap: 10px; margin: 0; }
-.pks-arrival-row h3 { margin: 0 0 8px; font-size: 13px; }
-.pks-arrival-totals button { display: grid; justify-items: start; align-content: space-between; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); font: inherit; text-align: start; cursor: pointer; }
-.pks-arrival-totals button:hover { background: var(--pks-hover); border-color: var(--accent); }
+.pks-attendance-summary { display: grid; gap: 10px; padding: 16px 20px; border-top: 1px solid var(--line); }
+.pks-attendance-summary h2 { margin: 0 0 2px; color: var(--text); font-size: 16px; }
+.pks-arrival-row h3 { margin: 0 0 6px; color: var(--muted); font-size: 13px; }
+.pks-arrival-totals { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.pks-arrival-totals button { display: grid; min-width: 0; min-height: 64px; justify-items: start; align-content: space-between; gap: 6px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; text-align: start; cursor: pointer; }
+.pks-arrival-totals button:first-child { background: var(--pks-filter); }
+.pks-arrival-totals button:hover, .pks-arrival-totals button[aria-pressed="true"] { background: var(--pks-hover); border-color: var(--accent); }
 .pks-arrival-totals button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.pks-arrival-totals button > strong { font-size: 21px; font-variant-numeric: tabular-nums; }
+.pks-arrival-totals button > strong { font-size: 21px; line-height: 1.15; font-variant-numeric: tabular-nums; }
+@media (min-width: 1151px) {
+  .pks-arrival-row { display: grid; grid-template-columns: 104px minmax(0, 1fr); align-items: center; gap: 12px; }
+  .pks-arrival-row h3 { margin: 0; }
+}
+@media (max-width: 760px) {
+  .pks-arrival-totals { gap: 4px; }
+  .pks-arrival-totals button { min-height: 54px; gap: 4px; padding: 5px 4px; }
+  .pks-arrival-totals .tag { justify-self: center; max-width: 100%; padding: 2px 3px; font-size: clamp(8px, 2vw, 10px); line-height: 1.2; text-align: center; letter-spacing: 0; overflow-wrap: anywhere; }
+  .pks-arrival-totals button > strong { justify-self: center; font-size: clamp(12px, 3.4vw, 16px); }
+}
+@media (max-width: 600px) {
+  .pks-attendance-summary { padding: 14px 16px; }
+}
 .pks-progress-table-section { overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .pks-revit-school-stage { display: grid; gap: 4px; padding: 8px 10px; border-radius: 8px; background: var(--pks-filter); }
 .pks-revit-school-stage strong { color: var(--accent); }
@@ -121,11 +137,18 @@ html[data-theme="dark"] .pks-summary__total { --metric-bg: #244b7d; }
 .pks-summary button:hover { box-shadow: inset 0 0 0 1px var(--metric-ink); }
 .pks-summary button[aria-pressed="true"]::after { content: ''; position: absolute; bottom: 0; left: 20px; right: 20px; height: 3px; background: var(--metric-ink); }
 .pks-summary button:focus-visible, .pks-tabs button:focus-visible, .pks-edit:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
-.pks-register { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; min-width: 0; scroll-margin-top: 80px; }
+.pks-register { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; min-width: 0; }
 .pks-register__head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; padding: 0 20px; border-bottom: 1px solid var(--line); background: var(--surface); }
 .pks-register__head > p { font-size: 14px; color: var(--muted); margin: 0; }
 .pks-tabs { display: flex; gap: 22px; }
+.pks-register__head > .pks-tabs { flex-wrap: wrap; max-width: 100%; row-gap: 0; }
 .pks-tabs button { display: flex; align-items: center; gap: 7px; padding: 17px 0 14px; border: 0; border-bottom: 2px solid transparent; color: var(--muted); background: transparent; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.pks-register__head > .pks-tabs button { white-space: nowrap; }
+@media (max-width: 760px) {
+  .pks-register__head > .pks-tabs { column-gap: 14px; }
+  .pks-register__head > .pks-tabs button { min-height: 44px; padding: 8px 0; }
+  .pks-register__head > .pks-tabs button, .pks-register__head > .pks-tabs button span { font-size: 13px; }
+}
 .pks-tabs button[aria-pressed="true"] { color: var(--accent); border-bottom-color: var(--accent); }
 .pks-tabs button[aria-pressed="true"] span { color: var(--accent); }
 .pks-tabs button span { color: var(--muted); font-size: 14px; font-weight: 400; font-variant-numeric: tabular-nums; }
@@ -139,7 +162,11 @@ html[data-theme="dark"] .pks-summary__total { --metric-bg: #244b7d; }
 .pks-filters :is(input, select):focus { border-color: var(--accent); outline: 2px solid var(--accent-soft); outline-offset: 1px; }
 .pks-results { display: flex; align-items: center; justify-content: space-between; min-height: 36px; padding: 0 20px 12px; font-size: 14px; color: var(--muted); }
 .pks-results b { color: var(--text); font-weight: 600; }
-.pks-results { background: var(--pks-filter); }
+.pks-results { background: var(--pks-filter); scroll-margin-top: 80px; }
+.pks-attendance-summary + .pks-results { padding: 8px 20px; border-top: 1px solid var(--line); }
+@media (max-width: 600px) {
+  .pks-attendance-summary + .pks-results { padding-inline: 16px; }
+}
 .pks-results button { background: none; border: 0; color: var(--accent); font: inherit; font-size: 14px; cursor: pointer; padding: 4px 0; }
 .pks-table-scroll { overflow-x: auto; }
 .pks-table.table { min-width: 1040px; width: 100%; border: 0; border-radius: 0; border-collapse: collapse; margin: 0; font-size: 14px; }
