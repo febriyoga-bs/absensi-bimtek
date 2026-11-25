@@ -1,6 +1,6 @@
 import LoRepresentation from '../../components/LoRepresentation.jsx';
-import { useEffect, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Navigate, useOutletContext } from 'react-router-dom';
 import { api, isLO } from '../../api.js';
 import { selectedEvent } from '../../event.js';
 import { personName } from '../../lib/personName.js';
@@ -8,13 +8,15 @@ import { groupPksVerifiers } from '../../lib/pksVerifiers.js';
 import FilterField from '../../components/FilterField.jsx';
 import PksRanking, { rankVerifiers } from './PksRanking.jsx';
 import WhatsAppLink from '../../components/WhatsAppLink.jsx';
+import ArrivalImport from './ArrivalImport.jsx';
 import { pksArrivalBadge } from './shared.js';
 import './Pks.css';
 
 const views = { schools: 'Sekolah', verifiers: 'Verifikator', lo: 'LO', ranking: 'Peringkat LO', verifierRanking: 'Peringkat Verifikator' };
 const number = new Intl.NumberFormat('id-ID');
 const arrivalRoleOrder = { 'Kepala Sekolah': 0, Bendahara: 1 };
-const arrivalOptions = ['sudah_tiba', 'sedang_antre', 'belum_tiba', 'belum_tercatat'].map(code => pksArrivalBadge(code)[0]);
+const arrivalStatuses = ['sudah_tiba', 'sedang_antre', 'belum_tiba', 'belum_tercatat'];
+const arrivalOptions = arrivalStatuses.map(code => pksArrivalBadge(code)[0]);
 function matchesArrival(school, label) {
   if (school.arrival_statuses?.length) {
     return school.arrival_statuses.some(status => pksArrivalBadge(status)[0] === label);
@@ -27,6 +29,61 @@ function ArrivalChip({ status }) {
   const [label, style] = pksArrivalBadge(status);
   return <span className={`tag ${style}`}>{label.toLocaleUpperCase('id')}</span>;
 }
+
+const participantQuota = 2;
+function participantStatusIndexes(school) {
+  const attendees = (school.arrival_attendees || []).map(({ role, status }) => ({
+    roleOrder: arrivalRoleOrder[role] ?? 2,
+    statusIndex: arrivalOptions.indexOf(pksArrivalBadge(status)[0]),
+  }));
+  attendees.sort((a, b) => a.roleOrder - b.roleOrder || a.statusIndex - b.statusIndex);
+  return Array.from({ length: participantQuota }, (_, index) =>
+    attendees[index]?.statusIndex ?? arrivalOptions.length - 1);
+}
+
+function summarizeAttendance(schools) {
+  const participants = arrivalOptions.map(() => 0);
+  for (const school of schools) {
+    for (const statusIndex of participantStatusIndexes(school)) participants[statusIndex]++;
+  }
+  return {
+    schools: arrivalOptions.map(label => schools.filter(school => matchesArrival(school, label)).length),
+    participants,
+    participantTotal: schools.length * participantQuota,
+  };
+}
+
+function ArrivalTotalsRow({ title, totalLabel, total, counts, onSelect }) {
+  return <div className="pks-arrival-row">
+    <h3>{title}</h3>
+    <div className="pks-arrival-totals">
+      <button type="button" onClick={() => onSelect('')}>
+        <span className="tag">{totalLabel}</span>
+        <strong>{number.format(total)}</strong>
+      </button>
+      {arrivalStatuses.map((code, index) => (
+        <button key={code} type="button" onClick={() => onSelect(arrivalOptions[index])}
+          aria-label={`${title}, ${arrivalOptions[index]}, ${number.format(counts[index])}`}>
+          <ArrivalChip status={code} />
+          <strong>{number.format(counts[index])}</strong>
+        </button>
+      ))}
+    </div>
+  </div>;
+}
+
+function PksAttendanceSummary({ schools, onSelect }) {
+  const totals = summarizeAttendance(schools);
+  return <section className="pks-progress-source-panel" aria-labelledby="pks-arrival-heading">
+    <div className="pks-progress-source-heading">
+      <div><h2 id="pks-arrival-heading">Rekap Kehadiran</h2></div>
+    </div>
+    <ArrivalTotalsRow title="Jumlah sekolah" totalLabel="Total sekolah" total={schools.length} counts={totals.schools} onSelect={onSelect} />
+    <ArrivalTotalsRow title="Jumlah peserta sekolah" totalLabel="Total peserta" total={totals.participantTotal} counts={totals.participants}
+      onSelect={label => onSelect(label, true)} />
+  </section>;
+}
+
 const progressGroups = [
   { label: 'Biodata', className: 'pks-progress-group--bio', metrics: ['belum_login', 'bio_belum', 'bio_proses', 'bio_tunggu', 'bio_ok'] },
   { label: 'RAB & BA', className: 'pks-progress-group--rab', metrics: ['sepakat_rab', 'ba'] },
@@ -45,6 +102,7 @@ function Contact({ phone, email, name }) {
 }
 
 export default function Pks({ publicView = false }) {
+  const { user } = useOutletContext() || {};
   const loView = !publicView && isLO();
   const [globalRoster, setGlobalRoster] = useState(null);
   const [globalRosterError, setGlobalRosterError] = useState('');
@@ -76,11 +134,19 @@ export default function Pks({ publicView = false }) {
   const [view, setView] = useState('schools');
   const [status, setStatus] = useState('');
   const [arrivalFilter, setArrivalFilter] = useState('');
+  const [arrivalByParticipant, setArrivalByParticipant] = useState(false);
+  const registerRef = useRef(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   async function load() {
     setError('');
-    try { setData(await request()); } catch (e) { setError(e.message); }
+    try {
+      setData(await request());
+      return true;
+    } catch (e) {
+      setError(e.message);
+      return false;
+    }
   }
   async function loadGlobalRoster() {
     setGlobalRosterError('');
@@ -165,7 +231,20 @@ export default function Pks({ publicView = false }) {
   useEffect(() => { if (publicView || selectedEvent()?.id === 5) { load(); loadSource(); } }, []);
   useEffect(() => { if (loView && selectedEvent()?.id === 5) loadGlobalRoster(); }, [loView]);
   if (!publicView && selectedEvent()?.id !== 5) return <Navigate to="/admin/pelaporan" replace />;
-  function reset() { setQuery(''); setVenue(''); setOwner(''); setVerifier(''); setStatus(''); setArrivalFilter(''); setPage(1); }
+  function changeArrivalFilter(label, byParticipant = false) {
+    setArrivalFilter(label);
+    setArrivalByParticipant(Boolean(label) && byParticipant);
+    setPage(1);
+  }
+  function showAttendanceResults(label, byParticipant) {
+    setView('schools');
+    changeArrivalFilter(label, byParticipant);
+    registerRef.current?.scrollIntoView({
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+      block: 'start',
+    });
+  }
+  function reset() { setQuery(''); setVenue(''); setOwner(''); setVerifier(''); setStatus(''); changeArrivalFilter(''); }
   const showArrivalFilter = view === 'schools';
   const search = query.trim().toLocaleLowerCase('id');
   const verifiers = groupPksVerifiers(data?.verifiers, data?.schools);
@@ -182,7 +261,9 @@ export default function Pks({ publicView = false }) {
     : null;
   const rows = (view === 'verifiers' ? verifiers : data?.[view] || []).filter(row => (!status || view !== 'schools' || schoolStatuses?.[row.npsn]?.stage === status)
     && (!verifier || view !== 'schools' || row.facilitator === verifier)
-    && (!showArrivalFilter || !arrivalFilter || matchesArrival(row, arrivalFilter))
+    && (!showArrivalFilter || !arrivalFilter || (arrivalByParticipant
+      ? participantStatusIndexes(row).includes(arrivalOptions.indexOf(arrivalFilter))
+      : matchesArrival(row, arrivalFilter)))
     && (!venue || row.venue === venue) && (!owner || (view === 'verifiers' ? row.los.includes(owner) : (view === 'lo' ? row.name : row.lo) === owner))
     && [row.npsn, row.name, row.provinsi, row.kab_kota, row.venue, row.facilitator, row.coordinator, row.head_name, row.lo, ...(row.los || []), row.pks?.nomor_pks]
       .some(value => String(value || '').toLocaleLowerCase('id').includes(search)));
@@ -201,6 +282,7 @@ export default function Pks({ publicView = false }) {
       <div><h1>Pantau Rekap PKS</h1><p>Satuan Pendidikan Aman Bencana <span>·</span> 23–28 November 2026</p></div>
       {data && <p className="pks-heading__meta">{data.venues.length} Venue <span>·</span> {data.lo.length} LO <span>·</span> {verifiers.length} Verifikator{!!data.coordinators?.length && <><span>·</span> {data.coordinators.length} Koordinator</>}</p>}
     </header>
+    {!publicView && user?.role === 'admin' && <ArrivalImport onImported={load} />}
     {error && <div className="alert alert--err" role="alert">{error} {!data && <button className="btn btn--sm" onClick={load}>Coba lagi</button>}</div>}
     {!data && !error && <p role="status">Memuat pemetaan PKS…</p>}
     {data && <>
@@ -243,7 +325,8 @@ export default function Pks({ publicView = false }) {
           <p className="pks-progress-footnote">Sumber data: <a href={sourceData.source} target="_blank" rel="noreferrer">revitsd.kemendikdasmen.go.id</a>{sourceData.updatedAt ? ` · diperbarui ${sourceData.updatedAt}` : ''}</p>
         </>}
       </section>
-      <section className="pks-register" aria-label="Daftar pemetaan PKS">
+      <PksAttendanceSummary schools={data.schools} onSelect={showAttendanceResults} />
+      <section ref={registerRef} className="pks-register" aria-label="Daftar pemetaan PKS">
         <div className="pks-register__head">
           <div className="pks-tabs" role="group" aria-label="Tampilan pemetaan">{Object.entries(views).map(([key, label]) => <button key={key} aria-pressed={view === key} onClick={() => { if (loView && rankingView !== (key === 'ranking' || key === 'verifierRanking')) reset(); setView(key); setPage(1); }}>{label}<span>{number.format(key === 'verifiers' ? verifiers.length : key === 'verifierRanking' ? rankingVerifiers.length : key === 'ranking' ? (rankingData?.lo.length ?? 0) : data[key].length)}</span></button>)}</div>
           <p>Status progres sekolah dari Dashboard Revit.</p>
@@ -267,7 +350,7 @@ export default function Pks({ publicView = false }) {
             </select>
           </FilterField>}
           {showArrivalFilter && <FilterField label="Kehadiran">
-            <select value={arrivalFilter} onChange={e => { setArrivalFilter(e.target.value); setPage(1); }}>
+            <select value={arrivalFilter} onChange={e => changeArrivalFilter(e.target.value)}>
               <option value="">Semua kehadiran</option>
               {arrivalOptions.map(label => <option key={label}>{label}</option>)}
             </select>
