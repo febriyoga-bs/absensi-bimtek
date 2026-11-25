@@ -371,7 +371,7 @@ export default function Pks({ publicView = false }) {
                 <td className="pks-school-region" data-label="Wilayah">{row.kab_kota}<small>{row.provinsi}</small></td><td className="pks-school-venue" data-label="Venue"><span className="pks-venue-name">{row.venue}</span></td>
                 <td className="pks-school-support" data-label="Verifikator"><b>{personName(row.facilitator)}</b><Contact phone={row.facilitator_phone} email={row.facilitator_email} name={row.facilitator} /><div className="pks-school-coordinator">{row.coordinator && <small>Koordinator <strong>{personName(row.coordinator)}</strong></small>}<Contact phone={row.coordinator_phone} email={row.coordinator_email} name={row.coordinator} /></div></td><td className="pks-school-lo" data-label="LO bertugas"><div className="pks-verifier-los"><span>{personName(row.lo)}<LoRepresentation name={row.lo}/></span></div></td>
                 <td className="pks-school-status" data-label="Status"><SchoolRevitStatus status={schoolStatuses?.[row.npsn]} loading={!schoolStatuses} failed={schoolStatusesError} />{(row.bimtek?.note || row.pks?.catatan) && <small>Catatan: {[row.bimtek?.note,row.pks?.catatan].filter(Boolean).join(' · ')}</small>}</td>
-                <td data-label="Kehadiran">
+                <td className="pks-school-arrival" data-label="Kehadiran">
                   {row.arrival_attendees?.length ? [...row.arrival_attendees]
                     .sort((a, b) => (arrivalRoleOrder[a.role] ?? 2) - (arrivalRoleOrder[b.role] ?? 2))
                     .map(attendee => (

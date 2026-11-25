@@ -232,7 +232,8 @@ html[data-theme="dark"] .pks-summary__total { --metric-bg: #244b7d; }
   .pks-table.table .pks-edit { min-height: 44px; }
   .pks-table.table tbody tr.pks-school-card { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 12px; }
   .pks-table.table tbody tr.pks-school-card td { margin: 0; padding: 0; }
-  .pks-school-identity, .pks-school-support, .pks-school-lo, .pks-school-status, .pks-school-action { grid-column: 1 / -1; }
+  .pks-school-identity, .pks-school-support, .pks-school-lo, .pks-school-status, .pks-school-arrival, .pks-school-action { grid-column: 1 / -1; }
+  .pks-school-arrival .tag { white-space: nowrap; }
   .pks-table.table .pks-school-identity > b { font-size: 19px; line-height: 1.35; color: var(--text); }
   .pks-table.table .pks-school-identity .pks-npsn { display: inline-block; margin-top: 8px; padding: 3px 8px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 600; }
   .pks-school-head { margin-top: 14px; padding: 12px; border-radius: 10px; background: var(--pks-filter); }
@@ -240,8 +241,11 @@ html[data-theme="dark"] .pks-summary__total { --metric-bg: #244b7d; }
   .pks-school-head strong, .pks-school-coordinator strong { display: block; margin-top: 4px; color: var(--text); font-size: 14px; font-weight: 600; }
   .pks-table.table tbody tr.pks-school-card td.pks-school-support { padding: 14px; border: 1px solid var(--line); border-radius: 12px; }
   .pks-school-coordinator { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
-  .pks-table.table tbody tr.pks-school-card td.pks-school-status { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding-top: 14px; border-top: 1px solid var(--line); }
-  .pks-table.table .pks-school-status::before { margin: 0; }
+  .pks-table.table tbody tr.pks-school-card td.pks-school-status { display: block; padding-top: 14px; border-top: 1px solid var(--line); }
+  .pks-school-status .pks-revit-school-stage { gap: 0; padding: 3px 12px; }
+  .pks-school-status .pks-revit-school-stage > div { grid-template-columns: minmax(80px, 2fr) minmax(0, 3fr); align-items: baseline; gap: 10px; padding: 7px 0; }
+  .pks-school-status .pks-revit-school-stage > div + div { border-top: 1px solid var(--line); }
+  .pks-school-status .pks-revit-school-stage strong { overflow-wrap: anywhere; }
   .pks-school-status .pks-status { padding: 5px 10px; border-radius: 7px; background: var(--pks-filter); font-size: 12px; font-weight: 600; }
   .pks-table.table .pks-school-action::before { display: none; }
   .pks-table.table .pks-school-action .pks-edit { display: block; width: 100%; padding: 11px 16px; border-radius: 10px; background: var(--pks-header); color: var(--pks-header-ink); font-weight: 600; text-decoration: none; }
@@ -375,7 +379,7 @@ html[data-theme="dark"] .pks-summary__total { --metric-bg: #244b7d; }
   .pks-bimtek-owners .pks-metric-item { padding: 5px 0; }
   .pks-bimtek-owners .pks-metric-trigger { min-height: 28px; }
 }
-@media (max-width: 700px) { .pks-bimtek-overview dl { grid-template-columns: repeat(2,minmax(0,1fr)); } .pks-bimtek-overview dl > div:first-child { grid-column: 1 / -1; } .pks-bimtek-overview { padding: 16px; } .pks-school-status > small { flex-basis: 100%; } }
+@media (max-width: 700px) { .pks-bimtek-overview dl { grid-template-columns: repeat(2,minmax(0,1fr)); } .pks-bimtek-overview dl > div:first-child { grid-column: 1 / -1; } .pks-bimtek-overview { padding: 16px; } }
 .pks-dialog footer { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 24px; border-top: 1px solid var(--line); }
 @media (max-width: 1150px) { .pks-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pks-register__head > p { display: none; } .pks-summary button { padding: 18px 14px; } .pks-summary button span { font-size: 14px; } }
 @media (max-width: 600px) { .pks-heading h1 { font-size: 24px; } .pks-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pks-summary__total { grid-column: 1 / -1; } .pks-summary button { border-bottom: 1px solid var(--line); padding: 16px; } .pks-summary button b { font-size: 24px; } .pks-filters { grid-template-columns: minmax(0, 1fr); padding: 16px; gap: 12px; } .pks-register__head { padding: 0 16px; } .pks-tabs { gap: 18px; } .pks-pagination { padding: 14px 16px; gap: 12px; } .pks-pagination nav { width: 100%; justify-content: space-between; } .pks-form-grid { grid-template-columns: minmax(0, 1fr); } .pks-dialog header, .pks-dialog__body, .pks-dialog footer { padding: 18px; } }
