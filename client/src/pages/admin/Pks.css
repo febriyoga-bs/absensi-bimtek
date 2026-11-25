@@ -32,8 +32,16 @@ html[data-theme="dark"] .pks-page {
 .pks-progress-card strong { color: var(--text); font-size: 21px; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .pks-attendance-summary { display: grid; gap: 10px; padding: 16px 20px; border-top: 1px solid var(--line); }
 .pks-attendance-summary h2 { margin: 0 0 2px; color: var(--text); font-size: 16px; }
+.pks-arrival-heading { display: flex; align-items: center; gap: 6px; }
+.pks-arrival-heading h2 { margin: 0; }
+.pks-arrival-help { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; background: transparent; color: var(--accent); font: inherit; cursor: pointer; }
+.pks-arrival-help span { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent-soft); font-weight: 700; }
+.pks-arrival-help:focus-visible { outline: 2px solid var(--accent); border-radius: 6px; }
+.pks-arrival-help-dialog, .pks-arrival-help-dialog header { background: var(--surface); color: var(--text); }
+.pks-arrival-help-dialog p { line-height: 1.55; }
 .pks-arrival-row h3 { margin: 0 0 6px; color: var(--muted); font-size: 13px; }
 .pks-arrival-totals { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.pks-arrival-totals .tag { border-radius: 4px; }
 .pks-arrival-totals button { display: grid; min-width: 0; min-height: 64px; justify-items: start; align-content: space-between; gap: 6px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; text-align: start; cursor: pointer; }
 .pks-arrival-totals button:first-child { background: var(--pks-filter); }
 .pks-arrival-totals button:hover, .pks-arrival-totals button[aria-pressed="true"] { background: var(--pks-hover); border-color: var(--accent); }

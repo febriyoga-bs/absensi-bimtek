@@ -75,8 +75,21 @@ function ArrivalTotalsRow({ title, totalLabel, total, counts, onSelect, activeLa
 
 function PksAttendanceSummary({ schools, onSelect, arrivalFilter, arrivalByParticipant }) {
   const totals = summarizeAttendance(schools);
+  const helpRef = useRef(null);
   return <section className="pks-attendance-summary" aria-labelledby="pks-arrival-heading">
-    <h2 id="pks-arrival-heading">Rekap Kehadiran</h2>
+    <div className="pks-arrival-heading">
+      <h2 id="pks-arrival-heading">Rekap Kehadiran</h2>
+      <button type="button" className="pks-arrival-help" aria-label="Cara menghitung rekap kehadiran"
+        aria-haspopup="dialog" onClick={() => helpRef.current.showModal()}>
+        <span aria-hidden="true">?</span>
+      </button>
+    </div>
+    <dialog ref={helpRef} className="assignment-dialog pks-arrival-help-dialog" aria-labelledby="pks-arrival-help-title">
+      <header><h3 id="pks-arrival-help-title">Cara menghitung kehadiran sekolah</h3></header>
+      <p><strong>Total Sekolah</strong> menghitung setiap sekolah satu kali. Pada kartu status, satu sekolah bisa muncul di beberapa kategori jika status pesertanya berbeda.</p>
+      <p>Misalnya, jika kepala sekolah sudah tiba dan bendahara masih antre, sekolah tersebut masuk ke kartu <strong>Sudah Tiba</strong> dan <strong>Sedang Antre</strong>. Karena itu, penjumlahan kartu status bisa melebihi Total Sekolah.</p>
+      <form method="dialog"><button type="submit" className="btn btn--sm">Tutup</button></form>
+    </dialog>
     <ArrivalTotalsRow title="Jumlah sekolah" totalLabel="Total sekolah" total={schools.length} counts={totals.schools}
       onSelect={onSelect} activeLabel={arrivalByParticipant ? '' : arrivalFilter} />
     <ArrivalTotalsRow title="Jumlah peserta sekolah" totalLabel="Total peserta" total={totals.participantTotal} counts={totals.participants}
