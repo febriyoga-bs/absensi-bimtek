@@ -17,6 +17,17 @@ export function arrivalBadge(status) {
   return ['Belum terdata', 'tag--off'];
 }
 
+const pksArrivalBadges = {
+  'Belum terdata': ['Belum Konfirmasi', 'tag--venue'],
+  'Belum tiba': ['Bersedia Hadir', 'tag--arrival-confirmed'],
+  'Sudah tiba': ['Sudah Tiba (Terdata di SPJ)', 'tag--arrival'],
+};
+
+export function pksArrivalBadge(status) {
+  const badge = arrivalBadge(status);
+  return pksArrivalBadges[badge[0]] ?? badge;
+}
+
 export const FLAG_LABEL = {
   qr_lo: 'Diabsenkan LO / panitia',
   akurasi_rendah: 'Akurasi GPS rendah — cek manual',

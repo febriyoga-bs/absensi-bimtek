@@ -908,6 +908,7 @@ select:disabled { background-color: var(--surface-2); color: var(--muted); curso
 .import-progress-dialog .alert ul { padding-left: 18px; }
 .scan-table [hidden], #scan-filters[hidden] { display: none !important; }
 .tag--arrival { color: var(--ok); background: var(--ok-soft); }
+.tag--arrival-confirmed { color: #174da3; background: #dbeafe; }
 .scan__unavailable { background: #fff1f0; color: #a12a24; border-color: #efbeb9; }
 .scan__unavailable:hover:not(:disabled) { background: #ffe2df; border-color: #c96861; }
 .arrival-import { margin-bottom: 14px; }

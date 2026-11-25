@@ -5,7 +5,7 @@ import { Link, useOutletContext } from 'react-router-dom';
 import jsQR from 'jsqr';
 import { api } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
-import { arrivalBadge, fmtDT, sessionTitle } from './shared.js';
+import { pksArrivalBadge, fmtDT, sessionTitle } from './shared.js';
 import { SkelRows, Spinner } from '../../components/Skeleton.jsx';
 import CameraCapture from '../../components/CameraCapture.jsx';
 import WhatsAppLink from '../../components/WhatsAppLink.jsx';
@@ -17,6 +17,9 @@ import PeriodReportStatus from '../../components/PeriodReportStatus.jsx';
 // Absenkan lewat scan QR dinonaktifkan sementara. Ubah ke true untuk memunculkan lagi tab "Scan QR"
 // (server juga perlu QR_SCAN_ENABLED = true di server/src/routes/admin.js).
 const QR_SCAN_ENABLED = false;
+const arrivalFilters = Object.entries({
+  arrived: 'sudah_tiba', queued: 'sedang_antre', confirmed: 'belum_tiba', unrecorded: 'belum_tercatat',
+}).map(([key, status]) => [key, ...pksArrivalBadge(status)]);
 
 /** Bunyi singkat: nada tinggi = berhasil, nada rendah = gagal */
 function beep(ok) {
@@ -364,9 +367,7 @@ export default function Scan() {
                 setLoading(true); setFilterArrival(e.target.value); setPage(1);
               }}>
                 <option value="">SEMUA STATUS KEDATANGAN</option>
-                <option value="arrived">SUDAH TIBA</option>
-                <option value="queued">SEDANG ANTRE</option>
-                <option value="unrecorded">BELUM TERDATA</option>
+                {arrivalFilters.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
               </select></label>
             </div>
             {sessionError && <p className="alert alert--warn" role="status">Daftar sesi uji coba gagal dimuat. {sessionError}</p>}
@@ -375,11 +376,11 @@ export default function Scan() {
             {!loading && !listError && list?.arrival_summary && (
               <div className="scan__arrival-recap">
                 <b>Rekap Kehadiran</b>
-                <span className="tag tag--arrival">{number.format(list.arrival_summary.arrived)} SUDAH TIBA</span>
-                <span className="tag tag--venue">{number.format(list.arrival_summary.queued)} SEDANG ANTRE</span>
-                <span className="tag tag--off">{number.format(list.arrival_summary.unrecorded)} BELUM TERDATA</span>
+                {arrivalFilters.map(([key, label, style]) => (
+                  <span key={key} className={`tag ${style}`}>{number.format(list.arrival_summary[key] ?? 0)} {label.toLocaleUpperCase('id')}</span>
+                ))}
                 <Link className="btn btn--sm" to="/admin/kehadiran">Buka rekap</Link>
-                {list.arrival_summary.unrecorded > 0 && !list.arrival_summary.arrived && !list.arrival_summary.queued &&
+                {list.arrival_summary.unrecorded > 0 && !list.arrival_summary.arrived && !list.arrival_summary.queued && !list.arrival_summary.confirmed &&
                   <span className="scan__arrival-note muted small">Belum ada data kedatangan dari rekap Excel yang cocok dengan daftar ini.</span>}
               </div>
             )}
@@ -406,7 +407,7 @@ export default function Scan() {
                   </td></tr>}
                   {!loading && !listError && list?.rows.map((p) => {
                     const [status, style] = attendanceStatus(p);
-                    const [arrival, arrivalStyle] = arrivalBadge(p.arrival_status);
+                    const [arrival, arrivalStyle] = pksArrivalBadge(p.arrival_status);
                     return (
                       <tr key={p.id} role="row">
                         <td role="cell"><b>{p.representative ? personName(p.representative.name) : personName(p.name)}</b>

@@ -8,23 +8,23 @@ import { groupPksVerifiers } from '../../lib/pksVerifiers.js';
 import FilterField from '../../components/FilterField.jsx';
 import PksRanking, { rankVerifiers } from './PksRanking.jsx';
 import WhatsAppLink from '../../components/WhatsAppLink.jsx';
-import { arrivalBadge } from './shared.js';
+import { pksArrivalBadge } from './shared.js';
 import './Pks.css';
 
 const views = { schools: 'Sekolah', verifiers: 'Verifikator', lo: 'LO', ranking: 'Peringkat LO', verifierRanking: 'Peringkat Verifikator' };
 const number = new Intl.NumberFormat('id-ID');
 const arrivalRoleOrder = { 'Kepala Sekolah': 0, Bendahara: 1 };
-const arrivalOptions = ['sudah_tiba', 'sedang_antre', 'belum_tiba', 'belum_tercatat'].map(code => arrivalBadge(code)[0]);
+const arrivalOptions = ['sudah_tiba', 'sedang_antre', 'belum_tiba', 'belum_tercatat'].map(code => pksArrivalBadge(code)[0]);
 function matchesArrival(school, label) {
   if (school.arrival_statuses?.length) {
-    return school.arrival_statuses.some(status => arrivalBadge(status)[0] === label);
+    return school.arrival_statuses.some(status => pksArrivalBadge(status)[0] === label);
   }
   return school.arrival_attendees?.length
-    ? school.arrival_attendees.some(attendee => arrivalBadge(attendee.status)[0] === label)
-    : arrivalBadge(school.arrival_status)[0] === label;
+    ? school.arrival_attendees.some(attendee => pksArrivalBadge(attendee.status)[0] === label)
+    : pksArrivalBadge(school.arrival_status)[0] === label;
 }
 function ArrivalChip({ status }) {
-  const [label, style] = arrivalBadge(status);
+  const [label, style] = pksArrivalBadge(status);
   return <span className={`tag ${style}`}>{label.toLocaleUpperCase('id')}</span>;
 }
 const progressGroups = [
