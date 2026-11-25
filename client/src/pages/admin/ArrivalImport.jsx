@@ -4,6 +4,9 @@ import { readArrivalWorkbook } from '../../lib/reportingFiles.js';
 import { Spinner } from '../../components/Skeleton.jsx';
 
 const number = new Intl.NumberFormat('id-ID');
+const importDate = new Intl.DateTimeFormat('id-ID', {
+  dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Jakarta',
+});
 
 export default function ArrivalImport({ onImported }) {
   const [file, setFile] = useState(null);
@@ -12,6 +15,21 @@ export default function ArrivalImport({ onImported }) {
   const [showImportResult, setShowImportResult] = useState(false);
   const importDialog = useRef(null);
   const [feedback, setFeedback] = useState(null);
+  const [lastImportedAt, setLastImportedAt] = useState(null);
+  const [timestampStatus, setTimestampStatus] = useState('loading');
+  const [importRevision, setImportRevision] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    api('/admin/arrival-recap', { admin: true }).then(rows => {
+      if (!active) return;
+      const dates = rows.map(row => row.imported_at && new Date(row.imported_at))
+        .filter(date => date && Number.isFinite(date.getTime()));
+      setLastImportedAt(dates.length ? new Date(Math.max(...dates.map(date => date.getTime()))) : null);
+      setTimestampStatus('ready');
+    }).catch(() => { if (active) setTimestampStatus('error'); });
+    return () => { active = false; };
+  }, [importRevision]);
 
   useEffect(() => {
     if ((busy || showImportResult) && !importDialog.current.open) importDialog.current.showModal();
@@ -28,6 +46,7 @@ export default function ArrivalImport({ onImported }) {
       const data = await readArrivalWorkbook(file);
       setImportStage(`Mengirim ${number.format(data.rows.length)} baris, mencocokkan profil, dan menyimpan rekap…`);
       const result = await api('/admin/arrival-recap/import', { admin: true, method: 'POST', body: data });
+      setImportRevision(value => value + 1);
       setImportStage('Impor tersimpan. Memperbarui tampilan rekap…');
       const refreshed = await onImported();
       setFeedback({ result, refreshFailed: !refreshed });
@@ -62,7 +81,14 @@ export default function ArrivalImport({ onImported }) {
         {!busy && <button type="button" className="btn btn--primary" onClick={() => importDialog.current.close()}>Tutup</button>}
       </dialog>
       <details className="card arrival-import">
-        <summary>Impor Rekap Kehadiran (.xlsx)</summary>
+        <summary>Impor Rekap Kehadiran (.xlsx)
+          <span className="muted small" style={{ display: 'block', marginTop: 6, fontWeight: 400 }} aria-live="polite">
+            {timestampStatus === 'loading' ? 'Memuat waktu impor terakhir…'
+              : timestampStatus === 'error' ? 'Waktu impor terakhir belum dapat dimuat.'
+              : lastImportedAt ? <>Terakhir impor kehadiran: <time dateTime={lastImportedAt.toISOString()}>{importDate.format(lastImportedAt)} WIB</time></>
+              : 'Belum ada data kehadiran yang diimpor.'}
+          </span>
+        </summary>
         <form className="form" onSubmit={save}>
           <p className="muted small">Unggah Excel dengan sheet <b>Ringkasan</b> dan <b>Detail Peserta</b>. Impor menggantikan rekap sebelumnya untuk venue yang tercantum di file.</p>
           <input type="file" accept=".xlsx" aria-label="File Excel rekap kehadiran" onChange={(e) => { setFile(e.target.files[0]); setFeedback(null); }} disabled={busy} />
