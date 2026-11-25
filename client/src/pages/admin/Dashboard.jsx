@@ -39,7 +39,7 @@ function VenueAttendanceCard({ venue, day, testSession, onDetails, visibleGroups
           const { total, recorded: attended, registered, arrivalTarget } = venue[key];
           const schoolOrDinas = ['bendahara', 'pengawas', 'dinas'].includes(key);
           const assumedArrived = ['lo', 'fasil'].includes(key);
-          const target = schoolOrDinas && arrivalTarget !== undefined ? arrivalTarget : total;
+          const target = (schoolOrDinas || key === 'representative') && arrivalTarget !== undefined ? arrivalTarget : total;
           return (
             <button type="button" key={key} aria-haspopup="dialog" aria-label={`Lihat daftar ${label} di ${venue.name}`}
               onClick={() => onDetails({
