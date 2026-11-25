@@ -1,5 +1,5 @@
 import { HttpError } from './util.js';
-import { progressLabels, progressStage } from '../../shared/pksProgress.js';
+import { progressLabels, progressStage, progressStages } from '../../shared/pksProgress.js';
 export const progressSourceUrl = 'https://revitsd.kemendikdasmen.go.id/spab/dashboard-progress?jenis=pks&bimtek=1';
 export const progressSchoolUrl = 'https://revitsd.kemendikdasmen.go.id/spab/dashboard-progress/sekolah';
 const progressMetrics = progressLabels;
@@ -17,7 +17,11 @@ export function parseProgressSchoolPage(html) {
     const npsn = identity.match(/NPSN\s*(\d{8})/i)?.[1];
     if (!npsn) return null;
     const name = identity.replace(/\s*NPSN\s*\d{8}.*$/i, '').trim();
-    return { npsn, name, kabKota: htmlText(cells[1]), hotel: htmlText(cells[2]), status: htmlText(cells[3]) };
+    // Revit added verifier/LO columns before Status. Locate the status by its
+    // content instead of reading a person's name from the old fourth column.
+    const statuses = cells.slice(3).map(htmlText).filter(text => progressStage(text) !== null);
+    statuses.sort((a, b) => progressStages.indexOf(progressStage(b)) - progressStages.indexOf(progressStage(a)));
+    return { npsn, name, kabKota: htmlText(cells[1]), hotel: htmlText(cells[2]), status: statuses[0] || '' };
   }).filter(Boolean);
   const totalMatch = htmlText(html).match(/\d[\d.]*\s*[–-]\s*\d[\d.]*\s+dari\s+([\d.]+)\s+sekolah/i);
   return { rows, total: totalMatch ? parseNumber(totalMatch[1]) : rows.length };

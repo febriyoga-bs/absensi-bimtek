@@ -119,7 +119,10 @@ export default function Pks({ publicView = false }) {
   const [error, setError] = useState('');
   const [sourceData, setSourceData] = useState(null);
   const [schoolStatuses, setSchoolStatuses] = useState(null);
-  const [schoolStatusesError, setSchoolStatusesError] = useState(false);
+  const [schoolStatusesError, setSchoolStatusesError] = useState('');
+  const [rankingStatuses, setRankingStatuses] = useState(null);
+  const [rankingStatusesError, setRankingStatusesError] = useState('');
+  const [rankingStatusesLoading, setRankingStatusesLoading] = useState(false);
   const [sourceError, setSourceError] = useState('');
   const [sourceLoading, setSourceLoading] = useState(true);
   const [sourceRanking, setSourceRanking] = useState(null);
@@ -171,12 +174,21 @@ export default function Pks({ publicView = false }) {
     finally { setSourceLoading(false); }
   }
   async function loadSchoolStatuses() {
-    setSchoolStatusesError(false);
+    setSchoolStatusesError('');
     try {
       setSchoolStatuses(await (loView ? api('/pks/progress/statuses?event=5') : request('/progress/statuses')));
-    } catch {
-      setSchoolStatusesError(true);
+    } catch (error) {
+      setSchoolStatusesError(error.message || 'Status Revit belum dapat dimuat.');
     }
+  }
+  async function loadRankingStatuses() {
+    setRankingStatusesLoading(true);
+    setRankingStatusesError('');
+    try {
+      const params = new URLSearchParams({ achievements: '1' });
+      setRankingStatuses(await (loView ? api('/pks/progress/statuses?event=5&achievements=1') : request('/progress/statuses', params)));
+    } catch (error) { setRankingStatusesError(error.message); }
+    finally { setRankingStatusesLoading(false); }
   }
   async function loadSourceRanking() {
     if (sourceRankingLoading) return;
@@ -207,7 +219,7 @@ export default function Pks({ publicView = false }) {
     const assigned = person.schools ?? [...new Map(rankingData.schools
       .filter(school => school.venue === person.venue && school.lo === person.name)
       .map(school => [String(school.npsn), school])).values()];
-    const schools = assigned.filter(school => metric === 'total' || hasProgressStage(schoolStatuses?.[school.npsn], metric));
+    const schools = assigned.filter(school => metric === 'total' || hasProgressStage((rankingStatuses || schoolStatuses)?.[school.npsn], metric));
     setDetailContext({ metric, hotel: person.venue, name: person.name, schools });
     setDetailQuery('');
     setDetailLoading(false);
@@ -236,6 +248,7 @@ export default function Pks({ publicView = false }) {
   }
   useEffect(() => { if (publicView || selectedEvent()?.id === 5) { load(); loadSource(); } }, []);
   useEffect(() => { if (loView && selectedEvent()?.id === 5) loadGlobalRoster(); }, [loView]);
+  useEffect(() => { if (view === 'verifierRanking' && !rankingStatuses) loadRankingStatuses(); }, [view]);
   if (!publicView && selectedEvent()?.id !== 5) return <Navigate to="/admin/pelaporan" replace />;
   function changeArrivalFilter(label, byParticipant = false) {
     setArrivalFilter(label);
@@ -262,8 +275,8 @@ export default function Pks({ publicView = false }) {
     .filter(row => (!venue || row.venue === venue) && (!owner || row.lo === owner))
     .map(row => row.facilitator).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, 'id'));
-  const verifierRanking = view === 'verifierRanking' && schoolStatuses && rankingData
-    ? { owners: rankVerifiers(rankingVerifiers, rankingData.schools, schoolStatuses) }
+  const verifierRanking = view === 'verifierRanking' && rankingStatuses && rankingData
+    ? { owners: rankVerifiers(rankingVerifiers, rankingData.schools, rankingStatuses) }
     : null;
   const matchesDirectoryFilters = (row, rowView) => (!status || rowView !== 'schools' || hasProgressStage(schoolStatuses?.[row.npsn], status))
     && (!verifier || rowView !== 'schools' || row.facilitator === verifier)
@@ -376,7 +389,8 @@ export default function Pks({ publicView = false }) {
             </select>
           </FilterField>}
         </div>
-        {rankingView && loView && !ownLo ? <p role="status">Penugasan LO belum tersedia.</p> : rankingView && !rankingData ? (globalRosterError ? <p role="alert">{globalRosterError} <button type="button" onClick={loadGlobalRoster}>Coba lagi</button></p> : <p role="status">Memuat data peringkat…</p>) : view === 'verifierRanking' ? <PksRanking verifierMode onShowSchools={openRankingSchools} data={rankingData} venue={venue} query={search} owner={owner} sourceRanking={verifierRanking} sourceRankingLoading={!schoolStatuses && !schoolStatusesError} sourceRankingError={schoolStatusesError ? 'Peringkat Verifikator dari Revit belum dapat dimuat.' : ''} onReloadSourceRanking={loadSchoolStatuses} /> : view === 'ranking' ? <PksRanking publicView={publicView} onShowSchools={openRankingSchools} data={rankingData} venue={venue} query={search} owner={owner} onReload={loView ? loadGlobalRoster : load} sourceRanking={sourceRanking} sourceRankingError={sourceRankingError} sourceRankingLoading={sourceRankingLoading} onLoadSourceRanking={loadSourceRanking} onReloadSourceRanking={loadSourceRankingAgain} /> : <>
+        {showArrivalFilter && schoolStatusesError && <p className="alert alert--err" role="alert">{schoolStatusesError} <button type="button" className="btn btn--sm" onClick={loadSchoolStatuses}>Coba lagi status Revit</button></p>}
+        {rankingView && loView && !ownLo ? <p role="status">Penugasan LO belum tersedia.</p> : rankingView && !rankingData ? (globalRosterError ? <p role="alert">{globalRosterError} <button type="button" onClick={loadGlobalRoster}>Coba lagi</button></p> : <p role="status">Memuat data peringkat…</p>) : view === 'verifierRanking' ? <PksRanking verifierMode onShowSchools={openRankingSchools} data={rankingData} venue={venue} query={search} owner={owner} sourceRanking={verifierRanking} sourceRankingLoading={rankingStatusesLoading} sourceRankingError={rankingStatusesError} onReloadSourceRanking={loadRankingStatuses} /> : view === 'ranking' ? <PksRanking publicView={publicView} onShowSchools={openRankingSchools} data={rankingData} venue={venue} query={search} owner={owner} onReload={loView ? loadGlobalRoster : load} sourceRanking={sourceRanking} sourceRankingError={sourceRankingError} sourceRankingLoading={sourceRankingLoading} onLoadSourceRanking={loadSourceRanking} onReloadSourceRanking={loadSourceRankingAgain} /> : <>
         {showArrivalFilter && <PksAttendanceSummary schools={filteredSchools} onSelect={showAttendanceResults}
           arrivalFilter={arrivalFilter} arrivalByParticipant={arrivalByParticipant} />}
         <div ref={resultsRef} className="pks-results"><span><b>{number.format(rows.length)}</b> {view === 'schools' ? 'sekolah' : view === 'verifiers' ? 'verifikator' : 'LO'}{filtered ? ' sesuai filter' : ''}</span>{filtered && <button type="button" onClick={reset}>Reset filter</button>}</div>
@@ -475,7 +489,7 @@ function MobileVenueProgress({ venue, metrics, open, onShowSchools }) {
 }
 
 function SchoolRevitStatus({ status, loading, failed }) {
-  if (failed) return <span>Data Revit gagal dimuat</span>;
+  if (failed && !status) return <span>Status Revit belum dapat dimuat. Klik Coba lagi di atas tabel.</span>;
   if (loading) return <span>Memuat status Revit…</span>;
   if (!status) return <span>NPSN tidak ditemukan di Revit</span>;
   const hasStageGroup = progressGroups.some(({ metrics }) => metrics.includes(status.stage));

@@ -1,3 +1,4 @@
+import { readRevitHtml } from './revitHttp.js';
 import { progressSourceUrl, progressSchoolUrl, parseProgressPage, parseProgressSchoolPage } from './pksProgressSource.js';
 import { progressLabels, progressStages, progressStage } from '../../shared/pksProgress.js';
 import { Router } from 'express';
@@ -40,9 +41,7 @@ const progressCache = createAsyncCache({ ttl: 120000, maxEntries: 3 });
 async function fetchProgressSchoolPage(hotel, page, metric = 'total', query = '') {
   const url = new URL(progressSchoolUrl);
   url.search = new URLSearchParams({ jenis: 'pks', bimtek: '1', metric, hotel, q: query, page: String(page) });
-  const response = await fetch(url, { headers: { Accept: 'text/html' }, signal: AbortSignal.timeout(12000) });
-  if (!response.ok) throw new HttpError(502, 'Daftar sekolah dari dashboard Revit tidak dapat diakses.');
-  return parseProgressSchoolPage(await response.text());
+  return parseProgressSchoolPage(await readRevitHtml(url));
 }
 
 async function fetchAllProgressSchools(hotels, metric = 'total') {
@@ -125,9 +124,7 @@ pksRoutes.get('/', ah(async (req, res) => {
 
 progressRoutes.get('/', ah(async (_req, res) => {
   if (eventId() !== 5) throw new HttpError(404, 'Rekap ini hanya tersedia untuk Bimtek PKS SPAB.');
-  const response = await fetch(progressSourceUrl, { headers: { Accept: 'text/html' }, signal: AbortSignal.timeout(15000) });
-  if (!response.ok) throw new HttpError(502, 'Dashboard progress sumber tidak dapat diakses.');
-  const html = await response.text();
+  const html = await readRevitHtml(progressSourceUrl);
   res.set('Cache-Control', 'private, max-age=60');
   res.json(parseProgressPage(html));
 }));
@@ -140,9 +137,7 @@ progressRoutes.get('/schools', ah(async (req, res) => {
   const page = Number(req.query.page || 1);
   if (!progressMetrics.some(([key]) => key === metric)) throw new HttpError(400, 'Tahap progres tidak valid.');
   if (hotel.length > 120 || query.length > 120 || !Number.isSafeInteger(page) || page < 1 || page > 1000) throw new HttpError(400, 'Filter daftar sekolah tidak valid.');
-  const sourceResponse = await fetch(progressSourceUrl, { signal: AbortSignal.timeout(15000) });
-  if (!sourceResponse.ok) throw new HttpError(502, 'Dashboard progress sumber tidak dapat diakses.');
-  const source = parseProgressPage(await sourceResponse.text());
+  const source = parseProgressPage(await readRevitHtml(progressSourceUrl));
   const sourceMetric = source.metrics.find(item => item.metric === metric)?.sourceMetric;
   if (!sourceMetric) throw new HttpError(502, 'Tahap belum tersedia pada dashboard sumber.');
   const result = await fetchProgressSchoolPage(hotel, page, sourceMetric, query);
@@ -153,12 +148,11 @@ progressRoutes.get('/schools', ah(async (req, res) => {
 progressRoutes.get('/lo-ranking', ah(async (_req, res) => {
   if (eventId() !== 5) throw new HttpError(404, 'Rekap ini hanya tersedia untuk Bimtek PKS SPAB.');
   const ranking = await progressCache.get('lo-ranking', async () => {
-    const [rosterResult, sourceResponse] = await Promise.all([
+    const [rosterResult, sourceHtml] = await Promise.all([
       q('SELECT data FROM assignment_roster WHERE id=1'),
-      fetch(progressSourceUrl, { headers: { Accept: 'text/html' }, signal: AbortSignal.timeout(15000) }),
+      readRevitHtml(progressSourceUrl),
     ]);
-    if (!sourceResponse.ok) throw new HttpError(502, 'Dashboard progress sumber tidak dapat diakses.');
-    const source = parseProgressPage(await sourceResponse.text());
+    const source = parseProgressPage(sourceHtml);
     const roster = rosterResult.rows[0]?.data;
     if (!roster?.schools || !roster?.lo) throw new HttpError(503, 'Data penugasan LO belum tersedia.');
     const sourceSchools = await loadProgressSchools(source.hotels);
@@ -209,22 +203,22 @@ progressRoutes.get('/lo-ranking', ah(async (_req, res) => {
 
 progressRoutes.get('/statuses', ah(async (req, res) => {
   if (eventId() !== 5) throw new HttpError(404, 'Rekap ini hanya tersedia untuk Bimtek PKS SPAB.');
-  const [rosterResult, response] = await Promise.all([
-    q('SELECT data FROM assignment_roster WHERE id=1'),
-    fetch(progressSourceUrl, { signal: AbortSignal.timeout(15000) }),
-  ]);
-  if (!response.ok) throw new HttpError(502, 'Dashboard progress sumber tidak dapat diakses.');
-  const source = parseProgressPage(await response.text());
-  const { hotels } = source;
+  const rosterResult = await q('SELECT data FROM assignment_roster WHERE id=1');
   const roster = rosterResult.rows[0]?.data;
   const own = req.user?.role === 'lo' ? roster?.lo?.find(row => row.account_id === req.user.lo) : null;
   const allowed = new Set((roster?.schools || [])
     .filter(row => !req.user || req.user.role === 'admin' || (own && row.venue === own.venue && row.lo === own.name))
     .map(row => String(row.npsn)));
-  const schools = await loadProgressSchools(hotels);
-  const achievements = await loadProgressAchievements(source);
+  // School status must not depend on nine separate achievement lists or the summary page.
+  const schools = await loadProgressSchools([{ hotel: '' }]);
+  let achievements = null;
+  if (req.query.achievements === '1') {
+    const source = parseProgressPage(await readRevitHtml(progressSourceUrl));
+    achievements = await loadProgressAchievements(source);
+  }
   res.json(Object.fromEntries(schools.filter(row => allowed.has(row.npsn)).map(row => [row.npsn, {
-    stage: metricForProgressStatus(row.status), label: row.status, achieved: [...(achievements.get(row.npsn) || [])],
+    stage: metricForProgressStatus(row.status), label: row.status,
+    ...(achievements ? { achieved: [...(achievements.get(row.npsn) || [])] } : {}),
   }])));
 }));
 

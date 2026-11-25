@@ -34,3 +34,9 @@ test('school popup retains NPSN identity for stage membership', () => {
   assert.equal(result.rows[0].npsn, '10102061');
   assert.equal(progressStage(result.rows[0].status), 'bio_kirim');
 });
+
+test('new verifier and LO columns do not become school status', () => {
+  const result = parseProgressSchoolPage('<tr><td>SD A NPSN 10102061</td><td>Aceh</td><td>Atria</td><td>Verifier Name</td><td>LO Name</td><td>Sudah kirim biodata</td><td>Sudah tiba</td></tr>');
+  assert.equal(result.rows[0].status, 'Sudah kirim biodata');
+  assert.equal(progressStage(result.rows[0].status), 'bio_kirim');
+});

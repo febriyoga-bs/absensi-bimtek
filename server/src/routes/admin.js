@@ -1109,7 +1109,7 @@ r.get('/reporting/attendance-ranking', ah(async (req, res) => {
     LEFT JOIN work a ON l.same_name=1 AND a.venue_id=l.venue_id AND a.person_id=p.id AND a.scanned_by='LO '||l.name
     WHERE l.id=$2 AND (${({
       assigned:'true',present:'COALESCE(pf.present,false)',completed:'a.id IS NOT NULL',
-      target:'true',unavailable:"a.status='berhalangan'",
+      target:'COALESCE(pf.present,false)',unavailable:"a.status='berhalangan'",
       participants:"a.id IS NOT NULL AND a.status<>'berhalangan' AND lower(trim(p.position)) IN ('bendahara','pengawas','kepala sekolah')",
       facilitators:"a.id IS NOT NULL AND a.status<>'berhalangan' AND lower(trim(p.position)) ~ '^(verifikator|fasil(itator)?)($|[[:space:]])'",
     })[metric]}) ORDER BY p.name,p.id` : `SELECT l.id,l.name,l.venue,

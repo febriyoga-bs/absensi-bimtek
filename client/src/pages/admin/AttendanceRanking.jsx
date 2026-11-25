@@ -40,7 +40,7 @@ export default function AttendanceRanking({ venue, query, owner = '', facilitato
   const rows = (result || []).filter((row) => !venue || row.venue === venue)
     .map((row) => {
       const completed = row.total + row.unavailable;
-      const target = row.assigned;
+      const target = row.present;
       return { ...row, completed, target, ratio: target ? completed * 100 / target : null };
     })
     .sort((a, b) => (b.ratio ?? -1) - (a.ratio ?? -1) || b.total - a.total || a.name.localeCompare(b.name, 'id'))
@@ -56,13 +56,13 @@ export default function AttendanceRanking({ venue, query, owner = '', facilitato
     </div>
     {sessionError && <p className="alert alert--err" role="alert">Daftar sesi gagal dimuat. {sessionError}</p>}
     {!sessionId && !sessionError && sessions.length === 0 && <p className="muted">Menunggu daftar sesi resmi. Klik Muat ulang jika belum tersedia.</p>}
-    {compact ? <div className="pks-attendance-help"><p>Absensi dihitung per orang, bukan per sekolah.</p><details><summary>Cara hitung</summary><p>Progres mencakup absensi dan catatan mundur/berhalangan oleh LO pada sesi pilihan. Target mencakup seluruh binaan sesuai sesi dan venue; semua ditargetkan hadir. Kehadiran aktual mengikuti absensi resmi sesi pilihan, tanpa rekap kedatangan. Sesi panitia tidak ditampilkan pada peringkat pencatatan binaan peserta/verifikator. Absensi mandiri dan ditolak tidak dihitung sebagai pekerjaan LO.</p></details></div> : <p className="muted small">Progres mencakup binaan yang diabsenkan dan yang dicatat Mundur/Berhalangan Hadir oleh LO pada sesi pilihan. Target mencakup seluruh binaan sesuai sesi dan venue. Kehadiran aktual berdasarkan absensi resmi sesi pilihan, tanpa rekap kedatangan. Absensi mandiri dan status ditolak tidak dihitung sebagai pekerjaan LO.</p>}
+    {compact ? <div className="pks-attendance-help"><p>Absensi dihitung per orang, bukan per sekolah.</p><details><summary>Cara hitung</summary><p>Progres mencakup absensi dan catatan mundur/berhalangan oleh LO pada sesi pilihan. Target mengikuti jumlah binaan yang tercatat hadir di venue pada sesi pilihan. Kehadiran aktual mengikuti absensi resmi sesi pilihan, tanpa rekap kedatangan. Sesi panitia tidak ditampilkan pada peringkat pencatatan binaan peserta/verifikator. Absensi mandiri dan ditolak tidak dihitung sebagai pekerjaan LO.</p></details></div> : <p className="muted small">Progres mencakup binaan yang diabsenkan dan yang dicatat Mundur/Berhalangan Hadir oleh LO pada sesi pilihan. Target mengikuti jumlah binaan yang tercatat hadir di venue pada sesi pilihan. Kehadiran aktual berdasarkan absensi resmi sesi pilihan, tanpa rekap kedatangan. Absensi mandiri dan status ditolak tidak dihitung sebagai pekerjaan LO.</p>}
     {error && <p className="alert alert--err" role="alert">{error}</p>}
     {sessionId && !result && !error && <p role="status">Memuat peringkat absensi…</p>}
     {result && <div className="reporting-ranking" tabIndex={0}>
       {rows.length ? <ol>{rows.map((row) => <li key={row.id}>
         <div className="reporting-ranking-name"><b>{row.rank}. {personName(row.name)}<LoRepresentation name={row.name}/></b>
-          <strong>{compact ? (row.ratio == null ? 'Tidak ada binaan untuk sesi ini' : `${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(row.ratio)}% tercatat`) : <>{row.completed}/{row.target} sudah dicatat{row.ratio == null ? '' : ` (${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(row.ratio)}%)`}</>}</strong></div>
+          <strong>{compact ? (row.ratio == null ? 'Belum ada binaan tercatat hadir di venue' : `${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(row.ratio)}% tercatat`) : <>{row.completed}/{row.target} sudah dicatat{row.ratio == null ? '' : ` (${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(row.ratio)}%)`}</>}</strong></div>
         <progress aria-label={`${row.completed} dari ${row.target} sudah dicatat oleh ${personName(row.name)}`} value={row.ratio ?? 0} max={100} />
         {compact ? <>
           <p className="pks-attendance-venue">{row.venue}</p>
