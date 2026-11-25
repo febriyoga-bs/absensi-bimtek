@@ -20,6 +20,7 @@ import { finiteInteger } from '../security.js';
 import { pksRoutes } from '../pks.js';
 import { eventId } from '../eventContext.js';
 import { linkPksArrivalProfiles } from '../pksArrivalProfileLinks.js';
+import {getSchoolIdentityAudit} from '../auditSchoolIdentities.js';
 import { pksVerifierArrivalSql } from '../pksVerifierArrival.js';
 import { loginLo } from '../loLogin.js';
 import { changeLoPassword } from '../loPassword.js';
@@ -87,6 +88,10 @@ r.post('/reporting/import', requireSuper, ah(async (req, res) => {
 }));
 r.get('/arrival-recap', requireSuper, ah(async (req, res) => {
   res.json(await getArrivalRecap());
+}));
+r.get('/school-identity-audit', requireSuper, ah(async (req,res)=>{
+  res.set('Cache-Control','no-store');
+  res.json(await getSchoolIdentityAudit());
 }));
 r.get('/arrival-recap/:venueId/participants', requireSuper, ah(async (req, res) => {
   if (req.user.role === 'lo' && Number(req.params.venueId) !== req.user.venue) throw new HttpError(403, 'Bukan venue Anda.');
@@ -698,7 +703,10 @@ r.get('/scan/participants', ah(async (req, res) => {
     ), assigned_people AS MATERIALIZED (
       SELECT DISTINCT p.id,m.account_id,m.lo_name
       FROM candidate_people p JOIN mappings m ON p.venue_id=m.venue_id
-        AND lower(trim(p.position))=m.position AND ${nameKeySql('p.name')}=m.name_key
+        AND lower(trim(p.position))=m.position
+        AND (${nameKeySql('p.name')}=m.name_key
+          OR (${eventId() === 5 ? 'true' : 'false'} AND lower(trim(p.position)) IN ('kepala sekolah','bendahara')
+            AND m.school_ids && string_to_array(replace(p.npsn,' ',''),';')))
         AND (lower(p.code)=m.code OR (m.school_ids IS NOT NULL
           AND m.school_ids && string_to_array(replace(p.npsn,' ',''),';')))
       WHERE p.role='peserta' AND p.archived_at IS NULL
@@ -1200,7 +1208,7 @@ r.get('/attendance', ah(async (req, res) => {
   const search = attendanceSearch(req);
   const where = `a.session_id=ANY($1::int[]) AND ($2::int IS NULL OR a.venue_id=$2)
     AND EXISTS (SELECT 1 FROM people p WHERE p.id=a.person_id AND ${positionFilter}
-      AND ($8::text='' OR p.name ILIKE $8 OR p.npsn ILIKE $8 OR EXISTS (
+      AND ($8::text='' OR p.name ILIKE $8 OR p.npsn ILIKE $8 OR p.institution ILIKE $8 OR EXISTS (
         SELECT 1 FROM venue_arrival_recap arrival WHERE arrival.venue_id=a.venue_id
           AND arrival.representatives->p.id::text->>'name' ILIKE $8)))
     AND ($9::int IS NULL OR (a.method IN ('manual','qr') AND NOT EXISTS (

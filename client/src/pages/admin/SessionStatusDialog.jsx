@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api.js';
-import { personName } from '../../lib/personName.js';
+import { personName, isRepresenting } from '../../lib/personName.js';
 import { fmtDT, sessionTitle, attendanceReasonText } from './shared.js';
 
 const number = new Intl.NumberFormat('id-ID');
@@ -37,7 +37,7 @@ export default function SessionStatusDialog({ selection, onClose }) {
         {!result.rows.length && <p className="muted">Tidak ada catatan {selection.label.toLowerCase()} pada cakupan ini.</p>}
         <ol start={page * PAGE + 1}>{result.rows.map((row) => <li key={row.id}>
           <b>{personName(row.representative?.name || row.name || 'Peserta belum diketahui')}</b>
-          {row.representative?.name && <div className="muted small"><span className="tag tag--venue">Mewakili</span> {personName(row.name)}</div>}
+          {isRepresenting(row) && <div className="muted small"><span className="tag tag--venue">Mewakili</span> {personName(row.name)}</div>}
           <div className="muted small">{[row.code, row.position, row.institution].filter(Boolean).join(' · ')}</div>
           <div className="muted small">{row.venue_name} · {fmtDT(row.created_at)} WIB</div>
           {row.scanned_by && <div className="small">Dicatat oleh {personName(row.scanned_by)}</div>}

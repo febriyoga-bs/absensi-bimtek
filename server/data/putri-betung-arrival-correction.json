@@ -1,0 +1,12 @@
+{
+  "event_id": 5,
+  "npsn": "10104494",
+  "venue": "Lumire Jakarta",
+  "head_name": "Mutiara",
+  "reason": "Konfirmasi pengguna: Mutiara adalah kepala sekolah yang hadir dan difoto. Bendahara sakit; catatan kedua profil tertukar.",
+  "swap_attendance_session_id": 20,
+  "attendees": [
+    {"name": "Mutiara", "role": "Kepala Sekolah", "status": "selesai"},
+    {"name": "Bendahara — SD Negeri 7 Putri Betung", "role": "Bendahara", "status": "belum_tiba"}
+  ]
+}

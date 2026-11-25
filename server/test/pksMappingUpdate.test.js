@@ -53,3 +53,14 @@ test('phone normalization preserves leading zero and rejects non-contact text', 
   assert.equal(normalizeHeadPhone(''),null);
   assert.throws(()=>normalizeHeadPhone('belum ada'),/karakter/);
 });
+test('mapping reimport preserves confirmed school identity corrections',()=>{
+ const {source,current}=fixture();
+ const correction={venue:'Hotel',head_name:'Confirmed Head',attendees:[
+  {role:'Kepala Sekolah',name:'Confirmed Head'},{role:'Bendahara',name:'Confirmed Treasurer'}]};
+ current.roster.arrival_corrections={'12345678':correction};
+ source.arrival_corrections={};
+ const plan=planPksMappingUpdate(source,current);
+ assert.equal(plan.updates.find(p=>p.id===1).name,'Confirmed Head');
+ assert.equal(plan.updates.find(p=>p.id===2).name,'Confirmed Treasurer');
+ assert.deepEqual(plan.roster.arrival_corrections,current.roster.arrival_corrections);
+});

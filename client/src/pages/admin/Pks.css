@@ -392,3 +392,10 @@ html[data-theme="dark"] .pks-summary__total { --metric-bg: #244b7d; }
 .pks-dialog footer { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 24px; border-top: 1px solid var(--line); }
 @media (max-width: 1150px) { .pks-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pks-register__head > p { display: none; } .pks-summary button { padding: 18px 14px; } .pks-summary button span { font-size: 14px; } }
 @media (max-width: 600px) { .pks-heading h1 { font-size: 24px; } .pks-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pks-summary__total { grid-column: 1 / -1; } .pks-summary button { border-bottom: 1px solid var(--line); padding: 16px; } .pks-summary button b { font-size: 24px; } .pks-filters { grid-template-columns: minmax(0, 1fr); padding: 16px; gap: 12px; } .pks-register__head { padding: 0 16px; } .pks-tabs { gap: 18px; } .pks-pagination { padding: 14px 16px; gap: 12px; } .pks-pagination nav { width: 100%; justify-content: space-between; } .pks-form-grid { grid-template-columns: minmax(0, 1fr); } .pks-dialog header, .pks-dialog__body, .pks-dialog footer { padding: 18px; } }
+.school-identity-audit { margin: 20px 0; }
+.school-audit-filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.school-audit-filters label { display: grid; gap: 5px; font-size: 12px; flex: 1 1 180px; min-width: 0; }
+.school-audit-filters input, .school-audit-filters select { width: 100%; min-width: 0; }
+.school-audit-findings { margin: 0; padding-left: 24px; }
+.school-audit-findings li { padding: 12px 4px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.school-audit-findings p { margin: 5px 0 0; font-size: 13px; }

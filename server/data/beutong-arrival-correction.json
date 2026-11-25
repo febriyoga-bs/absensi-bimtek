@@ -1,0 +1,11 @@
+{
+  "event_id": 5,
+  "npsn": "10104774",
+  "venue": "Lumire Jakarta",
+  "head_name": "Zainuddin, S.Pd.I",
+  "reason": "Konfirmasi pengguna: Zainuddin kepala sekolah hadir; bendahara tidak datang karena sakit.",
+  "attendees": [
+    {"name": "Zainuddin, S.Pd.I", "role": "Kepala Sekolah", "status": "selesai"},
+    {"name": "Bendahara — SD Negeri 1 Beutong Ateuh", "role": "Bendahara", "status": "belum_tiba"}
+  ]
+}

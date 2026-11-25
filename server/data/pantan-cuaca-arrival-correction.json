@@ -1,0 +1,11 @@
+{
+  "event_id": 5,
+  "npsn": "10104513",
+  "venue": "Lumire Jakarta",
+  "head_name": "Selamatdin",
+  "reason": "Konfirmasi pengguna: Selamatdin adalah kepala sekolah yang hadir, bukan pengganti. Bendahara tidak hadir karena sakit; nama Selamatdin yang tertaut ke bendahara harus dibersihkan.",
+  "attendees": [
+    {"name": "Selamatdin", "role": "Kepala Sekolah", "status": "selesai"},
+    {"name": "Bendahara — SD Negeri 4 Pantan Cuaca", "role": "Bendahara", "status": "belum_tiba"}
+  ]
+}

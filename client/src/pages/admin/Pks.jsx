@@ -10,6 +10,7 @@ import FilterField from '../../components/FilterField.jsx';
 import PksRanking, { rankVerifiers } from './PksRanking.jsx';
 import WhatsAppLink from '../../components/WhatsAppLink.jsx';
 import ArrivalImport from './ArrivalImport.jsx';
+import SchoolIdentityAudit from './SchoolIdentityAudit.jsx';
 import { pksArrivalBadge } from './shared.js';
 import './Pks.css';
 
@@ -312,6 +313,7 @@ export default function Pks({ publicView = false }) {
       {data && <p className="pks-heading__meta">{data.venues.length} Venue <span>·</span> {data.lo.length} LO <span>·</span> {verifiers.length} Verifikator{!!data.coordinators?.length && <><span>·</span> {data.coordinators.length} Koordinator</>}</p>}
     </header>
     {!publicView && user?.role === 'admin' && <ArrivalImport onImported={load} onTimestampChange={setArrivalImportTimestamp} />}
+    {!publicView && user?.role === 'admin' && <SchoolIdentityAudit key={selectedEvent()?.id} />}
     {error && <div className="alert alert--err" role="alert">{error} {!data && <button className="btn btn--sm" onClick={load}>Coba lagi</button>}</div>}
     {!data && !error && <p role="status">Memuat pemetaan PKS…</p>}
     {data && <>

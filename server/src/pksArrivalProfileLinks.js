@@ -27,24 +27,30 @@ export function planArrivalProfileLinks(schools, profiles, recaps) {
     const candidates = profilesBySchool.get(`${arrivalVenueKey(school.venue)}:${school.npsn}`) || [];
     const arrivals = school.arrival_attendees || [];
     if (!candidates.length || candidates.length > 2 || !arrivals.length || arrivals.length > 2) continue;
+    if (new Set(arrivals.map(p=>arrivalPersonKey(p.name))).size !== arrivals.length) continue;
     const recap = recaps.find(r => r.venue_id === candidates[0].venue_id);
     if (!recap) continue;
     const used = new Set(), assigned = new Map();
     for (const person of arrivals) {
-      const names = candidates.filter(p => arrivalPersonKey(recap.representatives?.[p.id]?.name || p.name) === arrivalPersonKey(person.name));
+      const names = candidates.filter(p => (person.role === 'Perwakilan Sekolah'
+        || String(p.position).toLowerCase().replace(/\s/g,'') === String(person.role).toLowerCase().replace(/\s/g,''))
+        && (arrivalPersonKey(p.name) === arrivalPersonKey(person.name)
+          || (!p.has_attendance && arrivalPersonKey(recap.representatives?.[p.id]?.name) === arrivalPersonKey(person.name))));
       if (names.length === 1 && !used.has(names[0].id)) { assigned.set(person, names[0]); used.add(names[0].id); }
     }
     for (const person of arrivals) {
       if (assigned.has(person) || person.role === 'Perwakilan Sekolah') continue;
       const role = String(person.role).toLowerCase().replace(/\s/g, '');
-      const slots = candidates.filter(p => !used.has(p.id) && String(p.position).toLowerCase().replace(/\s/g, '') === role);
+      const slots = candidates.filter(p => !used.has(p.id) && !p.has_attendance
+        && /^(kepala sekolah|bendahara)\s*[—–-]/i.test(p.name || '')
+        && String(p.position).toLowerCase().replace(/\s/g, '') === role);
       if (slots.length === 1) { assigned.set(person, slots[0]); used.add(slots[0].id); }
     }
     const remaining = arrivals.filter(p => !assigned.has(p) && p.role === 'Perwakilan Sekolah')
       .sort((a,b) => arrivalPersonKey(a.name).localeCompare(arrivalPersonKey(b.name)));
-    // The uploaded recap is authoritative for the current attendee names.
-    // Reuse the same school slots even when an older identity has attendance.
-    const empty = candidates.filter(p => !used.has(p.id))
+    // Unresolved representatives may use unused slots, but never inherit an
+    // existing person's attendance, photo, or absence reason by slot order.
+    const empty = candidates.filter(p => !used.has(p.id) && !p.has_attendance && !recap.representatives?.[p.id])
       .sort((a,b) => a.id - b.id);
     if (remaining.length <= empty.length) remaining.forEach((person,index) => assigned.set(person, empty[index]));
     for (const [person, profile] of assigned) {
@@ -68,7 +74,9 @@ export async function linkPksArrivalProfiles(venueId = null) {
       EXISTS(SELECT 1 FROM attendance a WHERE a.person_id=p.id) AS has_attendance
       FROM people p JOIN venues v ON v.id=p.venue_id WHERE p.role='peserta' AND p.archived_at IS NULL
       AND lower(trim(p.position)) IN ('kepala sekolah','bendahara') AND ($1::int IS NULL OR p.venue_id=$1)`, [venueId]),
-    q('SELECT venue_id,marks,representatives,imported_at FROM venue_arrival_recap WHERE ($1::int IS NULL OR venue_id=$1)', [venueId]),
+    // Keep PostgreSQL microseconds for the optimistic import-version check.
+    // A JS Date truncates them, causing the UPDATE to silently match no rows.
+    q('SELECT venue_id,marks,representatives,imported_at::text AS imported_at FROM venue_arrival_recap WHERE ($1::int IS NULL OR venue_id=$1)', [venueId]),
   ]);
   const schools = await getSchoolArrivalStatuses(roster?.schools || [], venueId);
   const patches = planArrivalProfileLinks(schools, profiles, recaps);

@@ -66,13 +66,16 @@ export function planPksMappingUpdate(source, current) {
     if (!owner || !verifier || mappingNameKey(verifier.coordinator) !== mappingNameKey(row.coordinator)) throw new Error(`Penugasan sekolah tidak konsisten: ${row.npsn}`);
     const head_phone = normalizeHeadPhone(row.head_phone);
     const school = { ...row, lo: owner.name, facilitator: verifier.name, coordinator: verifier.coordinator, head_name: clean(row.head_name), head_phone: head_phone || '' };
+    const correction=old.arrival_corrections?.[row.npsn];
+    if (correction?.venue===row.venue) school.head_name=correction.head_name;
     schools.push(school);
     for (const position of ['Kepala Sekolah', 'Bendahara']) {
       const matches = current.people.filter(person => person.role === 'peserta' && mappingNameKey(person.position) === mappingNameKey(position)
         && String(person.npsn || '').split(';').map(id => id.trim()).includes(row.npsn) && !person.archived_at);
       if (matches.length !== 1) throw new Error(`Profil ${position} perlu diperiksa untuk NPSN ${row.npsn}`);
       const person = matches[0], head = position === 'Kepala Sekolah';
-      const profile = { id: person.id, name: head && school.head_name ? school.head_name : person.name,
+      const correctedName=correction?.venue===row.venue && correction.attendees?.find(p=>p.role===position)?.name;
+      const profile = { id: person.id, name: correctedName || (head && school.head_name ? school.head_name : person.name),
         phone: head && head_phone ? head_phone : person.phone, venue_id: owner.venue_id,
         institution: row.name, npsn: row.npsn, provinsi: row.provinsi, kab_kota: row.kab_kota,
         fasil_pelaporan: verifier.name, koor_pelaporan: verifier.coordinator, archived_at: null };
@@ -85,7 +88,8 @@ export function planPksMappingUpdate(source, current) {
     if (!assignments.has(key)) { assignments.set(key, { ...verifier, lo: owner.name }); addAssignment(owner, verifier); }
   }
   return { updates, inserts, roster: { ...old, ...source, schools, lo, participants, facilitators: [...assignments.values()],
-    coordinators, verifier_people: [...linkedVerifiers.values()], attendance_assignments, pks_records: old.pks_records || {} },
+    coordinators, verifier_people: [...linkedVerifiers.values()], attendance_assignments, pks_records: old.pks_records || {},
+    arrival_corrections:old.arrival_corrections || {} },
     summary: { schools: schools.length, lo: lo.length, verifiers: linkedVerifiers.size, assignments: assignments.size,
       coordinators: coordinators.length, head_names: schools.filter(row => row.head_name).length,
       head_phones: schools.filter(row => row.head_phone).length, profiles_updated: updates.length, profiles_added: inserts.length } };

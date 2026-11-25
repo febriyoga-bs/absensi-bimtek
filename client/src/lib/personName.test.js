@@ -52,3 +52,8 @@ test('keeps SD and PKS uppercase in school placeholders and admin names', () => 
   assert.equal(personName('PKS-B-10105697'), 'PKS-B-10105697');
   assert.equal(personName('sdian pksari'), 'Sdian Pksari');
 });
+test('same head name with degree differences is not a representative',async()=>{
+ const {isRepresenting}=await import('./personName.js');
+ assert.equal(isRepresenting({name:'Amir,S.Pd.SD',representative:{name:'Amir',role:'Kepala Sekolah'}}),false);
+ assert.equal(isRepresenting({name:'Amir',representative:{name:'Other person',role:'Kepala Sekolah'}}),true);
+});

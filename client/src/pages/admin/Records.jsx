@@ -1,6 +1,6 @@
 import LoRepresentation from '../../components/LoRepresentation.jsx';
 import { eventLabel } from '../../event.js';
-import { personName } from '../../lib/personName.js';
+import { personName, isRepresenting } from '../../lib/personName.js';
 import FilterField from '../../components/FilterField.jsx';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
@@ -252,11 +252,11 @@ export default function Records() {
                 </div>
                 {r.method === 'manual' && r.has_photo && <span className="rec__by"><Icon name="users" size={13} /> Diabsenkan {personName(r.scanned_by) || 'LO'}</span>}
                 <div className="rec__name">{personName(r.representative?.name || r.name)} <span className={`tag tag--${r.role}`}>{r.role}</span> <LoRepresentation name={r.name} />
-                  {r.representative?.name && <span className="tag tag--venue">Mewakili</span>}</div>
-                {r.representative?.name && <div className="muted small">Mewakili {personName(r.name)}</div>}
+                  {isRepresenting(r) && <span className="tag tag--venue">Mewakili</span>}</div>
+                {isRepresenting(r) && <div className="muted small">Mewakili {personName(r.name)}</div>}
                 <div className="muted small">{r.code} · {r.institution || '-'}</div>
                 {r.venue_name && <div><span className="tag tag--venue">{r.venue_name}</span></div>}
-                {r.lat == null ? <div className="small">{fmtDT(r.created_at)} WIB · {r.status === 'berhalangan' ? 'dicatat oleh' : r.method === 'qr' ? 'dipindai oleh' : 'diabsenkan oleh'} {personName(r.scanned_by) || 'LO'}</div> : <>
+                {r.lat == null ? <div className="small">{fmtDT(r.created_at)} WIB</div> : <>
                 <div className="small">{fmtDT(r.created_at)} WIB · {dist(r.distance_m)} dari venue · akurasi ±{Math.round(r.accuracy_m)} m</div>
                 <div className="rec__geo">{Number(r.lat).toFixed(6)}, {Number(r.lng).toFixed(6)}</div>
                 <button type="button" className="link-btn" onClick={() => setMapPoint({

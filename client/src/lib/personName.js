@@ -1,8 +1,14 @@
+import {arrivalPersonKey} from '../../../shared/pksAttendeeName.js';
 const degrees = ['S.Pd.I', 'M.Pd.I', 'S.Tr.T', 'S.Tr.Kom', 'A.Md.Kom', 'A.Md.Kep', 'A.Md.T',
   'S.Si', 'S.Pd', 'S.T', 'S.E', 'S.H', 'S.Kom', 'S.Sos', 'S.Ak', 'S.Ag', 'S.AP', 'S.Kep', 'S.KM',
   'M.Si', 'M.Pd', 'M.T', 'M.E', 'M.H', 'M.Kom', 'M.Sos', 'M.Ak', 'M.AP', 'M.M', 'M.Ars',
   'M.Sc', 'B.Sc', 'M.Eng', 'B.Eng', 'Ph.D', 'D.Eng', 'A.Md'];
 const degreeNames = new Map(degrees.map((degree) => [degree.toLowerCase(), degree]));
+export function isRepresenting(person) {
+  const normalize = arrivalPersonKey;
+  return !!person.representative?.name && person.representative.role !== 'Perwakilan Sekolah'
+    && normalize(person.representative.name) !== normalize(person.name);
+}
 // Capture the left boundary instead of lookbehind (unsupported on iOS 15).
 const degreePattern = new RegExp(`(^|[^\\p{L}\\p{N}])(${[...degrees].sort((a,b)=>b.length-a.length)
   .map((degree) => degree.split('.').join('\\s*\\.\\s*')).join('|')})(?![\\p{L}\\p{N}])`, 'giu');

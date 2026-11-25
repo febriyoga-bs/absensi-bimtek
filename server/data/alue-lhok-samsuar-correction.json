@@ -1,0 +1,11 @@
+{
+  "event_id": 5,
+  "npsn": "10104468",
+  "venue": "Novotel Mangga Dua",
+  "head_name": "Samsuar",
+  "reason": "Konfirmasi pengguna: Samsuar adalah kepala sekolah yang sudah tiba. Pasangan peserta Syajaril akhzari dari nama sekolah dan venue yang tepat pada rekap terbaru; sekolah ini terpisah dari SDN ALUE LHOK NPSN 10110573.",
+  "attendees": [
+    {"name": "Samsuar", "role": "Kepala Sekolah", "status": "selesai"},
+    {"name": "Syajaril akhzari", "role": "Bendahara", "status": "selesai"}
+  ]
+}

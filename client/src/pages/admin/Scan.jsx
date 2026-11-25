@@ -11,7 +11,7 @@ import CameraCapture from '../../components/CameraCapture.jsx';
 import WhatsAppLink from '../../components/WhatsAppLink.jsx';
 import { formatRoom } from '../../lib/room.js';
 import EditAttendanceNote from './EditAttendanceNote.jsx';
-import { personName } from '../../lib/personName.js';
+import { personName, isRepresenting } from '../../lib/personName.js';
 import PeriodReportStatus from '../../components/PeriodReportStatus.jsx';
 
 // Absenkan lewat scan QR dinonaktifkan sementara. Ubah ke true untuk memunculkan lagi tab "Scan QR"
@@ -69,6 +69,7 @@ function attendanceStatus(person) {
 }
 
 function representedPersonName(person) {
+  if (!isRepresenting(person)) return null;
   if (person.representative?.role === 'Perwakilan Sekolah') return null;
   const name = person.name?.trim();
   if (!person.representative || !name || /^[-–—]+$/.test(name)) return null;

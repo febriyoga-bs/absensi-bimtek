@@ -30,13 +30,24 @@ const sourcePositions = {
   kepalasekolah: 'Kepala Sekolah', fasilitator: 'Fasilitator', bbpmp: 'BB/BPMP',
 };
 
-export async function getSchoolArrivalStatuses(schools, venueId = null) {
-  const { rows } = await q(`SELECT v.name AS venue, p.name, p.position, p.institution, p.arrival_status
+export async function getSchoolArrivalStatuses(schools, venueId = null, query = q) {
+  const corrections = eventId() === 5
+    ? (await query("SELECT data->'arrival_corrections' AS corrections FROM assignment_roster WHERE id=1")).rows[0]?.corrections || {}
+    : {};
+  const { rows } = await query(`SELECT v.name AS venue, p.name, p.position, p.institution, p.arrival_status
     FROM venue_arrival_recap r JOIN venues v ON v.id=r.venue_id
     CROSS JOIN LATERAL jsonb_to_recordset(r.detail_rows)
       AS p(name text, position text, institution text, arrival_status text)
     WHERE ${eventVenueScope('v')} AND ($1::int IS NULL OR r.venue_id=$1) AND p.position IN ('Bendahara', 'Kepala Sekolah')`, [venueId]);
   const schoolIdentity = (venue, name) => JSON.stringify([arrivalVenueKey(venue), schoolKey(name)]);
+  const schoolGroups=new Map(),exactSchoolGroups=new Map();
+  for (const school of schools) {
+    for (const [groups,identity] of [[schoolGroups,schoolIdentity(school.venue,school.name)],
+      [exactSchoolGroups,JSON.stringify([arrivalVenueKey(school.venue),key(school.name)])]]) {
+      if (!groups.has(identity)) groups.set(identity,new Set());
+      groups.get(identity).add(String(school.npsn));
+    }
+  }
   const bySchool = new Map();
   for (const row of rows) {
     if (!schoolKey(row.institution)) continue;
@@ -52,10 +63,22 @@ export async function getSchoolArrivalStatuses(schools, venueId = null) {
     }
   }
   return schools.map(school => {
+    const identity=schoolIdentity(school.venue,school.name);
+    const shared=(schoolGroups.get(identity)?.size || 0)>1;
+    const exactIdentity=JSON.stringify([arrivalVenueKey(school.venue),key(school.name)]);
+    const exactUnique=exactSchoolGroups.get(exactIdentity)?.size===1;
+    const sourceEntries=[...(bySchool.get(identity) || [])].filter(([,row])=>!shared
+      || (exactUnique && key(row.institution)===key(school.name)));
     const attendees = new Map([
-      ...(bySchool.get(schoolIdentity(school.venue, school.name)) || []),
+      ...sourceEntries,
       ...(bySchool.get(JSON.stringify(['npsn', arrivalVenueKey(school.venue), String(school.npsn)])) || []),
     ]);
+    const correction = corrections[String(school.npsn)];
+    if (correction && arrivalVenueKey(correction.venue) === arrivalVenueKey(school.venue)) {
+      return {...school, head_name:correction.head_name || school.head_name,
+        arrival_attendees:correction.attendees,
+        arrival_status:correction.attendees.reduce((best,p)=>(priority[p.status] || 0)>(priority[best] || 0)?p.status:best,null)};
+    }
     const headName = schoolHeadOverride(school.npsn, school.head_name) || school.head_name;
     const head = attendeeNameKey(headName);
     const isHead = (name, row) => row.position === 'Kepala Sekolah' || name === head;
@@ -68,7 +91,8 @@ export async function getSchoolArrivalStatuses(schools, venueId = null) {
     }));
     const arrival_status = arrival_attendees.reduce((best, { status }) =>
       !best || (priority[status] || 0) > (priority[best] || 0) ? status : best, null);
-    return { ...school, head_name: headName, arrival_status, arrival_attendees };
+    return { ...school, head_name: headName, arrival_status, arrival_attendees,
+      arrival_identity_ambiguous:shared && !exactUnique };
   });
 }
 export function validateArrivalSummaryRow(row) {
@@ -259,6 +283,11 @@ export async function importArrivalRecap(rows, summary = null, { audit = false }
     }
     if (matches.length !== 1) {
       recordUnmatched(source, matches.length ? 'Lebih dari satu profil cocok' : 'Profil tidak ditemukan');
+      continue;
+    }
+    if (eventId() === 5 && matches[0].has_attendance
+      && attendeeNameKey(name) !== attendeeNameKey(matches[0].name)) {
+      recordUnmatched(source, 'Nama berbeda pada profil yang sudah memiliki absensi; perlu konfirmasi identitas');
       continue;
     }
     proposals.push({ snapshot, person: matches[0], name, arrival, source });

@@ -1,0 +1,11 @@
+{
+  "event_id": 5,
+  "npsn": "10104516",
+  "venue": "Lumire Jakarta",
+  "head_name": "Sulaiman, S.Pd., Gr.",
+  "reason": "Konfirmasi pengguna: kasus salah tautan yang sama. Sulaiman adalah kepala sekolah SD Negeri 1 Pining yang sudah tiba, bukan perwakilan pada profil bendahara. Status kedatangan bendahara belum dikonfirmasi; tidak ada konfirmasi alasan sakit pada kasus ini.",
+  "attendees": [
+    {"name": "Sulaiman, S.Pd., Gr.", "role": "Kepala Sekolah", "status": "selesai"},
+    {"name": "Bendahara — SD Negeri 1 Pining", "role": "Bendahara", "status": "belum_tercatat"}
+  ]
+}

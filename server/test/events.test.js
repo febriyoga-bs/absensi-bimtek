@@ -905,7 +905,7 @@ test('PKS directory binds representatives to existing slots without changing imp
    }
    const school={npsn:'99990003',name:'SD Link',head_name:'Old Head',venue:'Link Test Hotel'};
    await q('INSERT INTO assignment_roster(id,data) VALUES(1,$1) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data',[JSON.stringify({schools:[school],venues:['Link Test Hotel']})]);
-   await q("INSERT INTO venue_arrival_recap(venue_id,marks,detail_rows,imported_at) VALUES($1,'{}',$2,'2026-11-25T12:00:00Z')",[venue.id,JSON.stringify([
+   await q("INSERT INTO venue_arrival_recap(venue_id,marks,detail_rows,imported_at) VALUES($1,'{}',$2,'2026-11-25T12:00:00.123456Z')",[venue.id,JSON.stringify([
     {name:'Marzuki',position:'Bendahara',institution:'SD Link',arrival_status:'selesai'},
     {name:'Zakaria',position:'Bendahara',institution:'SD Link',arrival_status:'sedang_antre'},
    ])]);
@@ -914,7 +914,9 @@ test('PKS directory binds representatives to existing slots without changing imp
    assert.equal(saved.representatives[ids[0]].name,'Marzuki');
    assert.equal(saved.representatives[ids[1]].role,'Perwakilan Sekolah');
    assert.equal(saved.marks[ids[1]],'sedang_antre');
-   assert.equal(new Date(saved.imported_at).toISOString(),'2026-11-25T12:00:00.000Z');
+   assert.equal(new Date(saved.imported_at).toISOString(),'2026-11-25T12:00:00.123Z');
+   const {rows:[precision]}=await q("SELECT to_char(imported_at AT TIME ZONE 'UTC','US') AS micros FROM venue_arrival_recap WHERE venue_id=$1",[venue.id]);
+   assert.equal(precision.micros,'123456');
    assert.equal((await q('SELECT name FROM people WHERE id=$1',[ids[0]])).rows[0].name,'Old Head');
    const response=await request(`/admin/scan/participants?event=5&category=sekolah&venue_id=${venue.id}`);
    assert.equal(response.status,200,await response.clone().text());
@@ -926,6 +928,67 @@ test('PKS directory binds representatives to existing slots without changing imp
    assert.equal(directory.arrival_summary.queued,1);
    await linkPksArrivalProfiles(venue.id);
    assert.deepEqual((await q('SELECT representatives FROM venue_arrival_recap WHERE venue_id=$1',[venue.id])).rows[0].representatives,saved.representatives);
+   const {correctSchoolArrival}=await import('../src/correctSchoolArrival.js');
+   const correction={event_id:5,npsn:'99990003',venue:school.venue,head_name:'Correct Head',reason:'Confirmed data correction',attendees:[
+    {name:'Correct Head',role:'Kepala Sekolah',status:'selesai'},
+    {name:'Bendahara - SD Link',role:'Bendahara',status:'belum_tiba'},
+   ]};
+   assert.equal((await correctSchoolArrival(correction)).applied,false);
+   assert.equal((await q('SELECT name FROM people WHERE id=$1',[ids[0]])).rows[0].name,'Old Head');
+   await correctSchoolArrival(correction,{apply:true});
+   assert.equal((await q('SELECT name FROM people WHERE id=$1',[ids[0]])).rows[0].name,'Correct Head');
+   // Simulate a later import replacing the arrival metadata with stale bindings.
+   await q("UPDATE venue_arrival_recap SET marks='{}',representatives='{}' WHERE venue_id=$1",[venue.id]);
+   await linkPksArrivalProfiles(venue.id);
+   const {rows:[corrected]}=await q('SELECT marks,representatives FROM venue_arrival_recap WHERE venue_id=$1',[venue.id]);
+   assert.equal(corrected.marks[ids[0]],'selesai');
+   assert.equal(corrected.marks[ids[1]],'belum_tiba');
+   assert.equal(corrected.representatives[ids[0]].name,'Correct Head');
+   await correctSchoolArrival(correction,{apply:true});
+   const {rows:[audit]}=await q("SELECT data->'arrival_corrections'->'99990003' AS correction FROM assignment_roster WHERE id=1");
+   assert.equal(audit.correction.before.profiles[0].name,'Old Head');
+   const {rows:[owner]}=await q("INSERT INTO lo_accounts(name,username,password_hash,venue_id) VALUES('LO Correction Test','lo-correction-test','unused',$1) RETURNING id",[venue.id]);
+   try {
+    await q("UPDATE assignment_roster SET data=jsonb_set(data,'{attendance_assignments}',$1::jsonb) WHERE id=1",[JSON.stringify({[owner.id]:[
+     {name:'Old Head',position:'Kepala Sekolah',npsn:'99990003',venue_id:venue.id,code:'link-k'},
+     {name:'Bendahara - SD Link',position:'Bendahara',npsn:'99990003',venue_id:venue.id,code:'link-b'},
+    ]})]);
+    const assignedResponse=await request(`/admin/scan/participants?event=5&category=sekolah&venue_id=${venue.id}`);
+    assert.equal(assignedResponse.status,200);
+    const assignedDirectory=await assignedResponse.json();
+    assert.ok(assignedDirectory.rows.every(p=>p.assigned_los.includes('LO Correction Test')));
+   } finally {await q('DELETE FROM lo_accounts WHERE id=$1',[owner.id]);}
+   const {rows:[swapSession]}=await q("INSERT INTO sessions(name,role,starts_at,ends_at) VALUES('Correction swap test','peserta','2026-11-25T01:00:00Z','2026-11-25T16:00:00Z') RETURNING id");
+   try {
+    await q("INSERT INTO attendance(person_id,session_id,venue_id,status,photo_path) VALUES($1,$3,$4,'berhalangan',''),($2,$3,$4,'valid','confirmed-head-photo.jpg')",[ids[0],ids[1],swapSession.id,venue.id]);
+    const swap={...correction,swap_attendance_session_id:swapSession.id};
+    await correctSchoolArrival(swap,{apply:true});
+    const {rows:swapped}=await q('SELECT person_id,status,photo_path FROM attendance WHERE session_id=$1 ORDER BY person_id',[swapSession.id]);
+    assert.equal(swapped.find(a=>a.person_id===ids[0]).photo_path,'confirmed-head-photo.jpg');
+    assert.equal(swapped.find(a=>a.person_id===ids[0]).status,'valid');
+    assert.equal(swapped.find(a=>a.person_id===ids[1]).status,'berhalangan');
+    const searchResponse=await request(`/admin/attendance?event=5&session_id=${swapSession.id}&q=SD%20Link`);
+    assert.equal(searchResponse.status,200,await searchResponse.clone().text());
+    const searchResult=await searchResponse.json();
+    assert.equal(searchResult.rows.length,2);
+    assert.ok(searchResult.rows.some(row=>row.name==='Correct Head' && row.status==='valid' && row.has_photo));
+    const beforeAudit=(await q('SELECT marks,representatives FROM venue_arrival_recap WHERE venue_id=$1',[venue.id])).rows;
+    const auditResponse=await request('/admin/school-identity-audit?event=5');
+    assert.equal(auditResponse.status,200,await auditResponse.clone().text());
+    assert.equal(auditResponse.headers.get('cache-control'),'no-store');
+    const auditReport=await auditResponse.json();
+    assert.equal(auditReport.event_id,5);assert.equal(auditReport.schools,1);
+    assert.ok(auditReport.profiles>=2);assert.ok(Array.isArray(auditReport.findings));
+    assert.deepEqual((await q('SELECT marks,representatives FROM venue_arrival_recap WHERE venue_id=$1',[venue.id])).rows,beforeAudit);
+    assert.equal((await request('/admin/school-identity-audit?event=5',{token:null})).status,401);
+    const loAuditToken=signAdmin({role:'lo',username:'lo-sama',accounts:[{event:3,id:1}]});
+    assert.equal((await request('/admin/school-identity-audit?event=3',{token:loAuditToken})).status,403);
+    await correctSchoolArrival(swap,{apply:true});
+    assert.deepEqual((await q('SELECT person_id,status,photo_path FROM attendance WHERE session_id=$1 ORDER BY person_id',[swapSession.id])).rows,swapped);
+   } finally {
+    await q('DELETE FROM attendance WHERE session_id=$1',[swapSession.id]);
+    await q('DELETE FROM sessions WHERE id=$1',[swapSession.id]);
+   }
   } finally {
    if(prior)await q('UPDATE assignment_roster SET data=$1 WHERE id=1',[JSON.stringify(prior.data)]);
    await q('DELETE FROM people WHERE id=ANY($1::int[])',[ids]);
