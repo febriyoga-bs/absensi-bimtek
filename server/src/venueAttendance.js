@@ -4,6 +4,7 @@ import { q } from './db.js';
 import { HttpError } from './util.js';
 import { eventVenueScope } from './eventVenues.js';
 import { sourceAttendance } from './sourceAttendance.js';
+import { getSchoolArrivalStatuses, arrivalVenueKey } from './arrivalRecap.js';
 
 const emptyCount = () => ({ total: 0, registered: 0, attended: 0, recorded: 0 });
 const nameKey = (name) => String(name || '').normalize('NFKD').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
@@ -56,6 +57,7 @@ function assignmentProfiles(rows, profiles, venueIds, venueId) {
 }
 
 const loadRoster = () => q(`SELECT
+  data->'schools' AS schools,
   (SELECT jsonb_agg(f) FROM jsonb_to_recordset(data->'facilitators') AS f(name text, venue text)) AS facilitators,
   (SELECT jsonb_agg(to_jsonb(l) || jsonb_build_object('account_name', a.name,'account_username',a.username))
    FROM jsonb_to_recordset(data->'lo') AS l(name text, venue text, venue_id int, account_id int)
@@ -270,13 +272,29 @@ export async function getVenueAttendance(venueId, day = null, testSession = null
       const result = sourceAttendance(source,profiles,participantPositions[group]);
       if (result) card[group] = result.count;
     }
-    if (Array.isArray(source.detail_rows)) {
+    if (eventId() !== 5 && Array.isArray(source.detail_rows)) {
       const heads = new Set();
       for (const row of source.detail_rows) {
         if (row.position !== 'Kepala Sekolah' || !['selesai','sudah_tiba','sedang_antre'].includes(row.arrival_status)) continue;
         heads.add(`${String(row.name || '').trim().toLowerCase()}:${String(row.institution || '').trim().toLowerCase()}`);
       }
       card.pengawas.arrivalTarget = heads.size;
+    }
+  }
+  if (eventId() === 5) {
+    const schools = await getSchoolArrivalStatuses(roster?.schools || []);
+    for (const card of cards.values()) {
+      const assigned = schools.filter(school => arrivalVenueKey(school.venue) === arrivalVenueKey(card.name));
+      for (const [group, role] of [['bendahara', 'Bendahara'], ['pengawas', 'Kepala Sekolah']]) {
+        const seen = new Set();
+        for (const school of assigned) {
+          if ((school.arrival_attendees || []).some(person => person.role === role &&
+            ['selesai','sudah_tiba','sedang_antre'].includes(person.status))) {
+            seen.add(school.npsn || nameKey(school.name));
+          }
+        }
+        card[group].arrivalTarget = seen.size;
+      }
     }
   }
   for (const group of ['fasil', 'lo']) {

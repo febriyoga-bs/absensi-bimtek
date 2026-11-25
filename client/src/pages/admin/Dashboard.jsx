@@ -52,7 +52,7 @@ function VenueAttendanceCard({ venue, day, testSession, onDetails, visibleGroups
               <span className="venue-attendance__label">{label} <FontIcon name="chevron-right" /></span>
               <span className="venue-attendance__count"><b>{number.format(attended)}</b> / {number.format(target)} <small>sudah dicatat</small></span>
               {schoolOrDinas && arrivalTarget !== undefined && <small className="muted">Total undangan: {number.format(total)}</small>}
-              {assumedArrived && <small className="muted">Diasumsikan sudah tiba: {number.format(total)} / {number.format(total)}</small>}
+              {assumedArrived && <small className="muted">Total undangan: {number.format(total)}</small>}
               {venue[key].source !== 'arrival' && registered < total && <small className="muted">
                 {registered === 0 ? 'Belum ada profil absensi' : `${number.format(registered)} punya profil absensi`}
               </small>}
