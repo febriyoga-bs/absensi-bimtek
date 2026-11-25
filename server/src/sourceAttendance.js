@@ -71,6 +71,7 @@ export function sourceAttendance(source, profiles, position) {
         status: registered ? match.status_by_venue[source.venue_id] ?? null : null, arrival_status: row.arrival_status }] };
   }).sort((a,b) => a.name.localeCompare(b.name,'id'));
   const count = { total: summary.reduce((n,row) => n + row.invited,0),
+    arrivalTarget: details.filter(row => ['selesai','sudah_tiba','sedang_antre'].includes(row.people[0].arrival_status)).length,
     registered: details.filter(row => row.people[0].registered).length,
     attended: details.filter(row => ['valid','review'].includes(row.people[0].status)).length,
     recorded: details.filter(row => ['valid','review','berhalangan'].includes(row.people[0].status)).length,

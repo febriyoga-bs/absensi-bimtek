@@ -270,6 +270,14 @@ export async function getVenueAttendance(venueId, day = null, testSession = null
       const result = sourceAttendance(source,profiles,participantPositions[group]);
       if (result) card[group] = result.count;
     }
+    if (Array.isArray(source.detail_rows)) {
+      const heads = new Set();
+      for (const row of source.detail_rows) {
+        if (row.position !== 'Kepala Sekolah' || !['selesai','sudah_tiba','sedang_antre'].includes(row.arrival_status)) continue;
+        heads.add(`${String(row.name || '').trim().toLowerCase()}:${String(row.institution || '').trim().toLowerCase()}`);
+      }
+      card.pengawas.arrivalTarget = heads.size;
+    }
   }
   for (const group of ['fasil', 'lo']) {
     for (const person of groupProfiles(roster, profiles, group, ids, venueId)) {

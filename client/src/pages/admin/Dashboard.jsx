@@ -36,7 +36,10 @@ function VenueAttendanceCard({ venue, day, testSession, onDetails, visibleGroups
       </header>
       <div className="venue-attendance__groups">
         {visibleGroups.map(([key, label]) => {
-          const { total, recorded: attended, registered } = venue[key];
+          const { total, recorded: attended, registered, arrivalTarget } = venue[key];
+          const schoolOrDinas = ['bendahara', 'pengawas', 'dinas'].includes(key);
+          const assumedArrived = ['lo', 'fasil'].includes(key);
+          const target = schoolOrDinas && arrivalTarget !== undefined ? arrivalTarget : total;
           return (
             <button type="button" key={key} aria-haspopup="dialog" aria-label={`Lihat daftar ${label} di ${venue.name}`}
               onClick={() => onDetails({
@@ -47,7 +50,9 @@ function VenueAttendanceCard({ venue, day, testSession, onDetails, visibleGroups
                 sourceTotal: venue[key].source === 'arrival' ? total : undefined,
               })}>
               <span className="venue-attendance__label">{label} <FontIcon name="chevron-right" /></span>
-              <span className="venue-attendance__count"><b>{number.format(attended)}</b> / {number.format(total)} <small>sudah dicatat</small></span>
+              <span className="venue-attendance__count"><b>{number.format(attended)}</b> / {number.format(target)} <small>sudah dicatat</small></span>
+              {schoolOrDinas && arrivalTarget !== undefined && <small className="muted">Total undangan: {number.format(total)}</small>}
+              {assumedArrived && <small className="muted">Diasumsikan sudah tiba: {number.format(total)} / {number.format(total)}</small>}
               {venue[key].source !== 'arrival' && registered < total && <small className="muted">
                 {registered === 0 ? 'Belum ada profil absensi' : `${number.format(registered)} punya profil absensi`}
               </small>}
