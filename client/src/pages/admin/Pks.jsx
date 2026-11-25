@@ -1,7 +1,7 @@
 import LoRepresentation from '../../components/LoRepresentation.jsx';
 import { useEffect, useRef, useState } from 'react';
 import { Navigate, useOutletContext } from 'react-router-dom';
-import { api, isLO } from '../../api.js';
+import { api } from '../../api.js';
 import { selectedEvent } from '../../event.js';
 import { personName } from '../../lib/personName.js';
 import { groupPksVerifiers } from '../../lib/pksVerifiers.js';
@@ -116,7 +116,7 @@ function Contact({ phone, email, name }) {
 
 export default function Pks({ publicView = false }) {
   const { user } = useOutletContext() || {};
-  const loView = !publicView && isLO();
+  const loView = !publicView && user?.role === 'lo';
   const [globalRoster, setGlobalRoster] = useState(null);
   const [globalRosterError, setGlobalRosterError] = useState('');
   function request(suffix = '', params = new URLSearchParams()) {
@@ -141,8 +141,11 @@ export default function Pks({ publicView = false }) {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailQuery, setDetailQuery] = useState('');
   const [query, setQuery] = useState('');
-  const [venue, setVenue] = useState('');
-  const [owner, setOwner] = useState('');
+  const [selectedVenue, setVenue] = useState('');
+  const [selectedOwner, setOwner] = useState('');
+  const ownLo = loView ? data?.lo?.[0] : null;
+  const venue = loView ? ownLo?.venue || '' : selectedVenue;
+  const owner = loView ? ownLo?.name || '' : selectedOwner;
   const [verifier, setVerifier] = useState('');
   const [view, setView] = useState('schools');
   const [status, setStatus] = useState('');
@@ -264,7 +267,7 @@ export default function Pks({ publicView = false }) {
   const rankingData = loView ? globalRoster : data;
   const rankingVerifiers = loView ? groupPksVerifiers(globalRoster?.verifiers, globalRoster?.schools) : verifiers;
   const rankingView = view === 'ranking' || view === 'verifierRanking';
-  const filterData = rankingView ? rankingData : data;
+  const filterData = rankingView && !loView ? rankingData : data;
   const verifierOptions = [...new Set((data?.schools || [])
     .filter(row => (!venue || row.venue === venue) && (!owner || row.lo === owner))
     .map(row => row.facilitator).filter(Boolean))]
@@ -348,8 +351,20 @@ export default function Pks({ publicView = false }) {
         </div>
         <div className={`pks-filters${view === 'schools' ? ' pks-filters--schools' : ''}${showArrivalFilter ? ' pks-filters--with-arrival' : ''}`}>
           <FilterField label="Pencarian"><input type="search" value={query} placeholder={view === 'schools' ? 'Nama sekolah, NPSN, atau nomor PKS' : 'Cari nama atau venue'} onChange={e => { setQuery(e.target.value); setPage(1); }} /></FilterField>
-          <FilterField label="Venue"><select value={venue} onChange={e => { setVenue(e.target.value); setOwner(''); setVerifier(''); setPage(1); }}><option value="">Semua venue</option>{(filterData?.venues || []).map(name => <option key={name}>{name}</option>)}</select></FilterField>
-          <FilterField label="LO bertugas"><select value={owner} onChange={e => { setOwner(e.target.value); setVerifier(''); setPage(1); }}><option value="">Semua LO</option>{(filterData?.lo || []).filter(row => !venue || row.venue === venue).map(row => <option value={row.name} key={row.venue + row.name}>{personName(row.name)}</option>)}</select></FilterField>
+          <FilterField label="Venue">
+            <select value={venue} disabled={loView} onChange={e => { setVenue(e.target.value); setOwner(''); setVerifier(''); setPage(1); }}>
+              {!loView && <option value="">Semua venue</option>}
+              {loView && !venue && <option value="">Venue belum ditetapkan</option>}
+              {(filterData?.venues || []).map(name => <option key={name}>{name}</option>)}
+            </select>
+          </FilterField>
+          <FilterField label="LO bertugas">
+            <select value={owner} disabled={loView} onChange={e => { setOwner(e.target.value); setVerifier(''); setPage(1); }}>
+              {!loView && <option value="">Semua LO</option>}
+              {loView && !owner && <option value="">Penugasan LO belum tersedia</option>}
+              {(filterData?.lo || []).filter(row => !venue || row.venue === venue).map(row => <option value={row.name} key={row.venue + row.name}>{personName(row.name)}</option>)}
+            </select>
+          </FilterField>
           {view === 'schools' && <FilterField label="Verifikator">
             <select value={verifier} onChange={e => { setVerifier(e.target.value); setPage(1); }}>
               <option value="">Semua verifikator</option>
@@ -371,7 +386,7 @@ export default function Pks({ publicView = false }) {
             </select>
           </FilterField>}
         </div>
-        {rankingView && !rankingData ? (globalRosterError ? <p role="alert">{globalRosterError} <button type="button" onClick={loadGlobalRoster}>Coba lagi</button></p> : <p role="status">Memuat data peringkat…</p>) : view === 'verifierRanking' ? <PksRanking verifierMode onShowSchools={openRankingSchools} data={rankingData} venue={venue} query={search} owner={owner} sourceRanking={verifierRanking} sourceRankingLoading={!schoolStatuses && !schoolStatusesError} sourceRankingError={schoolStatusesError ? 'Peringkat Verifikator dari Revit belum dapat dimuat.' : ''} onReloadSourceRanking={loadSchoolStatuses} /> : view === 'ranking' ? <PksRanking publicView={publicView} onShowSchools={openRankingSchools} data={rankingData} venue={venue} query={search} owner={owner} onReload={loView ? loadGlobalRoster : load} sourceRanking={sourceRanking} sourceRankingError={sourceRankingError} sourceRankingLoading={sourceRankingLoading} onLoadSourceRanking={loadSourceRanking} onReloadSourceRanking={loadSourceRankingAgain} /> : <>
+        {rankingView && loView && !ownLo ? <p role="status">Penugasan LO belum tersedia.</p> : rankingView && !rankingData ? (globalRosterError ? <p role="alert">{globalRosterError} <button type="button" onClick={loadGlobalRoster}>Coba lagi</button></p> : <p role="status">Memuat data peringkat…</p>) : view === 'verifierRanking' ? <PksRanking verifierMode onShowSchools={openRankingSchools} data={rankingData} venue={venue} query={search} owner={owner} sourceRanking={verifierRanking} sourceRankingLoading={!schoolStatuses && !schoolStatusesError} sourceRankingError={schoolStatusesError ? 'Peringkat Verifikator dari Revit belum dapat dimuat.' : ''} onReloadSourceRanking={loadSchoolStatuses} /> : view === 'ranking' ? <PksRanking publicView={publicView} onShowSchools={openRankingSchools} data={rankingData} venue={venue} query={search} owner={owner} onReload={loView ? loadGlobalRoster : load} sourceRanking={sourceRanking} sourceRankingError={sourceRankingError} sourceRankingLoading={sourceRankingLoading} onLoadSourceRanking={loadSourceRanking} onReloadSourceRanking={loadSourceRankingAgain} /> : <>
         {showArrivalFilter && <PksAttendanceSummary schools={filteredSchools} onSelect={showAttendanceResults}
           arrivalFilter={arrivalFilter} arrivalByParticipant={arrivalByParticipant} />}
         <div ref={resultsRef} className="pks-results"><span><b>{number.format(rows.length)}</b> {view === 'schools' ? 'sekolah' : view === 'verifiers' ? 'verifikator' : 'LO'}{filtered ? ' sesuai filter' : ''}</span>{filtered && <button type="button" onClick={reset}>Reset filter</button>}</div>
