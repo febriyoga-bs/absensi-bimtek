@@ -3,12 +3,11 @@ import { HttpError } from './util.js';
 import { eventVenueScope } from './eventVenues.js';
 import { eventId } from './eventContext.js';
 import { arrivalSchoolOverride, schoolHeadOverride } from './arrivalSchoolOverrides.js';
+import { arrivalPersonKey as attendeeNameKey } from '../../shared/pksAttendeeName.js';
 
 const key = (value) => String(value ?? '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 const schoolKey = (value) => key(String(value ?? '').toLowerCase().replace(/\bsd\s*n(?=\s|\d|[.-])/g, 'sd negeri '));
 // Nama di rekap bisa memuat beberapa gelar yang tidak ada di daftar sekolah.
-const attendeeNameKey = (value) => key(String(value ?? '').split(',')[0].trim()
-  .replace(/(?:\s+(?:s\.?ag|s\.?pd(?:\.?i)?|s\.?t|m\.?pd(?:\.?i)?|m\.?t)\.?)+$/i, ''));
 const aliases = {
   hotelatriatangerang: 'atriatangerang', holidayinn: 'holidayinnjakarta',
   mercurebatavia: 'mercurebataviajakarta', mercurejakartabatavia: 'mercurebataviajakarta',
@@ -294,6 +293,24 @@ export async function importArrivalRecap(rows, summary = null, { audit = false }
   if (audit) {
     return { unmatched, groups: [...unmatchedGroups.values()].sort((a, b) =>
       a.venue.localeCompare(b.venue, 'id') || a.instansi.localeCompare(b.instansi, 'id')) };
+  }
+  if (pks) {
+    // Keep confirmed profile bindings through re-imports while that same source
+    // participant remains in the same school and venue.
+    const { rows: previous } = await q('SELECT venue_id,representatives FROM venue_arrival_recap');
+    for (const snapshot of snapshotsToSave) {
+      const bindings = previous.find(row => row.venue_id === snapshot.venue_id)?.representatives || {};
+      for (const [id, representative] of Object.entries(bindings)) {
+        if (representative.role !== 'Perwakilan Sekolah' || snapshot.representatives[id]) continue;
+        const profile = people.find(p => String(p.id) === id && p.venue_id === snapshot.venue_id);
+        if (!profile) continue;
+        const entries = snapshot.detail_rows.filter(row => attendeeNameKey(row.name) === attendeeNameKey(representative.name)
+          && schoolKey(row.institution) === schoolKey(profile.institution));
+        if (entries.length !== 1) continue;
+        snapshot.representatives[id] = { ...representative, name: entries[0].name };
+        if (priority[entries[0].arrival_status]) snapshot.marks[id] = entries[0].arrival_status;
+      }
+    }
   }
   await q(`INSERT INTO venue_arrival_recap (venue_id,marks,detail_rows,source_summary,representatives)
     SELECT venue_id,marks,detail_rows,source_summary,representatives

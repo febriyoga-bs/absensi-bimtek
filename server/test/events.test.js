@@ -15,6 +15,7 @@ import { join } from 'node:path';
 import { cleanPksRecord } from '../src/pks.js';
 import { insertPksSchedule } from '../src/pksSchedule.js';
 import {getVenueAttendanceDetails} from '../src/venueAttendance.js';
+import {linkPksArrivalProfiles} from '../src/pksArrivalProfileLinks.js';
 
 // Actual PostgreSQL in memory: never connect tests to DATABASE_URL.
 const db = new PGlite();
@@ -890,4 +891,46 @@ test('PKS representative popup links attendance within its venue and day',async(
       await q('DELETE FROM venue_arrival_recap WHERE venue_id=$1',[venue.id]);await q('DELETE FROM venues WHERE id=$1',[venue.id]);
     }
   });
+});
+
+test('PKS directory binds representatives to existing slots without changing import time or attendance', async()=>{
+ await eventContext.run({id:5,schema_name:'bimtek_5'},async()=>{
+  await migrate();
+  const {rows:[prior]}=await q('SELECT data FROM assignment_roster WHERE id=1');
+  const {rows:[venue]}=await q("INSERT INTO venues(name,lat,lng) VALUES('Link Test Hotel',-6,106) RETURNING id");
+  const ids=[];
+  try {
+   for(const [code,name,position] of [['link-k','Old Head','Kepala Sekolah'],['link-b','Bendahara — SD Link','Bendahara']]) {
+    const {rows:[p]}=await q("INSERT INTO people(code,name,role,position,venue_id,npsn,institution) VALUES($1,$2,'peserta',$3,$4,'99990003','SD Link') RETURNING id",[code,name,position,venue.id]);ids.push(p.id);
+   }
+   const school={npsn:'99990003',name:'SD Link',head_name:'Old Head',venue:'Link Test Hotel'};
+   await q('INSERT INTO assignment_roster(id,data) VALUES(1,$1) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data',[JSON.stringify({schools:[school],venues:['Link Test Hotel']})]);
+   await q("INSERT INTO venue_arrival_recap(venue_id,marks,detail_rows,imported_at) VALUES($1,'{}',$2,'2026-11-25T12:00:00Z')",[venue.id,JSON.stringify([
+    {name:'Marzuki',position:'Bendahara',institution:'SD Link',arrival_status:'selesai'},
+    {name:'Zakaria',position:'Bendahara',institution:'SD Link',arrival_status:'sedang_antre'},
+   ])]);
+   await linkPksArrivalProfiles(venue.id);
+   const {rows:[saved]}=await q('SELECT marks,representatives,imported_at FROM venue_arrival_recap WHERE venue_id=$1',[venue.id]);
+   assert.equal(saved.representatives[ids[0]].name,'Marzuki');
+   assert.equal(saved.representatives[ids[1]].role,'Perwakilan Sekolah');
+   assert.equal(saved.marks[ids[1]],'sedang_antre');
+   assert.equal(new Date(saved.imported_at).toISOString(),'2026-11-25T12:00:00.000Z');
+   assert.equal((await q('SELECT name FROM people WHERE id=$1',[ids[0]])).rows[0].name,'Old Head');
+   const response=await request(`/admin/scan/participants?event=5&category=sekolah&venue_id=${venue.id}`);
+   assert.equal(response.status,200,await response.clone().text());
+   const directory=await response.json();
+   assert.equal(directory.rows.length,2);
+   assert.deepEqual(directory.rows.map(p=>p.representative.name).sort(),['Marzuki','Zakaria']);
+   assert.ok(directory.rows.every(p=>p.representative.role==='Perwakilan Sekolah'));
+   assert.equal(directory.arrival_summary.arrived,1);
+   assert.equal(directory.arrival_summary.queued,1);
+   await linkPksArrivalProfiles(venue.id);
+   assert.deepEqual((await q('SELECT representatives FROM venue_arrival_recap WHERE venue_id=$1',[venue.id])).rows[0].representatives,saved.representatives);
+  } finally {
+   if(prior)await q('UPDATE assignment_roster SET data=$1 WHERE id=1',[JSON.stringify(prior.data)]);
+   await q('DELETE FROM people WHERE id=ANY($1::int[])',[ids]);
+   await q('DELETE FROM venue_arrival_recap WHERE venue_id=$1',[venue.id]);
+   await q('DELETE FROM venues WHERE id=$1',[venue.id]);
+  }
+ });
 });

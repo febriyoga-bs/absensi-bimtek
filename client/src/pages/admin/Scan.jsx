@@ -69,6 +69,7 @@ function attendanceStatus(person) {
 }
 
 function representedPersonName(person) {
+  if (person.representative?.role === 'Perwakilan Sekolah') return null;
   const name = person.name?.trim();
   if (!person.representative || !name || /^[-–—]+$/.test(name)) return null;
   const prefix = name.split(/\s+[-–—]\s*/u, 1)[0].trim().toLocaleLowerCase('id');
@@ -187,7 +188,7 @@ export default function Scan() {
 
   function absenkan(p) {
     setShot({ code: p.code, name: p.representative ? personName(p.representative.name) : personName(p.name),
-      originalName: representedPersonName(p), position: p.position, school: p.institution?.split('; ')[0],
+      originalName: representedPersonName(p), position: p.representative?.role || p.position, school: p.institution?.split('; ')[0],
       sessionId: p.session?.id, sessionName: sessionTitle(p.session), isTest: p.session?.is_test });
   }
 
@@ -414,7 +415,7 @@ export default function Scan() {
                           {representedPersonName(p) && tab !== 'dinas' && <><span className="tag tag--venue">Mewakili</span>
                             <div className="muted small">Mewakili {personName(p.name)}</div></>}
                           {!p.representative && <WhatsAppLink name={p.name} phone={p.phone} />}
-                          <div className="muted small">{[p.position, !organizationTab && p.code].filter(Boolean).join(' · ')}</div></td>
+                          <div className="muted small">{[p.representative?.role || p.position, !organizationTab && p.code].filter(Boolean).join(' · ')}</div></td>
                         <td role="cell" data-label="Sekolah / Instansi" hidden={columnHidden('Sekolah / Instansi')} className="cell-clamp">{p.institution || '—'}
                           {p.npsn && <div className="muted small">NPSN {p.npsn}</div>}
                         </td>
