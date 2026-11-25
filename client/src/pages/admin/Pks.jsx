@@ -116,6 +116,7 @@ export default function Pks({ publicView = false }) {
   }
 
   const [data, setData] = useState(null);
+  const [arrivalImportTimestamp, setArrivalImportTimestamp] = useState({ status: 'loading', date: null });
   const [error, setError] = useState('');
   const [sourceData, setSourceData] = useState(null);
   const [schoolStatuses, setSchoolStatuses] = useState(null);
@@ -301,10 +302,16 @@ export default function Pks({ publicView = false }) {
   const progressTotal = progressMetrics.get('total')?.value || 0;
   return <div className="pks-page">
     <header className="pks-heading">
+      {!publicView && user?.role === 'admin' && <p className="pks-heading__import-time" aria-live="polite">
+        {arrivalImportTimestamp.status === 'loading' ? 'Memuat waktu impor terakhir…'
+          : arrivalImportTimestamp.status === 'error' ? 'Waktu impor kehadiran terakhir belum dapat dimuat.'
+          : arrivalImportTimestamp.date ? <>Terakhir impor kehadiran: <time dateTime={arrivalImportTimestamp.date.toISOString()}>{new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Jakarta' }).format(arrivalImportTimestamp.date)} WIB</time></>
+          : 'Belum ada data kehadiran yang diimpor.'}
+      </p>}
       <div><h1>Pantau Rekap PKS</h1><p>Satuan Pendidikan Aman Bencana <span>·</span> 23–28 November 2026</p></div>
       {data && <p className="pks-heading__meta">{data.venues.length} Venue <span>·</span> {data.lo.length} LO <span>·</span> {verifiers.length} Verifikator{!!data.coordinators?.length && <><span>·</span> {data.coordinators.length} Koordinator</>}</p>}
     </header>
-    {!publicView && user?.role === 'admin' && <ArrivalImport onImported={load} />}
+    {!publicView && user?.role === 'admin' && <ArrivalImport onImported={load} onTimestampChange={setArrivalImportTimestamp} />}
     {error && <div className="alert alert--err" role="alert">{error} {!data && <button className="btn btn--sm" onClick={load}>Coba lagi</button>}</div>}
     {!data && !error && <p role="status">Memuat pemetaan PKS…</p>}
     {data && <>
