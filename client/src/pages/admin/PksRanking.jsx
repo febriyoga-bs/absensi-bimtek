@@ -1,3 +1,4 @@
+import { progressGroups, progressLabels, hasProgressStage, progressScore } from '../../../../shared/pksProgress.js';
 import { useEffect, useState } from 'react';
 import LoRepresentation from '../../components/LoRepresentation.jsx';
 import { personName } from '../../lib/personName.js';
@@ -6,17 +7,7 @@ import AttendanceRanking from './AttendanceRanking.jsx';
 
 const percent = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 });
 const number = new Intl.NumberFormat('id-ID');
-const sourceStages = [
-  { title: 'BIODATA', metrics: [
-    ['belum_login', 'Belum login'], ['bio_belum', 'Belum mengisi biodata'],
-    ['bio_proses', 'Proses mengisi biodata'], ['bio_tunggu', 'Menunggu verifikasi biodata'],
-    ['bio_ok', 'Sudah verifikasi biodata'],
-  ] },
-  { title: 'RAB', metrics: [['sepakat_rab', 'Sepakat RAB'], ['ba', 'TTD BA']] },
-  { title: 'PKS', metrics: [
-    ['pks', 'TTE Kepsek PKS'], ['pks_ppk', 'TTE PPK PKS'], ['meterai', 'E-Meterai'],
-  ] },
-];
+const sourceStages = progressGroups.map(group => ({ title: group.label === 'Biodata' ? 'BIODATA' : group.label, metrics: progressLabels.filter(([key]) => group.metrics.includes(key)) }));
 
 export function rankVerifiers(verifiers, schools, statuses) {
   const stages = sourceStages.flatMap(group => group.metrics.map(([key]) => key));
@@ -31,13 +22,13 @@ export function rankVerifiers(verifiers, schools, statuses) {
       const status = statuses[npsn];
       if (!status) continue;
       matched++;
-      const index = stages.indexOf(status.stage);
-      if (index < 0) continue;
-      metrics[status.stage]++;
-      stageSum += index;
+      const score = progressScore(status);
+      if (score == null) continue;
+      for (const metric of stages) if (hasProgressStage(status, metric)) metrics[metric]++;
+      stageSum += score;
       scored++;
     }
-    const overall = scored ? 100 * stageSum / (scored * (stages.length - 1)) : null;
+    const overall = scored ? stageSum / scored : null;
     return { ...verifier, schools: [...assigned.values()], matched, total: assigned.size, metrics, overall };
   }).sort((a, b) => (b.overall ?? -1) - (a.overall ?? -1) || a.name.localeCompare(b.name, 'id'));
   let rank = 0;
@@ -79,11 +70,9 @@ export default function PksRanking({
       <details className="pks-overall-help">
         <summary>Cara hitung <b>Point Progress</b></summary>
         <p>Sekolah dicocokkan dengan data Revit berdasarkan NPSN. Point Progress adalah rata-rata skor sekolah binaan yang tahapnya dikenali di Revit.</p>
-        <p>Ada 10 tahap dengan poin 0 sampai 9. Belum login bernilai 0 poin, Belum mengisi biodata 1 poin, Proses mengisi biodata 2 poin, Menunggu verifikasi biodata 3 poin, dan seterusnya hingga E-Meterai 9 poin.</p>
-        <p>Setiap NPSN dihitung satu kali berdasarkan tahap tertinggi yang dilaporkan Revit. Jika satu sekolah muncul di beberapa kolom capaian, poinnya tetap berasal dari tahap tertingginya. Contohnya, sekolah yang sudah mencapai E-Meterai mendapat 9 dari 9 poin.</p>
-        <p><strong>Rumus</strong> = jumlah poin seluruh sekolah yang dihitung ÷ (jumlah sekolah yang dihitung × 9) × 100%.</p>
-        <p><strong>Contoh</strong> — dari 28 sekolah, 2 belum mengisi biodata, 6 sedang mengisi, dan 20 menunggu verifikasi. Skornya ((2 × 1) + (6 × 2) + (20 × 3)) ÷ (28 × 9) × 100% = 29,4% setelah dibulatkan.</p>
-        <p>Persentase di samping tiap tahap menunjukkan bagian dari seluruh sekolah binaan yang berada pada tahap tersebut. Peringkat ditentukan dari skor sebelum pembulatan, dan skor yang sama mendapat peringkat yang sama.</p>
+        <p>Ada sembilan tahap capaian: Sudah login, Sudah mengisi biodata, Sudah kirim biodata, Sudah verifikasi biodata, Sepakat RAB, TTD BA, TTE Kepsek PKS, TTE PPK PKS, dan E-Meterai.</p>
+        <p>Setiap tahap yang tercapai bernilai satu poin, maksimal 9 poin. Capaian tiap tahap mengikuti daftar sekolah dari Revit, termasuk ketentuan sekolah dengan beberapa program. Point Progress = rata-rata poin sekolah yang statusnya dikenali, dibagi 9, lalu dikalikan 100%.</p>
+        <p>Jumlah per tahap bersifat kumulatif. Sekolah yang mencapai tahap akhir juga masuk ke tahap sebelumnya, sehingga jumlah antartahap tidak dijumlahkan. Setiap NPSN dihitung satu kali pada masing-masing tahap. Skor yang sama mendapat peringkat yang sama.</p>
       </details>
       {sourceRankingLoading && <p role="status">Mengambil data Revit dan menghitung {title.toLowerCase()}…</p>}
       {sourceRankingError && <div className="alert alert--err" role="alert">{sourceRankingError} <button className="btn btn--sm" onClick={onReloadSourceRanking}>Coba lagi</button></div>}

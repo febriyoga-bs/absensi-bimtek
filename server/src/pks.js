@@ -1,3 +1,5 @@
+import { progressSourceUrl, progressSchoolUrl, parseProgressPage, parseProgressSchoolPage } from './pksProgressSource.js';
+import { progressLabels, progressStages, progressStage } from '../../shared/pksProgress.js';
 import { Router } from 'express';
 import { q } from './db.js';
 import { eventId } from './eventContext.js';
@@ -33,43 +35,8 @@ publicPksRoutes.get('/', ah(async (_req, res) => {
 }));
 export const pksStatuses = ['belum_diterima', 'menunggu_verifikasi', 'perlu_perbaikan', 'lengkap'];
 
-const progressSourceUrl = 'https://revitsd.kemendikdasmen.go.id/spab/dashboard-progress?jenis=pks&bimtek=1';
-const progressSchoolUrl = 'https://revitsd.kemendikdasmen.go.id/spab/dashboard-progress/sekolah';
-const progressMetrics = [
-  ['total', 'Total sekolah'],
-  ['belum_login', 'Belum login'],
-  ['bio_belum', 'Belum mengisi biodata'],
-  ['bio_proses', 'Proses mengisi biodata'],
-  ['bio_tunggu', 'Menunggu verifikasi biodata'],
-  ['bio_ok', 'Sudah verifikasi biodata'],
-  ['sepakat_rab', 'Sepakat RAB'],
-  ['ba', 'TTD BA'],
-  ['pks', 'TTE Kepsek PKS'],
-  ['pks_ppk', 'TTE PPK PKS'],
-  ['meterai', 'E-Meterai'],
-  ['tidak_terdata', 'Tidak terdata'],
-];
+const progressMetrics = progressLabels;
 const progressCache = createAsyncCache({ ttl: 120000, maxEntries: 3 });
-const decodeHtml = (value) => String(value || '').replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ')
-  .replace(/&ndash;|&#8211;/g, '–').replace(/&mdash;|&#8212;/g, '—')
-  .replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
-const htmlText = (value) => decodeHtml(String(value || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim());
-const parseNumber = (value) => Number(String(value || '').replace(/\./g, '').replace(/,/g, '.').replace(/[^\d.-]/g, '')) || 0;
-
-function parseProgressSchoolPage(html) {
-  const rows = [...html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map(([, row]) => {
-    const cells = [...row.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map(([, cell]) => cell);
-    if (cells.length < 4) return null;
-    const identity = htmlText(cells[0]);
-    const npsn = identity.match(/NPSN\s*(\d{8})/i)?.[1];
-    if (!npsn) return null;
-    const name = identity.replace(/\s*NPSN\s*\d{8}.*$/i, '').trim();
-    return { npsn, name, kabKota: htmlText(cells[1]), hotel: htmlText(cells[2]), status: htmlText(cells[3]) };
-  }).filter(Boolean);
-  const totalMatch = htmlText(html).match(/\d[\d.]*\s*[–-]\s*\d[\d.]*\s+dari\s+([\d.]+)\s+sekolah/i);
-  return { rows, total: totalMatch ? parseNumber(totalMatch[1]) : rows.length };
-}
-
 async function fetchProgressSchoolPage(hotel, page, metric = 'total', query = '') {
   const url = new URL(progressSchoolUrl);
   url.search = new URLSearchParams({ jenis: 'pks', bimtek: '1', metric, hotel, q: query, page: String(page) });
@@ -78,8 +45,8 @@ async function fetchProgressSchoolPage(hotel, page, metric = 'total', query = ''
   return parseProgressSchoolPage(await response.text());
 }
 
-async function fetchAllProgressSchools(hotels) {
-  const firstPages = await Promise.all(hotels.map(hotel => fetchProgressSchoolPage(hotel.hotel, 1)));
+async function fetchAllProgressSchools(hotels, metric = 'total') {
+  const firstPages = await Promise.all(hotels.map(hotel => fetchProgressSchoolPage(hotel.hotel, 1, metric)));
   const jobs = [];
   firstPages.forEach((page, hotelIndex) => {
     const pageSize = Math.max(1, page.rows.length);
@@ -92,7 +59,7 @@ async function fetchAllProgressSchools(hotels) {
     while (cursor < jobs.length) {
       const index = cursor++;
       const job = jobs[index];
-      const page = await fetchProgressSchoolPage(job.hotel, job.page);
+      const page = await fetchProgressSchoolPage(job.hotel, job.page, metric);
       results.push(...page.rows);
     }
   });
@@ -104,56 +71,27 @@ function loadProgressSchools(hotels) {
   return progressCache.get('schools', () => fetchAllProgressSchools(hotels));
 }
 
-function metricForProgressStatus(status) {
-  const value = String(status || '').toLocaleLowerCase('id').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  if (value.includes('belum login')) return 'belum_login';
-  if (value.includes('belum mengisi biodata')) return 'bio_belum';
-  if (value.includes('proses mengisi biodata')) return 'bio_proses';
-  if (value.includes('menunggu verifikasi biodata')) return 'bio_tunggu';
-  if (value.includes('sudah verifikasi biodata')) return 'bio_ok';
-  if (value.includes('sepakat rab')) return 'sepakat_rab';
-  if (value.includes('ttd ba') || value.includes('tanda tangan ba')) return 'ba';
-  if (value.includes('tte kepsek pks')) return 'pks';
-  if (value.includes('tte ppk pks')) return 'pks_ppk';
-  if (value.includes('e-meterai') || value.includes('e meterai')) return 'meterai';
-  if (value.includes('tidak terdata')) return 'tidak_terdata';
-  return null;
-}
-
-function parseProgressPage(html) {
-  const metricList = [...html.matchAll(/<button\b(?=[^>]*data-progress-open)([^>]*)>([\s\S]*?)<\/button>/gi)]
-    .filter(([, attrs]) => /data-hotel=""/i.test(attrs));
-  const summary = metricList.map(([, attrs, body]) => {
-    const metric = attrs.match(/data-metric="([^"]+)"/i)?.[1];
-    const label = htmlText(body.match(/<span[^>]*>([\s\S]*?)<\/span>/i)?.[1])
-      || decodeHtml(attrs.match(/data-title="([^"]*)"/i)?.[1] || '');
-    const value = body.match(/<strong[^>]*>([\s\S]*?)<\/strong>/i)?.[1];
-    const percent = body.match(/<span[^>]*text-xs[^>]*>([^<]*%)<\/span>/i)?.[1] || '0%';
-    return metric ? { metric, label, value: parseNumber(htmlText(value)), percent: htmlText(percent) } : null;
-  }).filter(Boolean);
-
-  const hotels = [...html.matchAll(/<tr\b[^>]*class="[^"]*hover:bg-soft[^"]*"[^>]*>([\s\S]*?)<\/tr>/gi)].map(([, row]) => {
-    const cells = [...row.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map(([, cell]) => cell);
-    if (!cells.length) return null;
-    const metrics = Object.fromEntries(progressMetrics.map(([key]) => [key, 0]));
-    cells.slice(1).forEach((cell) => {
-      const metric = cell.match(/data-metric="([^"]+)"/i)?.[1];
-      const buttonValue = cell.match(/<button\b[^>]*>([\s\S]*?)<\/button>/i)?.[1];
-      const spanValue = cell.match(/<span[^>]*>([\s\S]*?)<\/span>/i)?.[1];
-      if (metric && Object.hasOwn(metrics, metric)) metrics[metric] = parseNumber(htmlText(buttonValue));
-      else if (spanValue) {
-        const index = cells.indexOf(cell);
-        const key = progressMetrics[index - 1]?.[0];
-        if (key) metrics[key] = parseNumber(htmlText(spanValue));
+async function loadProgressAchievements(source) {
+  return progressCache.get('achievements', async () => {
+    const reached = new Map();
+    const jobs = source.metrics.filter(item => progressStages.includes(item.metric));
+    if (jobs.length !== progressStages.length) throw new HttpError(502, 'Dashboard Revit belum menyediakan sembilan tahap capaian lengkap.');
+    let cursor = 0;
+    await Promise.all(Array.from({ length: 3 }, async () => {
+      while (cursor < jobs.length) {
+        const item = jobs[cursor++];
+        const rows = await fetchAllProgressSchools(source.hotels, item.sourceMetric);
+        for (const row of rows) {
+          if (!reached.has(row.npsn)) reached.set(row.npsn, new Set());
+          reached.get(row.npsn).add(item.metric);
+        }
       }
-    });
-    return { hotel: htmlText(cells[0]), metrics };
-  }).filter((row) => row?.hotel);
-
-  if (!summary.length || !hotels.length) throw new HttpError(502, 'Struktur data dashboard progress sumber berubah.');
-  const updatedAt = html.match(/diperbarui\s*([^<]+)/i)?.[1]?.trim() || null;
-  return { source: progressSourceUrl, updatedAt: htmlText(updatedAt), metrics: summary, hotels };
+    }));
+    return reached;
+  });
 }
+
+const metricForProgressStatus = progressStage;
 
 export function cleanPksRecord(body) {
   if (!pksStatuses.includes(body?.status)) throw new HttpError(400, 'Status PKS tidak valid.');
@@ -202,7 +140,12 @@ progressRoutes.get('/schools', ah(async (req, res) => {
   const page = Number(req.query.page || 1);
   if (!progressMetrics.some(([key]) => key === metric)) throw new HttpError(400, 'Tahap progres tidak valid.');
   if (hotel.length > 120 || query.length > 120 || !Number.isSafeInteger(page) || page < 1 || page > 1000) throw new HttpError(400, 'Filter daftar sekolah tidak valid.');
-  const result = await fetchProgressSchoolPage(hotel, page, metric, query);
+  const sourceResponse = await fetch(progressSourceUrl, { signal: AbortSignal.timeout(15000) });
+  if (!sourceResponse.ok) throw new HttpError(502, 'Dashboard progress sumber tidak dapat diakses.');
+  const source = parseProgressPage(await sourceResponse.text());
+  const sourceMetric = source.metrics.find(item => item.metric === metric)?.sourceMetric;
+  if (!sourceMetric) throw new HttpError(502, 'Tahap belum tersedia pada dashboard sumber.');
+  const result = await fetchProgressSchoolPage(hotel, page, sourceMetric, query);
   res.set('Cache-Control', 'private, max-age=60');
   res.json({ ...result, metric, hotel, page, pageSize: result.rows.length });
 }));
@@ -219,6 +162,7 @@ progressRoutes.get('/lo-ranking', ah(async (_req, res) => {
     const roster = rosterResult.rows[0]?.data;
     if (!roster?.schools || !roster?.lo) throw new HttpError(503, 'Data penugasan LO belum tersedia.');
     const sourceSchools = await loadProgressSchools(source.hotels);
+    const achievements = await loadProgressAchievements(source);
     const schoolByNpsn = new Map(roster.schools.map(school => [String(school.npsn), school]));
     const ownerByName = new Map(roster.lo.map(owner => [`${owner.venue}:${owner.name}`, {
       name: owner.name, venue: owner.venue, total: 0, assignedNpsn: new Set(),
@@ -228,7 +172,7 @@ progressRoutes.get('/lo-ranking', ah(async (_req, res) => {
     for (const school of roster.schools) {
       ownerByName.get(`${school.venue}:${school.lo}`)?.assignedNpsn.add(String(school.npsn));
     }
-    const stages = ['belum_login', 'bio_belum', 'bio_proses', 'bio_tunggu', 'bio_ok', 'sepakat_rab', 'ba', 'pks', 'pks_ppk', 'meterai'];
+    const stages = progressStages;
     for (const item of sourceSchools) {
       const school = schoolByNpsn.get(item.npsn);
       if (!school) continue;
@@ -236,11 +180,12 @@ progressRoutes.get('/lo-ranking', ah(async (_req, res) => {
       if (!owner || owner.seen.has(item.npsn)) continue;
       owner.seen.add(item.npsn);
       owner.total++;
-      const metric = metricForProgressStatus(item.status);
-      if (metric && Object.hasOwn(owner.metrics, metric)) owner.metrics[metric]++;
-      const stageIndex = stages.indexOf(metric);
-      if (stageIndex >= 0) {
-        owner.scoreTotal += (stageIndex / (stages.length - 1)) * 100;
+      const achieved = achievements.get(item.npsn) || new Set();
+      for (const target of achieved) owner.metrics[target]++;
+      const stage = metricForProgressStatus(item.status);
+      const score = stage === 'tidak_terdata' || (!stage && !achieved.size) ? null : achieved.size * 100 / stages.length;
+      if (score != null) {
+        owner.scoreTotal += score;
         owner.scoredSchools++;
       }
     }
@@ -269,15 +214,17 @@ progressRoutes.get('/statuses', ah(async (req, res) => {
     fetch(progressSourceUrl, { signal: AbortSignal.timeout(15000) }),
   ]);
   if (!response.ok) throw new HttpError(502, 'Dashboard progress sumber tidak dapat diakses.');
-  const { hotels } = parseProgressPage(await response.text());
+  const source = parseProgressPage(await response.text());
+  const { hotels } = source;
   const roster = rosterResult.rows[0]?.data;
   const own = req.user?.role === 'lo' ? roster?.lo?.find(row => row.account_id === req.user.lo) : null;
   const allowed = new Set((roster?.schools || [])
     .filter(row => !req.user || req.user.role === 'admin' || (own && row.venue === own.venue && row.lo === own.name))
     .map(row => String(row.npsn)));
   const schools = await loadProgressSchools(hotels);
+  const achievements = await loadProgressAchievements(source);
   res.json(Object.fromEntries(schools.filter(row => allowed.has(row.npsn)).map(row => [row.npsn, {
-    stage: metricForProgressStatus(row.status), label: row.status,
+    stage: metricForProgressStatus(row.status), label: row.status, achieved: [...(achievements.get(row.npsn) || [])],
   }])));
 }));
 

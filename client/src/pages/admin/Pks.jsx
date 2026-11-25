@@ -1,3 +1,4 @@
+import { progressGroups, progressMetricLabels, hasProgressStage } from '../../../../shared/pksProgress.js';
 import LoRepresentation from '../../components/LoRepresentation.jsx';
 import { useEffect, useRef, useState } from 'react';
 import { Navigate, useOutletContext } from 'react-router-dom';
@@ -97,17 +98,6 @@ function PksAttendanceSummary({ schools, onSelect, arrivalFilter, arrivalByParti
   </section>;
 }
 
-const progressGroups = [
-  { label: 'Biodata', className: 'pks-progress-group--bio', metrics: ['belum_login', 'bio_belum', 'bio_proses', 'bio_tunggu', 'bio_ok'] },
-  { label: 'RAB & BA', className: 'pks-progress-group--rab', metrics: ['sepakat_rab', 'ba'] },
-  { label: 'PKS', className: 'pks-progress-group--pks', metrics: ['pks', 'pks_ppk', 'meterai'] },
-];
-const progressMetricLabels = [
-  ['total', 'Total sekolah'], ['belum_login', '1. Belum login'], ['bio_belum', '2. Belum mengisi biodata'],
-  ['bio_proses', '3. Proses mengisi biodata'], ['bio_tunggu', '4. Menunggu verifikasi biodata'],
-  ['bio_ok', '5. Sudah verifikasi biodata'], ['sepakat_rab', '6. Sepakat RAB'], ['ba', '7. TTD BA'],
-  ['pks', '8. TTE Kepsek PKS'], ['pks_ppk', '9. TTE PPK PKS'], ['meterai', '10. E-Meterai'], ['tidak_terdata', 'Tidak terdata'],
-];
 function percent(value, total) { return `${total ? Math.round((value / total) * 100) : 0}%`; }
 
 function Contact({ phone, email, name }) {
@@ -217,7 +207,7 @@ export default function Pks({ publicView = false }) {
     const assigned = person.schools ?? [...new Map(rankingData.schools
       .filter(school => school.venue === person.venue && school.lo === person.name)
       .map(school => [String(school.npsn), school])).values()];
-    const schools = assigned.filter(school => metric === 'total' || schoolStatuses?.[school.npsn]?.stage === metric);
+    const schools = assigned.filter(school => metric === 'total' || hasProgressStage(schoolStatuses?.[school.npsn], metric));
     setDetailContext({ metric, hotel: person.venue, name: person.name, schools });
     setDetailQuery('');
     setDetailLoading(false);
@@ -275,7 +265,7 @@ export default function Pks({ publicView = false }) {
   const verifierRanking = view === 'verifierRanking' && schoolStatuses && rankingData
     ? { owners: rankVerifiers(rankingVerifiers, rankingData.schools, schoolStatuses) }
     : null;
-  const matchesDirectoryFilters = (row, rowView) => (!status || rowView !== 'schools' || schoolStatuses?.[row.npsn]?.stage === status)
+  const matchesDirectoryFilters = (row, rowView) => (!status || rowView !== 'schools' || hasProgressStage(schoolStatuses?.[row.npsn], status))
     && (!verifier || rowView !== 'schools' || row.facilitator === verifier)
     && (!venue || row.venue === venue) && (!owner || (rowView === 'verifiers' ? row.los.includes(owner) : (rowView === 'lo' ? row.name : row.lo) === owner))
     && [row.npsn, row.name, row.provinsi, row.kab_kota, row.venue, row.facilitator, row.coordinator, row.head_name, row.lo, ...(row.los || []), row.pks?.nomor_pks]
