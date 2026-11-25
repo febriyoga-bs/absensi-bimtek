@@ -15,3 +15,14 @@ test('SDN and SD Negeri source rows stay separate when normalized names share a 
  const ambiguous=await eventContext.run({id:5},()=>getSchoolArrivalStatuses([schools[0],{...schools[0],npsn:'99999999'}],null,query));
  assert.ok(ambiguous.every(s=>s.arrival_attendees.length===0 && s.arrival_identity_ambiguous));
 });
+test('identical school names resolve only uniquely named heads, leaving treasurers unresolved',async()=>{
+ const schools=[{npsn:'10101795',name:'SDN GAMPONG JALAN',venue:'Novotel Mangga Dua',head_name:'Khalijah Siregar, S.Pd.,ind'},
+  {npsn:'10102100',name:'SDN GAMPONG JALAN',venue:'Novotel Mangga Dua',head_name:'Suryani,S.Pd'}];
+ const rows=['Khalijah Siregar','SURYANI S.Pd','FITRIYANA','Anggie zudewky'].map(name=>({name,institution:schools[0].name,
+  venue:schools[0].venue,position:'Bendahara',arrival_status:'selesai'}));
+ const query=async sql=>({rows:sql.includes('arrival_corrections')?[{corrections:{}}]:rows});
+ const result=await eventContext.run({id:5},()=>getSchoolArrivalStatuses(schools,null,query));
+ assert.deepEqual(result.map(s=>s.arrival_attendees.map(p=>p.name)),[['Khalijah Siregar'],['SURYANI S.Pd']]);
+ assert.ok(result.every(s=>s.arrival_attendees[0].role==='Kepala Sekolah' && s.arrival_attendees[0].status==='selesai'));
+ assert.ok(result.every(s=>s.arrival_identity_ambiguous));
+});

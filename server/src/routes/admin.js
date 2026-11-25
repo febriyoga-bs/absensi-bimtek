@@ -21,6 +21,7 @@ import { pksRoutes } from '../pks.js';
 import { eventId } from '../eventContext.js';
 import { linkPksArrivalProfiles } from '../pksArrivalProfileLinks.js';
 import {getSchoolIdentityAudit} from '../auditSchoolIdentities.js';
+import {correctSchoolArrival} from '../correctSchoolArrival.js';
 import { pksVerifierArrivalSql } from '../pksVerifierArrival.js';
 import { loginLo } from '../loLogin.js';
 import { changeLoPassword } from '../loPassword.js';
@@ -93,6 +94,14 @@ r.get('/school-identity-audit', requireSuper, ah(async (req,res)=>{
   res.set('Cache-Control','no-store');
   res.json(await getSchoolIdentityAudit());
 }));
+r.post('/school-identity-correction', requireSuper, ah(async(req,res)=>{
+  if (eventId()!==5 || !req.body?.expected_imported_at || req.body?.confirmed!==true) throw new HttpError(400,'Konfirmasi dan versi rekap diperlukan.');
+  const {npsn,venue,attendees,reason}=req.body;
+  const head_name=Array.isArray(attendees) && attendees.find(p=>p.role==='Kepala Sekolah')?.name;
+  const result=await correctSchoolArrival({event_id:eventId(),npsn,venue,attendees,reason,head_name,corrected_by:req.user.name || 'Admin'},
+    {apply:true,expectedImportedAt:req.body.expected_imported_at});
+  res.json(result);
+}));
 r.get('/arrival-recap/:venueId/participants', requireSuper, ah(async (req, res) => {
   if (req.user.role === 'lo' && Number(req.params.venueId) !== req.user.venue) throw new HttpError(403, 'Bukan venue Anda.');
   res.json(await getArrivalRecapDetails(req.params.venueId, req.query.group));
@@ -100,6 +109,10 @@ r.get('/arrival-recap/:venueId/participants', requireSuper, ah(async (req, res) 
 r.post('/arrival-recap/import', requireSuper, ah(async (req, res) => {
   const result = await importArrivalRecap(req.body?.rows, req.body?.summary);
   await linkPksArrivalProfiles();
+  if (eventId()===5) {
+    try {result.audit=await getSchoolIdentityAudit();}
+    catch {result.audit_error='Impor tersimpan, tetapi pemeriksaan identitas gagal. Jalankan Audit Data untuk mencoba lagi.';}
+  }
   res.json(result);
 }));
 

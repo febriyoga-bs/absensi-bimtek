@@ -19,6 +19,18 @@ test('ambiguous same-name schools and excess attendees are not reassigned',()=>{
  assert.equal(planArrivalProfileLinks([school,{...school,npsn:'99999999'}],profiles,[{venue_id:1}]).length,0);
  assert.equal(planArrivalProfileLinks([{...school,arrival_attendees:[...school.arrival_attendees,{name:'Third'}]}],profiles,[{venue_id:1}]).length,0);
 });
+test('same-name schools can link uniquely identified heads to their own NPSN only',()=>{
+ const schools=[{npsn:'10101795',name:'SDN GAMPONG JALAN',venue:'Novotel Mangga Dua',head_name:'Khalijah Siregar',
+  arrival_attendees:[{name:'Khalijah Siregar',role:'Kepala Sekolah',status:'selesai'}]},
+ {npsn:'10102100',name:'SDN GAMPONG JALAN',venue:'Novotel Mangga Dua',head_name:'Suryani',
+  arrival_attendees:[{name:'Suryani',role:'Kepala Sekolah',status:'selesai'}]}];
+ const people=schools.flatMap((s,index)=>[
+  {id:index*2+1,npsn:s.npsn,venue:s.venue,venue_id:1,name:s.head_name,position:'Kepala Sekolah',has_attendance:true},
+  {id:index*2+2,npsn:s.npsn,venue:s.venue,venue_id:1,name:'Bendahara - SDN Gampong Jalan',position:'Bendahara',has_attendance:true}]);
+ const [patch]=planArrivalProfileLinks(schools,people,[{venue_id:1,marks:{},representatives:{}}]);
+ assert.deepEqual(patch.marks,{1:'selesai',3:'selesai'});
+ assert.equal(patch.representatives[2],undefined);assert.equal(patch.representatives[4],undefined);
+});
 test('unknown uploaded names never replace recorded identities by school slot',()=>{
  const source={npsn:'10107859',name:'SD NEGERI ARONGAN WOYLA',venue:'Lumire Jakarta',arrival_attendees:[
   {name:'Zainiyah',role:'Perwakilan Sekolah',status:'selesai'},

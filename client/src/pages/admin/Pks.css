@@ -399,3 +399,7 @@ html[data-theme="dark"] .pks-summary__total { --metric-bg: #244b7d; }
 .school-audit-findings { margin: 0; padding-left: 24px; }
 .school-audit-findings li { padding: 12px 4px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
 .school-audit-findings p { margin: 5px 0 0; font-size: 13px; }
+.school-arrival-correction { padding: 12px; border: 1px solid var(--accent); border-radius: 8px; }
+.school-arrival-correction fieldset { display: grid; gap: 8px; min-width: 0; }
+.school-arrival-correction label { display: grid; gap: 4px; }
+.school-arrival-correction input, .school-arrival-correction select, .school-arrival-correction textarea { width: 100%; min-width: 0; }

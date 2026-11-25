@@ -1,8 +1,10 @@
 import {useState} from 'react';
 import {api} from '../../api.js';
+import SchoolArrivalCorrection from './SchoolArrivalCorrection.jsx';
 
 const labels={HEAD_ON_TREASURER:'Kepala sekolah tertaut ke bendahara',DUPLICATE_PROFILE_NAME:'Nama pada beberapa profil',
   AMBIGUOUS_SCHOOL_NAME:'Nama sekolah sama pada beberapa NPSN',
+  SOURCE_PROFILE_ARRIVAL_MISMATCH:'Kedatangan sumber belum terhubung ke profil',
   SOURCE_HEAD_ROLE:'Peran kepala sekolah berbeda',UNRESOLVED_HEAD_IDENTITY:'Identitas kepala sekolah perlu diperiksa',
   MORE_THAN_TWO_SOURCE_NAMES:'Lebih dari dua nama di sumber'};
 const formatDate=value=>new Intl.DateTimeFormat('id-ID',{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Jakarta'}).format(new Date(value))+' WIB';
@@ -16,24 +18,32 @@ function download(report) {
   const link=document.createElement('a');link.href=url;link.download=`audit-identitas-sekolah-${report.created_at.replace(/[:.]/g,'-')}.csv`;
   document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
-export default function SchoolIdentityAudit() {
-  const [report,setReport]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
+export default function SchoolIdentityAudit({initialReport=null,onCorrected}) {
+  const [report,setReport]=useState(initialReport),[busy,setBusy]=useState(false),[error,setError]=useState('');
+  const [editing,setEditing]=useState(null);
   const [type,setType]=useState(''),[venue,setVenue]=useState(''),[search,setSearch]=useState(''),[page,setPage]=useState(0);
   async function run() {
+    if (editing) return;
     setBusy(true);setError('');setReport(null);setPage(0);setType('');setVenue('');setSearch('');
     try {setReport(await api('/admin/school-identity-audit',{admin:true}));}
     catch(e) {setError(e.message || 'Audit gagal dimuat. Coba lagi.');}
     finally {setBusy(false);}
   }
+  async function corrected() {
+    const refreshed=await api('/admin/school-identity-audit',{admin:true});
+    setReport(refreshed);setEditing(null);setPage(0);
+    await onCorrected?.();
+  }
   const filtered=(report?.findings || []).filter(f=>(!type || f.type===type) && (!venue || f.venue===venue)
     && `${f.npsn} ${f.school} ${f.head_name} ${f.evidence}`.toLocaleLowerCase('id').includes(search.toLocaleLowerCase('id').trim()));
-  return <section className="pks-progress-source-panel school-identity-audit" aria-labelledby="school-audit-title">
+  return <section className="pks-progress-source-panel school-identity-audit" aria-label="Audit Data">
     <div className="pks-progress-source-heading">
-      <div><h2 id="school-audit-title">Audit Data</h2><p>Periksa identitas kepala sekolah, bendahara, dan tautan kedatangan dari database aktif. Audit tidak mengubah data.</p></div>
+      <div><h2>Audit Data</h2><p>Periksa identitas kepala sekolah, bendahara, dan tautan kedatangan. Perubahan hanya disimpan melalui tombol koreksi.</p></div>
       <button type="button" className="btn btn--sm" disabled={busy} onClick={run}>{busy?'Memeriksa data…':report?'Audit ulang':'Jalankan audit'}</button>
     </div>
     {busy && <p role="status">Memeriksa seluruh sekolah dan profil absensi…</p>}
     {error && <p className="alert alert--err" role="alert">{error}</p>}
+    {editing && <SchoolArrivalCorrection key={editing.npsn} school={editing} onSaved={corrected} onCancel={()=>setEditing(null)} />}
     {report && <>
       <p className="muted small">Diperiksa: {formatDate(report.created_at)} · {number.format(report.schools)} sekolah · {number.format(report.profiles)} profil.
         {report.imported_at && <> Impor kehadiran terakhir: {formatDate(report.imported_at)}.</>}</p>
@@ -54,6 +64,8 @@ export default function SchoolIdentityAudit() {
           {filtered.slice(page*pageSize,(page+1)*pageSize).map((f,index)=><li key={`${f.npsn}:${f.type}:${index}`}>
             <strong>{f.school}</strong><div className="muted small">NPSN {f.npsn} · {f.venue}</div>
             <div className="small"><b>{labels[f.type] || f.type}</b></div><p>{f.evidence}</p>
+            {report.review_schools?.find(s=>s.npsn===f.npsn)?.expected_imported_at && <button type="button" className="btn btn--sm" disabled={!!editing}
+              onClick={()=>setEditing(report.review_schools.find(s=>s.npsn===f.npsn))}>Periksa / koreksi data</button>}
           </li>)}
         </ol>}
       {filtered.length>pageSize && <div className="school-audit-filters">

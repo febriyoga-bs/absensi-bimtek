@@ -40,8 +40,11 @@ export async function getSchoolArrivalStatuses(schools, venueId = null, query = 
       AS p(name text, position text, institution text, arrival_status text)
     WHERE ${eventVenueScope('v')} AND ($1::int IS NULL OR r.venue_id=$1) AND p.position IN ('Bendahara', 'Kepala Sekolah')`, [venueId]);
   const schoolIdentity = (venue, name) => JSON.stringify([arrivalVenueKey(venue), schoolKey(name)]);
-  const schoolGroups=new Map(),exactSchoolGroups=new Map();
+  const schoolGroups=new Map(),exactSchoolGroups=new Map(),headGroups=new Map();
   for (const school of schools) {
+    const headKey=JSON.stringify([schoolIdentity(school.venue,school.name),attendeeNameKey(schoolHeadOverride(school.npsn,school.head_name) || school.head_name)]);
+    if (!headGroups.has(headKey)) headGroups.set(headKey,new Set());
+    headGroups.get(headKey).add(String(school.npsn));
     for (const [groups,identity] of [[schoolGroups,schoolIdentity(school.venue,school.name)],
       [exactSchoolGroups,JSON.stringify([arrivalVenueKey(school.venue),key(school.name)])]]) {
       if (!groups.has(identity)) groups.set(identity,new Set());
@@ -67,8 +70,12 @@ export async function getSchoolArrivalStatuses(schools, venueId = null, query = 
     const shared=(schoolGroups.get(identity)?.size || 0)>1;
     const exactIdentity=JSON.stringify([arrivalVenueKey(school.venue),key(school.name)]);
     const exactUnique=exactSchoolGroups.get(exactIdentity)?.size===1;
-    const sourceEntries=[...(bySchool.get(identity) || [])].filter(([,row])=>!shared
-      || (exactUnique && key(row.institution)===key(school.name)));
+    const headName = schoolHeadOverride(school.npsn, school.head_name) || school.head_name;
+    const head = attendeeNameKey(headName);
+    const uniqueHead=head && headGroups.get(JSON.stringify([identity,head]))?.size===1;
+    const sourceEntries=[...(bySchool.get(identity) || [])].filter(([name,row])=>!shared
+      || (exactUnique && key(row.institution)===key(school.name))
+      || (uniqueHead && name===head));
     const attendees = new Map([
       ...sourceEntries,
       ...(bySchool.get(JSON.stringify(['npsn', arrivalVenueKey(school.venue), String(school.npsn)])) || []),
@@ -79,8 +86,6 @@ export async function getSchoolArrivalStatuses(schools, venueId = null, query = 
         arrival_attendees:correction.attendees,
         arrival_status:correction.attendees.reduce((best,p)=>(priority[p.status] || 0)>(priority[best] || 0)?p.status:best,null)};
     }
-    const headName = schoolHeadOverride(school.npsn, school.head_name) || school.head_name;
-    const head = attendeeNameKey(headName);
     const isHead = (name, row) => row.position === 'Kepala Sekolah' || name === head;
     const canInferTreasurer = attendees.size === 2 && [...attendees].filter(([name, row]) => isHead(name, row)).length === 1;
     const fallbackRole = 'Perwakilan Sekolah';

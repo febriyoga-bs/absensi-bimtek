@@ -2,14 +2,21 @@ import {pool} from './db.js';
 import {eventId} from './eventContext.js';
 import {arrivalVenueKey} from './arrivalRecap.js';
 import {unifiedStorage} from './unifiedStorage.js';
+import {arrivalPersonKey} from '../../shared/pksAttendeeName.js';
+import {HttpError} from './util.js';
 
 // Explicit administrative data correction. The snapshot is retained for audit;
 // Session payloads move only when an explicit, validated swap is requested.
-export async function correctSchoolArrival(correction, {apply=false}={}) {
+export async function correctSchoolArrival(correction, {apply=false,expectedImportedAt=null}={}) {
   if (eventId() !== correction.event_id || !/^\d{8}$/.test(correction.npsn)
-    || !correction.reason || !correction.head_name || correction.attendees?.length !== 2
-    || !['Kepala Sekolah','Bendahara'].every(role=>correction.attendees.some(p=>p.role===role))) {
-    throw new Error('Data koreksi atau kegiatan tidak valid.');
+    || !correction.reason || !correction.head_name || !Array.isArray(correction.attendees) || correction.attendees.length !== 2
+    || typeof correction.reason!=='string' || correction.reason.length>1000
+    || typeof correction.head_name!=='string' || correction.head_name.length>400
+    || correction.attendees.some(p=>typeof p.name!=='string' || !p.name.trim() || p.name.length>400
+      || !['selesai','sudah_tiba','sedang_antre','belum_tiba','belum_tercatat'].includes(p.status))
+    || !['Kepala Sekolah','Bendahara'].every(role=>correction.attendees.some(p=>p.role===role))
+    || new Set(correction.attendees.map(p=>arrivalPersonKey(p.name))).size!==2) {
+    throw new HttpError(400,'Data koreksi atau kegiatan tidak valid.');
   }
   const client=await pool.connect();
   try {
@@ -24,6 +31,7 @@ export async function correctSchoolArrival(correction, {apply=false}={}) {
     if (profiles.length !== 2 || new Set(profiles.map(p=>p.position)).size !== 2) throw new Error('Harus ada tepat satu profil kepala sekolah dan satu bendahara.');
     const {rows:[recap]}=await client.query('SELECT marks,representatives,imported_at::text AS imported_at FROM venue_arrival_recap WHERE venue_id=$1 FOR UPDATE',[profiles[0].venue_id]);
     if (!recap) throw new Error('Rekap kehadiran belum tersedia.');
+    if (expectedImportedAt && recap.imported_at!==expectedImportedAt) throw new HttpError(409,'Rekap telah diimpor ulang. Muat ulang audit sebelum menyimpan koreksi.');
     const previous=roster.data.arrival_corrections?.[correction.npsn];
     let attendanceBefore=[];
     if (correction.swap_attendance_session_id != null) {
@@ -52,7 +60,7 @@ export async function correctSchoolArrival(correction, {apply=false}={}) {
     }
     const result={npsn:correction.npsn,venue:school.venue,profiles:profiles.map(p=>({id:p.id,before:p.name,after:correction.attendees.find(a=>a.role===p.position).name}))};
     if (apply) {
-      const saved={...correction,corrected_at:new Date().toISOString(),
+      const saved={...previous,...correction,corrected_at:new Date().toISOString(),
         before:{...(previous?.before || {school:{...school},profiles,recap}),
           attendance:previous?.before?.attendance?.length ? previous.before.attendance : attendanceBefore}};
       const data={...roster.data,schools:schools.map(s=>s===school?{...s,head_name:correction.head_name}:s),

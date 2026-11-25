@@ -23,9 +23,10 @@ export function planArrivalProfileLinks(schools, profiles, recaps) {
   const patches = new Map();
   for (const school of schools) {
     const identity = `${arrivalVenueKey(school.venue)}:${schoolIdentity(school.name)}`;
-    if (identities.get(identity)?.size !== 1) continue;
+    const sharedIdentity=identities.get(identity)?.size !== 1;
     const candidates = profilesBySchool.get(`${arrivalVenueKey(school.venue)}:${school.npsn}`) || [];
-    const arrivals = school.arrival_attendees || [];
+    const arrivals = (school.arrival_attendees || []).filter(p=>!sharedIdentity
+      || (p.role==='Kepala Sekolah' && arrivalPersonKey(p.name)===arrivalPersonKey(school.head_name)));
     if (!candidates.length || candidates.length > 2 || !arrivals.length || arrivals.length > 2) continue;
     if (new Set(arrivals.map(p=>arrivalPersonKey(p.name))).size !== arrivals.length) continue;
     const recap = recaps.find(r => r.venue_id === candidates[0].venue_id);

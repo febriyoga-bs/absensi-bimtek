@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api.js';
 import { readArrivalWorkbook } from '../../lib/reportingFiles.js';
 import { Spinner } from '../../components/Skeleton.jsx';
+import SchoolIdentityAudit from './SchoolIdentityAudit.jsx';
 
 const number = new Intl.NumberFormat('id-ID');
 export default function ArrivalImport({ onImported, onTimestampChange }) {
@@ -67,6 +68,8 @@ export default function ArrivalImport({ onImported, onTimestampChange }) {
               <dt>Nama pengganti terhubung</dt><dd>{number.format(feedback.result.representatives || 0)}</dd>
             </dl>
             <p className="muted small">Profil unik dan baris Excel memiliki satuan berbeda, sehingga jumlahnya tidak selalu sama dengan total baris.</p>
+            {feedback.result.audit && <SchoolIdentityAudit key={feedback.result.audit.created_at} initialReport={feedback.result.audit} onCorrected={onImported} />}
+            {feedback.result.audit_error && <p className="alert alert--warn">{feedback.result.audit_error}</p>}
             {!!feedback.result.warnings?.length && <div className="alert alert--warn"><div><b>Peringatan data sumber</b>
               <ul>{feedback.result.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div></div>}
             {feedback.refreshFailed && <p className="alert alert--warn">Data sudah tersimpan, tetapi tampilan rekap gagal diperbarui. Muat ulang halaman untuk melihat data terbaru.</p>}

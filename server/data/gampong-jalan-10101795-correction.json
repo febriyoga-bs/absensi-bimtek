@@ -1,0 +1,11 @@
+{
+  "event_id": 5,
+  "npsn": "10101795",
+  "venue": "Novotel Mangga Dua",
+  "head_name": "Khalijah Siregar, S.Pd.,ind",
+  "reason": "Konfirmasi pengguna: SDN GAMPONG JALAN NPSN 10101795 memiliki kepala sekolah Khalijah Siregar dan bendahara Anggie zudewky. Kedua nama berstatus Selesai pada rekap kehadiran. Pisahkan dari sekolah bernama sama NPSN 10102100.",
+  "attendees": [
+    {"name": "Khalijah Siregar, S.Pd.,ind", "role": "Kepala Sekolah", "status": "selesai"},
+    {"name": "Anggie zudewky", "role": "Bendahara", "status": "selesai"}
+  ]
+}

@@ -894,6 +894,8 @@ test('PKS representative popup links attendance within its venue and day',async(
 });
 
 test('PKS directory binds representatives to existing slots without changing import time or attendance', async()=>{
+ await rawPool.query("UPDATE public.bimtek_events SET status='draft' WHERE id=5");
+ invalidateEventMetadata();
  await eventContext.run({id:5,schema_name:'bimtek_5'},async()=>{
   await migrate();
   const {rows:[prior]}=await q('SELECT data FROM assignment_roster WHERE id=1');
@@ -983,6 +985,25 @@ test('PKS directory binds representatives to existing slots without changing imp
     assert.equal((await request('/admin/school-identity-audit?event=5',{token:null})).status,401);
     const loAuditToken=signAdmin({role:'lo',username:'lo-sama',accounts:[{event:3,id:1}]});
     assert.equal((await request('/admin/school-identity-audit?event=3',{token:loAuditToken})).status,403);
+    const {rows:[version]}=await q('SELECT imported_at::text AS imported_at FROM venue_arrival_recap WHERE venue_id=$1',[venue.id]);
+    const correctionBody={npsn:correction.npsn,venue:correction.venue,attendees:correction.attendees,
+      reason:'Confirmed from import review',confirmed:true,expected_imported_at:version.imported_at};
+    const correctionResponse=await request('/admin/school-identity-correction?event=5',{method:'POST',body:correctionBody});
+    assert.equal(correctionResponse.status,200,await correctionResponse.clone().text());
+    assert.equal((await correctionResponse.json()).applied,true);
+    assert.deepEqual((await q('SELECT person_id,status,photo_path FROM attendance WHERE session_id=$1 ORDER BY person_id',[swapSession.id])).rows,swapped);
+    assert.equal((await request('/admin/school-identity-correction?event=5',{method:'POST',body:{...correctionBody,expected_imported_at:'stale-version'}})).status,409);
+    assert.equal((await request('/admin/school-identity-correction?event=5',{method:'POST',body:{...correctionBody,confirmed:false}})).status,400);
+    assert.equal((await request('/admin/school-identity-correction?event=5',{method:'POST',body:correctionBody,token:null})).status,401);
+    assert.equal((await request('/admin/school-identity-correction?event=3',{method:'POST',body:correctionBody,token:loAuditToken})).status,403);
+    const importResponse=await request('/admin/arrival-recap/import?event=5',{method:'POST',body:{rows:[
+      ['Link Test Hotel','Sekolah','Correct Head','SD Link','Selesai','Bersedia Hadir'],
+      ['Link Test Hotel','Sekolah','Bendahara - SD Link','SD Link','','Bersedia Hadir'],
+    ]}});
+    assert.equal(importResponse.status,200,await importResponse.clone().text());
+    const importResult=await importResponse.json();
+    assert.ok(importResult.audit);assert.ok(Array.isArray(importResult.audit.review_schools));
+    assert.equal(importResult.audit.event_id,5);
     await correctSchoolArrival(swap,{apply:true});
     assert.deepEqual((await q('SELECT person_id,status,photo_path FROM attendance WHERE session_id=$1 ORDER BY person_id',[swapSession.id])).rows,swapped);
    } finally {
