@@ -1,4 +1,4 @@
-const nameKey=value=>String(value || '').normalize('NFKD').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
+import {arrivalPersonKey as nameKey} from '../../shared/pksAttendeeName.js';
 
 // Build once per venue/request; never scan and normalize all entries per record.
 export function representativeMatcher(entries) {
@@ -11,7 +11,11 @@ export function representativeMatcher(entries) {
   }
   return record=>{
     const candidates=new Set();
-    const npsns=record.npsn ? String(record.npsn).split(';') : null;
+    const npsns=record.npsn ? String(record.npsn).split(';').map(n=>n.trim()).filter(Boolean) : null;
+    // For one identified school, the displayed attendee is authoritative.
+    // An old slot name must not make two different source people look ambiguous.
+    const current=(byName.get(nameKey(record.name)) || []).filter(entry=>!npsns || npsns.includes(String(entry.npsn)));
+    if (npsns?.length===1 && current.length===1) return current[0];
     for(const key of new Set([nameKey(record.name),nameKey(record.original_name)])) {
       for(const entry of byName.get(key) || []) {
         if(!npsns || npsns.includes(entry.npsn))candidates.add(entry);

@@ -188,7 +188,8 @@ export default function Pks({ publicView = false }) {
     setRankingStatusesError('');
     try {
       const params = new URLSearchParams({ achievements: '1' });
-      setRankingStatuses(await (loView ? api('/pks/progress/statuses?event=5&achievements=1') : request('/progress/statuses', params)));
+      const result=await (loView ? api('/pks/progress/statuses?event=5&achievements=1') : request('/progress/statuses', params));
+      setRankingStatuses(result);setRankingStatusesError(result._meta?.warning || '');
     } catch (error) { setRankingStatusesError(error.message); }
     finally { setRankingStatusesLoading(false); }
   }
@@ -196,7 +197,7 @@ export default function Pks({ publicView = false }) {
     if (sourceRankingLoading) return;
     setSourceRankingLoading(true);
     setSourceRankingError('');
-    try { setSourceRanking(await request('/progress/lo-ranking')); }
+    try { const result=await request('/progress/lo-ranking');setSourceRanking(result);setSourceRankingError(result.warning || ''); }
     catch (e) { setSourceRankingError(e.message || 'Peringkat LO dari Revit belum dapat dimuat.'); }
     finally { setSourceRankingLoading(false); }
   }
@@ -244,7 +245,6 @@ export default function Pks({ publicView = false }) {
 
   function loadSourceRankingAgain() {
     if (loView) loadGlobalRoster();
-    setSourceRanking(null);
     loadSourceRanking();
     loadSchoolStatuses();
   }

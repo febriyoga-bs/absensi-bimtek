@@ -76,7 +76,7 @@ export default function PksRanking({
       </details>
       {sourceRankingLoading && <p role="status">Mengambil data Revit dan menghitung {title.toLowerCase()}…</p>}
       {sourceRankingError && <div className="alert alert--err" role="alert">{sourceRankingError} <button className="btn btn--sm" onClick={onReloadSourceRanking}>Coba lagi</button></div>}
-      {!sourceRankingLoading && sourceRanking && <div className="pks-bimtek-owners">
+      {sourceRanking && <div className="pks-bimtek-owners">
         {sourceRows.map(row => <article key={`${row.venue}:${row.name}`}>
           <div className="pks-overall-heading">
             <h3>

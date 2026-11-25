@@ -1,0 +1,11 @@
+{
+  "event_id": 5,
+  "npsn": "10107696",
+  "venue": "Novotel Mangga Dua",
+  "head_name": "Suryani, S.Pd.SD",
+  "reason": "Koreksi konfirmasi terakhir pengguna: Suryani.S.Pd,SD adalah kepala sekolah UPTD SPF SD Negeri Pulo Sarok NPSN 10107696; Munawarah adalah bendahara. Keduanya berstatus Selesai pada rekap. Konfirmasi ini menggantikan pernyataan sebelumnya yang terbalik. Tidak mengubah atau memindahkan catatan dan foto absensi sesi.",
+  "attendees": [
+    {"name": "Suryani, S.Pd.SD", "role": "Kepala Sekolah", "status": "selesai"},
+    {"name": "Munawarah", "role": "Bendahara", "status": "selesai"}
+  ]
+}

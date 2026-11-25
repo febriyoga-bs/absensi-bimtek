@@ -19,3 +19,14 @@ test('an in-flight read cannot repopulate a cache after invalidation', async () 
   resolve('old'); await old;
   assert.equal(await cache.get('key', async () => 'wrong'), 'new');
 });
+test('bounded stale fallback preserves successful data and marks it during an upstream error',async()=>{
+ const cache=createAsyncCache({ttl:-1,staleIfError:10000,describeStale:value=>({...value,stale:true})});
+ await cache.get('ranking',async()=>({total:42}));
+ const fallback=await cache.get('ranking',async()=>{throw new Error('429');});
+ assert.deepEqual(fallback,{total:42,stale:true});
+ cache.clear();
+ await assert.rejects(cache.get('ranking',async()=>{throw new Error('429');}),/429/);
+ const expired=createAsyncCache({ttl:-20000,staleIfError:10000});
+ await expired.get('ranking',async()=>42);
+ await assert.rejects(expired.get('ranking',async()=>{throw new Error('expired');}),/expired/);
+});

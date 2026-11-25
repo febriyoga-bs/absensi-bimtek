@@ -1,0 +1,11 @@
+{
+  "event_id": 5,
+  "npsn": "10104480",
+  "venue": "Novotel Mangga Dua",
+  "head_name": "Deswati",
+  "reason": "Koreksi berdasarkan konfirmasi pengguna dan rekap: SD NEGERI ALUE SENTANG NPSN 10104480 memiliki kepala sekolah Deswati dan bendahara AINUN MARDIAH, keduanya Selesai. Sekolah terpisah dari SDN ALUE SENTANG NPSN 10102069.",
+  "attendees": [
+    {"name": "Deswati", "role": "Kepala Sekolah", "status": "selesai"},
+    {"name": "Ainun Mardiah", "role": "Bendahara", "status": "selesai"}
+  ]
+}

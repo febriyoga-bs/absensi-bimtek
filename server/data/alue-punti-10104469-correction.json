@@ -1,0 +1,11 @@
+{
+  "event_id": 5,
+  "npsn": "10104469",
+  "venue": "Novotel Mangga Dua",
+  "head_name": "Bahrum, S.Pd.I., M.Pd.I",
+  "reason": "Konfirmasi pengguna: seluruh peserta Alue Punti sudah tiba kecuali Kaloy NPSN 10104478. Rekap untuk SD NEGERI ALUE PUNTI memuat Bahrum dan INDAH SEPRITA berstatus Selesai; terpisah dari SDN ALUE PUNTI NPSN 10102066.",
+  "attendees": [
+    {"name": "Bahrum, S.Pd.I., M.Pd.I", "role": "Kepala Sekolah", "status": "selesai"},
+    {"name": "Indah Seprita", "role": "Bendahara", "status": "selesai"}
+  ]
+}

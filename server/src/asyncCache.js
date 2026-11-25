@@ -1,5 +1,5 @@
 import { HttpError } from './util.js';
-export function createAsyncCache({ ttl = 10000, maxEntries = 128 } = {}) {
+export function createAsyncCache({ ttl = 10000, maxEntries = 128, staleIfError = 0, describeStale = value=>value } = {}) {
   const entries = new Map();
   const pending = new Map();
   let generation = 0;
@@ -16,6 +16,9 @@ export function createAsyncCache({ ttl = 10000, maxEntries = 128 } = {}) {
         if (entries.size >= maxEntries) entries.delete(entries.keys().next().value);
         entries.set(key, { value, expires: Date.now() + ttl });
         return value;
+      }).catch(error=>{
+        if (version===generation && saved && staleIfError>0 && saved.expires+staleIfError>Date.now()) return describeStale(saved.value,error);
+        throw error;
       }).finally(() => { if (pending.get(key) === request) pending.delete(key); });
       pending.set(key, request);
       return request;

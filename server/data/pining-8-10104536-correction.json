@@ -1,0 +1,11 @@
+{
+  "event_id": 5,
+  "npsn": "10104536",
+  "venue": "Lumire Jakarta",
+  "head_name": "Suardi",
+  "reason": "Konfirmasi pengguna: kasus salah tautan yang sama pada SD Negeri 8 Pining. Rekap hanya memuat SUARDI berstatus Selesai. Suardi ditempatkan pada profil kepala sekolah; tautan Suardi pada bendahara dibersihkan. Tidak ada bukti kedatangan bendahara pada sumber ini.",
+  "attendees": [
+    {"name": "Suardi", "role": "Kepala Sekolah", "status": "selesai"},
+    {"name": "Bendahara — SD Negeri 8 Pining", "role": "Bendahara", "status": "belum_tercatat"}
+  ]
+}

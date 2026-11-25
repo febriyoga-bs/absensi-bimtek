@@ -1,0 +1,11 @@
+{
+  "event_id": 5,
+  "npsn": "10102066",
+  "venue": "Novotel Mangga Dua",
+  "head_name": "Edi Saputra",
+  "reason": "Konfirmasi pengguna: seluruh peserta Alue Punti sudah tiba kecuali Kaloy NPSN 10104478. Rekap untuk SDN ALUE PUNTI memuat Edi Saputra dan Koko Susilo berstatus Selesai; terpisah dari SD NEGERI ALUE PUNTI NPSN 10104469.",
+  "attendees": [
+    {"name": "Edi Saputra", "role": "Kepala Sekolah", "status": "selesai"},
+    {"name": "Koko Susilo", "role": "Bendahara", "status": "selesai"}
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "event_id": 5,
+  "npsn": "10102069",
+  "venue": "Novotel Mangga Dua",
+  "head_name": "Herana Budi",
+  "reason": "Koreksi berdasarkan konfirmasi pengguna dan rekap: SDN ALUE SENTANG NPSN 10102069 memiliki kepala sekolah HERANA BUDI dan bendahara DIAN FEBRI MAULANA, keduanya Selesai. Sekolah terpisah dari SD NEGERI ALUE SENTANG NPSN 10104480.",
+  "attendees": [
+    {"name": "Herana Budi", "role": "Kepala Sekolah", "status": "selesai"},
+    {"name": "Dian Febri Maulana", "role": "Bendahara", "status": "selesai"}
+  ]
+}

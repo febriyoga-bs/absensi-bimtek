@@ -18,6 +18,16 @@ test('one attendance record links once; duplicates stay unresolved and input is 
  assert.equal(result[1].people[0].registered,false);
  assert.equal(entries[0].people[0].status,null);
 });
+test('Munawarah matches displayed identity instead of conflicting original school slot name',()=>{
+ const entries=[entry('Munawarah','10107696'),entry('Suryani.S.Pd,SD','10107696')];
+ const record={name:'Munawarah',original_name:'Suryani.S.Pd,SD',npsn:'10107696',status:'valid'};
+ const match=representativeMatcher(entries);
+ assert.equal(match(record),entries[0]);
+ const details=representativeAttendance(entries,[record]);
+ assert.equal(details[0].people[0].status,'valid');
+ assert.equal(details[1].people[0].status,null);
+ assert.equal(match({...record,npsn:'99999999'}),null);
+});
 test('bulk representative matching handles a full venue without repeated scans',()=>{
  const entries=Array.from({length:600},(_,i)=>entry(`Person ${i}`,String(i)));
  const records=entries.map((e,i)=>({name:e.name,npsn:e.npsn,status:i%2?'berhalangan':'valid'}));

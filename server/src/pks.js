@@ -37,7 +37,10 @@ publicPksRoutes.get('/', ah(async (_req, res) => {
 export const pksStatuses = ['belum_diterima', 'menunggu_verifikasi', 'perlu_perbaikan', 'lengkap'];
 
 const progressMetrics = progressLabels;
-const progressCache = createAsyncCache({ ttl: 120000, maxEntries: 3 });
+const staleWarning='Revit sementara tidak tersedia. Menampilkan data terakhir yang berhasil dimuat; data ini belum diperbarui.';
+const progressCache = createAsyncCache({ ttl: 300000, maxEntries: 3, staleIfError:1800000,
+  describeStale:value=>Object.assign(value instanceof Map?new Map(value):Array.isArray(value)?[...value]:{...value},
+    {stale:true,warning:staleWarning}) });
 async function fetchProgressSchoolPage(hotel, page, metric = 'total', query = '') {
   const url = new URL(progressSchoolUrl);
   url.search = new URLSearchParams({ jenis: 'pks', bimtek: '1', metric, hotel, q: query, page: String(page) });
@@ -54,7 +57,7 @@ async function fetchAllProgressSchools(hotels, metric = 'total') {
   });
   const results = [...firstPages.flatMap(page => page.rows)];
   let cursor = 0;
-  const workers = Array.from({ length: Math.min(6, jobs.length) }, async () => {
+  const workers = Array.from({ length: Math.min(2, jobs.length) }, async () => {
     while (cursor < jobs.length) {
       const index = cursor++;
       const job = jobs[index];
@@ -76,7 +79,7 @@ async function loadProgressAchievements(source) {
     const jobs = source.metrics.filter(item => progressStages.includes(item.metric));
     if (jobs.length !== progressStages.length) throw new HttpError(502, 'Dashboard Revit belum menyediakan sembilan tahap capaian lengkap.');
     let cursor = 0;
-    await Promise.all(Array.from({ length: 3 }, async () => {
+    await Promise.all(Array.from({ length: 1 }, async () => {
       while (cursor < jobs.length) {
         const item = jobs[cursor++];
         const rows = await fetchAllProgressSchools(source.hotels, item.sourceMetric);
@@ -195,7 +198,8 @@ progressRoutes.get('/lo-ranking', ah(async (_req, res) => {
       previous = owner.overall;
       owner.rank = owner.overall == null ? null : rank;
     });
-    return { source: source.source, updatedAt: source.updatedAt, owners, totalSourceSchools: sourceSchools.length };
+    return { source: source.source, updatedAt: source.updatedAt, owners, totalSourceSchools: sourceSchools.length,
+      ...((sourceSchools.stale || achievements.stale)?{stale:true,warning:staleWarning}:{}) };
   });
   res.set('Cache-Control', 'private, max-age=60');
   res.json(ranking);
@@ -216,10 +220,10 @@ progressRoutes.get('/statuses', ah(async (req, res) => {
     const source = parseProgressPage(await readRevitHtml(progressSourceUrl));
     achievements = await loadProgressAchievements(source);
   }
-  res.json(Object.fromEntries(schools.filter(row => allowed.has(row.npsn)).map(row => [row.npsn, {
+  res.json({...Object.fromEntries(schools.filter(row => allowed.has(row.npsn)).map(row => [row.npsn, {
     stage: metricForProgressStatus(row.status), label: row.status,
     ...(achievements ? { achieved: [...(achievements.get(row.npsn) || [])] } : {}),
-  }])));
+  }])),...((schools.stale || achievements?.stale)?{_meta:{stale:true,warning:staleWarning}}:{})});
 }));
 
 pksRoutes.put('/:npsn/bimtek', ah(async (req,res) => {
