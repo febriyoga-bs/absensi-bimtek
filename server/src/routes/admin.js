@@ -19,6 +19,7 @@ import { getArrivalRecap, getArrivalRecapDetails, importArrivalRecap } from '../
 import { finiteInteger } from '../security.js';
 import { pksRoutes } from '../pks.js';
 import { eventId } from '../eventContext.js';
+import { pksVerifierArrivalSql } from '../pksVerifierArrival.js';
 import { loginLo } from '../loLogin.js';
 import { changeLoPassword } from '../loPassword.js';
 import { eventVenueScope } from '../eventVenues.js';
@@ -718,7 +719,7 @@ r.get('/scan/participants', ah(async (req, res) => {
         AND ${nameKeySql('detail.name')} <> '' AND ${nameKeySql('detail.institution')} <> ''
     ), matching AS (
       SELECT p.id, p.role, p.code, p.name, p.position, p.phone, p.institution, p.npsn, p.ruangan, p.venue_id, v.name AS venue_name,
-        COALESCE(arrival.marks->>p.id::text, CASE WHEN confirmed.venue_id IS NOT NULL THEN 'belum_tiba' END) AS arrival_status,
+        ${pksVerifierArrivalSql('p.position', "COALESCE(arrival.marks->>p.id::text, CASE WHEN confirmed.venue_id IS NOT NULL THEN 'belum_tiba' END)", eventId())} AS arrival_status,
         arrival.representatives->p.id::text AS representative,
         selected_session.id AS selected_session_id,selected_session.name AS selected_session_name,selected_session.status AS selected_status,
         COALESCE(assignment.assigned_los,'[]'::jsonb) AS assigned_los,

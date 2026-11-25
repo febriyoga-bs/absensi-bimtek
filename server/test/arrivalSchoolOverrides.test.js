@@ -14,3 +14,11 @@ test('Ramatsyah is the confirmed head only for NPSN 10101744', () => {
   assert.equal(schoolHeadOverride('10101744'), 'Ramatsyah');
   assert.equal(schoolHeadOverride('10102130'), null);
 });
+
+test('latest mapping fills missing heads and preserves future database changes', () => {
+  assert.equal(schoolHeadOverride('10102125', ''), 'Asnan');
+  assert.equal(schoolHeadOverride('10101768', 'Rosnawati'), 'Aderai');
+  assert.equal(schoolHeadOverride('10106810', 'Deliana'), 'Usni Yanto');
+  assert.equal(schoolHeadOverride('10101744', 'Kepala Sekolah Baru'), null);
+  assert.equal(schoolHeadOverride('99999999', 'Rosnawati'), null);
+});

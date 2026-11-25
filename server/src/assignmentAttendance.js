@@ -1,4 +1,6 @@
 import { q } from './db.js';
+import { eventId } from './eventContext.js';
+import { pksVerifierArrivalSql } from './pksVerifierArrival.js';
 import { HttpError } from './util.js';
 import { reportingCheckInDates, reportingDates } from './reportingDays.js';
 
@@ -36,7 +38,7 @@ export async function getAssignmentAttendance(type, venue, lo, npsn = null, user
   const canSeeContact = user?.role === 'admin' || (user?.lo === accountId && user?.venue === venueId);
   const schoolIds = type === 'schools' ? entries.map((row) => row.npsn) : null;
   const [{ rows: profiles }, { rows: source }] = await Promise.all([
-    q(`SELECT p.name, p.position, p.npsn, p.phone, a.status, arrival.marks->>p.id::text AS arrival_status,
+    q(`SELECT p.name, p.position, p.npsn, p.phone, a.status, ${pksVerifierArrivalSql('p.position', 'arrival.marks->>p.id::text', eventId())} AS arrival_status,
          ${reportingCheckInDates('p.id', '$1', '$4')} AS check_in_dates
        FROM people p LEFT JOIN venue_arrival_recap arrival ON arrival.venue_id=$1 AND p.venue_id=$1
        LEFT JOIN LATERAL (

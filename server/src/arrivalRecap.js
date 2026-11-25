@@ -57,7 +57,7 @@ export async function getSchoolArrivalStatuses(schools, venueId = null) {
       ...(bySchool.get(schoolIdentity(school.venue, school.name)) || []),
       ...(bySchool.get(JSON.stringify(['npsn', arrivalVenueKey(school.venue), String(school.npsn)])) || []),
     ]);
-    const headName = schoolHeadOverride(school.npsn) || school.head_name;
+    const headName = schoolHeadOverride(school.npsn, school.head_name) || school.head_name;
     const head = attendeeNameKey(headName);
     const isHead = (name, row) => row.position === 'Kepala Sekolah' || name === head;
     const canInferTreasurer = attendees.size === 2 && [...attendees].filter(([name, row]) => isHead(name, row)).length === 1;

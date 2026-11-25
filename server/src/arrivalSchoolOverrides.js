@@ -10,6 +10,11 @@ export function arrivalSchoolOverride(row) {
 }
 
 // Current head confirmed against the user's school mapping, keyed by NPSN.
-export function schoolHeadOverride(npsn) {
-  return String(npsn) === '10101744' ? 'Ramatsyah' : null;
+export function schoolHeadOverride(npsn, currentName) {
+  const correction = pksSchoolHeadCorrections[String(npsn)];
+  if (!correction) return null;
+  // Prefer a later database update over this dated correction.
+  if (currentName !== undefined && key(currentName) && ![key(correction.previous), key(correction.name)].includes(key(currentName))) return null;
+  return correction.name;
 }
+import { pksSchoolHeadCorrections } from './pksSchoolHeadCorrections.js';

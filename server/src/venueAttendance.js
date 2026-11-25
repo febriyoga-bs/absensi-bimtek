@@ -1,4 +1,5 @@
 import { eventId } from './eventContext.js';
+import { pksVerifierArrivalSql } from './pksVerifierArrival.js';
 import { schoolIdentity, similarSchool } from './schoolIdentity.js';
 import { q } from './db.js';
 import { HttpError } from './util.js';
@@ -98,7 +99,7 @@ const loadProfiles = (venueId, day, testSession = null, includeArrival = true) =
   SELECT person_id,jsonb_object_agg(venue_id,status) AS status_by_venue FROM selected_status GROUP BY person_id
 )
 SELECT p.id,p.code,p.name,p.venue_id,p.category,p.institution,p.position,p.npsn,p.room,
-  ${includeArrival ? 'arrival.marks->>p.id::text' : 'NULL::text'} AS arrival_status,COALESCE(statuses.status_by_venue,'{}'::jsonb) AS status_by_venue
+  ${pksVerifierArrivalSql('p.position', includeArrival ? 'arrival.marks->>p.id::text' : 'NULL::text', eventId())} AS arrival_status,COALESCE(statuses.status_by_venue,'{}'::jsonb) AS status_by_venue
 FROM profiles p ${includeArrival ? 'LEFT JOIN venue_arrival_recap arrival ON arrival.venue_id=p.venue_id' : ''}
 LEFT JOIN statuses ON statuses.person_id=p.id
 WHERE p.category IS NOT NULL`, [venueId, day, testSession]);
