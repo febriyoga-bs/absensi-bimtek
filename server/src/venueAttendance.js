@@ -13,6 +13,25 @@ const participantPositions = {
   dinas: 'dinas pendidikan', bpmp: 'bb/bpmp',
 };
 
+function schoolRepresentatives(schools, venue) {
+  const seen = new Set();
+  return schools.filter(s => arrivalVenueKey(s.venue) === arrivalVenueKey(venue)).flatMap(s =>
+    (s.arrival_attendees || []).filter(p => !['Kepala Sekolah', 'Bendahara'].includes(p.role)).map(p => ({
+      name: p.name, institution: s.name, npsn: s.npsn,
+      people: [{ name: p.name, registered: false, status: null, arrival_status: p.status }],
+    }))).filter(p => {
+      const identity = `${p.npsn || nameKey(p.institution)}:${nameKey(p.name)}`;
+      if (seen.has(identity)) return false;
+      seen.add(identity); return true;
+    });
+}
+
+function representativeRecord(record, entries) {
+  const matches = entries.filter(e => [record.name, record.original_name].some(name => nameKey(name) && nameKey(name) === nameKey(e.name)) &&
+    (!record.npsn || String(record.npsn).split(';').includes(e.npsn)));
+  return matches.length === 1;
+}
+
 function assignmentProfiles(rows, profiles, venueIds, venueId) {
   const byName = new Map();
   const byCode = new Map(profiles.filter((profile)=>profile.code).map((profile)=>[profile.code.toLowerCase(),profile]));
@@ -130,10 +149,29 @@ const loadSessionRecords = (venueId, day, testSession) => q(`SELECT a.id,a.perso
   ORDER BY p.name,a.id`, [venueId,day,testSession]);
 
 export async function getVenueAttendanceDetails(venueId, group, day = null, testSession = null) {
+  if (group === 'representative' && eventId() === 5) {
+    const [{ rows: [roster] }, { rows: [venue] }, { rows: records }] = await Promise.all([
+      loadRoster(), q('SELECT name FROM venues WHERE id=$1', [venueId]), loadSessionRecords(venueId, day, testSession),
+    ]);
+    const entries = schoolRepresentatives(await getSchoolArrivalStatuses(roster?.schools || []), venue?.name);
+    return entries.map(entry => {
+      const matching = records.filter(record => representativeRecord(record, entries) &&
+        [record.name, record.original_name].some(name => nameKey(name) === nameKey(entry.name)));
+      const record = matching.length === 1 ? matching[0] : null;
+      return { ...entry, people: entry.people.map(p => ({ ...p, registered: !!record, status: record?.status || null })) };
+    });
+  }
   const [entries, { rows: records }] = await Promise.all([
     group === 'other' ? Promise.resolve([]) : loadVenueAttendanceDetails(venueId, group, day, testSession),
     loadSessionRecords(venueId, day, testSession),
   ]);
+  if (eventId() === 5 && ['bendahara', 'pengawas'].includes(group)) {
+    const representatives = await getVenueAttendanceDetails(venueId, 'representative', day, testSession);
+    const isRepresentative = entry => representatives.some(p => nameKey(p.name) === nameKey(entry.name) &&
+      (p.npsn && entry.npsn ? String(entry.npsn).split(';').includes(p.npsn) : nameKey(p.institution) === nameKey(entry.institution)));
+    entries.splice(0, entries.length, ...entries.filter(entry => !isRepresentative(entry)));
+    records.splice(0, records.length, ...records.filter(record => !representativeRecord(record, representatives)));
+  }
   const actual = records.filter(p => recordGroup(p) === group).map(p => {
     const linked = entries.filter(e => e.source_profile_id === p.person_id);
     const arrived = linked.filter(e => e.people?.some(person => ['selesai','sudah_tiba','sedang_antre'].includes(person.arrival_status)));
@@ -281,10 +319,15 @@ export async function getVenueAttendance(venueId, day = null, testSession = null
       card.pengawas.arrivalTarget = heads.size;
     }
   }
+  const representativesByVenue = new Map();
   if (eventId() === 5) {
     const schools = await getSchoolArrivalStatuses(roster?.schools || []);
     for (const card of cards.values()) {
       const assigned = schools.filter(school => arrivalVenueKey(school.venue) === arrivalVenueKey(card.name));
+      const representatives = schoolRepresentatives(assigned, card.name);
+      representativesByVenue.set(card.id, representatives);
+      card.representative = { ...emptyCount(), arrivalTarget: representatives.filter(e =>
+        ['selesai','sudah_tiba','sedang_antre'].includes(e.people[0].arrival_status)).length };
       for (const [group, role] of [['bendahara', 'Bendahara'], ['pengawas', 'Kepala Sekolah']]) {
         const seen = new Set();
         for (const school of assigned) {
@@ -316,6 +359,17 @@ export async function getVenueAttendance(venueId, day = null, testSession = null
     const group = recordGroup(record);
     card[group].recorded += record.n;
     if (group === 'other') card.other.total += record.n;
+  }
+  for (const [id, entries] of representativesByVenue) {
+    const { rows: records } = await loadSessionRecords(id, day, testSession);
+    for (const record of records) {
+      if (!representativeRecord(record, entries)) continue;
+      const card = cards.get(id);
+      const group = recordGroup(record);
+      card[group].recorded = Math.max(0, card[group].recorded - 1);
+      if (group === 'other') card.other.total = Math.max(0, card.other.total - 1);
+      card.representative.recorded++;
+    }
   }
   return [...cards.values()];
 }

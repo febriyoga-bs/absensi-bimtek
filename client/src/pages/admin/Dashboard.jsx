@@ -22,7 +22,7 @@ function VenueAttendanceCard({ venue, day, testSession, onDetails, visibleGroups
   const participantGroups = visibleGroups.filter(([key]) => key !== 'lo');
   const total = participantGroups.reduce((sum, [key]) => sum + venue[key].total, 0);
   const attended = participantGroups.reduce((sum, [key]) => sum + venue[key].recorded, 0)
-    + (visibleGroups.length === venueGroups.length ? (venue.other?.recorded || 0) : 0);
+    + (visibleGroups.filter(([key]) => key !== 'representative').length === venueGroups.length ? (venue.other?.recorded || 0) : 0);
 
   return (
     <article className="venue-attendance">
@@ -47,7 +47,7 @@ function VenueAttendanceCard({ venue, day, testSession, onDetails, visibleGroups
                 path: `/admin/venue-attendance/${venue.id}/${key}${testSession ? `?test_session_id=${testSession.id}` : day ? `?day=${day.date}` : ''}`,
                 sessionDay: testSession ? sessionTitle(testSession) : day && checkInDayLabel(day),
                 filterByCheckIn: true,
-                sourceTotal: venue[key].source === 'arrival' ? total : undefined,
+                sourceTotal: key === 'representative' ? arrivalTarget : venue[key].source === 'arrival' ? total : undefined,
               })}>
               <span className="venue-attendance__label">{label} <FontIcon name="chevron-right" /></span>
               <span className="venue-attendance__count"><b>{number.format(attended)}</b> / {number.format(target)} <small>sudah dicatat</small></span>
@@ -88,7 +88,8 @@ export default function Dashboard() {
       return Array.isArray(saved) ? saved.filter((key) => venueGroups.some(([group]) => group === key)) : [];
     } catch { return []; }
   });
-  const sessionGroups = attendanceSessionGroups(venueGroups, sessions.map(session => session.role));
+  const eventGroups = event?.id === 5 ? [...venueGroups.slice(0, 2), ['representative', 'Perwakilan Sekolah'], ...venueGroups.slice(2)] : venueGroups;
+  const sessionGroups = attendanceSessionGroups(eventGroups, sessions.map(session => session.role));
   const chosenGroups = sessionGroups.filter(([key]) => !hiddenGroups.includes(key));
   const visibleGroups = chosenGroups.length ? chosenGroups : sessionGroups;
   useEffect(() => {
