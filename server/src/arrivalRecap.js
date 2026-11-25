@@ -2,6 +2,7 @@ import { q } from './db.js';
 import { HttpError } from './util.js';
 import { eventVenueScope } from './eventVenues.js';
 import { eventId } from './eventContext.js';
+import { arrivalSchoolOverride } from './arrivalSchoolOverrides.js';
 
 const key = (value) => String(value ?? '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 const schoolKey = (value) => key(String(value ?? '').toLowerCase().replace(/\bsd\s*n(?=\s|\d|[.-])/g, 'sd negeri '));
@@ -30,17 +31,18 @@ const sourcePositions = {
   kepalasekolah: 'Kepala Sekolah', fasilitator: 'Fasilitator', bbpmp: 'BB/BPMP',
 };
 
-export async function getSchoolArrivalStatuses(schools) {
+export async function getSchoolArrivalStatuses(schools, venueId = null) {
   const { rows } = await q(`SELECT v.name AS venue, p.name, p.position, p.institution, p.arrival_status
     FROM venue_arrival_recap r JOIN venues v ON v.id=r.venue_id
     CROSS JOIN LATERAL jsonb_to_recordset(r.detail_rows)
       AS p(name text, position text, institution text, arrival_status text)
-    WHERE ${eventVenueScope('v')} AND p.position IN ('Bendahara', 'Kepala Sekolah')`);
+    WHERE ${eventVenueScope('v')} AND ($1::int IS NULL OR r.venue_id=$1) AND p.position IN ('Bendahara', 'Kepala Sekolah')`, [venueId]);
   const schoolIdentity = (venue, name) => JSON.stringify([arrivalVenueKey(venue), schoolKey(name)]);
   const bySchool = new Map();
   for (const row of rows) {
     if (!schoolKey(row.institution)) continue;
-    const identity = schoolIdentity(row.venue, row.institution);
+    const override = arrivalSchoolOverride(row);
+    const identity = override ? JSON.stringify(['npsn', arrivalVenueKey(row.venue), override]) : schoolIdentity(row.venue, row.institution);
     if (!bySchool.has(identity)) bySchool.set(identity, new Map());
     const attendees = bySchool.get(identity);
     const name = attendeeNameKey(row.name);
@@ -51,7 +53,10 @@ export async function getSchoolArrivalStatuses(schools) {
     }
   }
   return schools.map(school => {
-    const attendees = bySchool.get(schoolIdentity(school.venue, school.name)) || new Map();
+    const attendees = new Map([
+      ...(bySchool.get(schoolIdentity(school.venue, school.name)) || []),
+      ...(bySchool.get(JSON.stringify(['npsn', arrivalVenueKey(school.venue), String(school.npsn)])) || []),
+    ]);
     const head = attendeeNameKey(school.head_name);
     const isHead = (name, row) => row.position === 'Kepala Sekolah' || name === head;
     const canInferTreasurer = attendees.size === 2 && [...attendees].filter(([name, row]) => isHead(name, row)).length === 1;

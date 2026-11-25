@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { cleanPksRecord } from '../src/pks.js';
 import { insertPksSchedule } from '../src/pksSchedule.js';
+import {getVenueAttendanceDetails} from '../src/venueAttendance.js';
 
 // Actual PostgreSQL in memory: never connect tests to DATABASE_URL.
 const db = new PGlite();
@@ -863,4 +864,30 @@ test('PKS login and records stay isolated and LO can update only assigned school
   const all = await request(`/admin/export?event=5&session_id=${wednesday}&combine_day=true&include_all=true`, { token });
   assert.equal(all.status, 200);
 
+});
+
+test('PKS representative popup links attendance within its venue and day',async()=>{
+  // Isolated schema fixture: this test never contacts the production database.
+  await eventContext.run({id:5,schema_name:'bimtek_5'},async()=>{
+    await migrate();
+    const {rows:[venue]}=await q("INSERT INTO venues(name,lat,lng) VALUES('Popup Test Hotel',-6,106) RETURNING id");
+    const {rows:[session]}=await q("INSERT INTO sessions(name,role,starts_at,ends_at) VALUES('Popup Test','peserta','2026-11-25T01:00:00Z','2026-11-25T16:00:00Z') RETURNING id");
+    const {rows:[person]}=await q("INSERT INTO people(code,name,role,position,venue_id,npsn,institution) VALUES('popup-representative','Perwakilan Uji','peserta','Bendahara',$1,'99990001','Sekolah Popup') RETURNING id",[venue.id]);
+    const {rows:[prior]}=await q('SELECT data FROM assignment_roster WHERE id=1');
+    try {
+      const school={npsn:'99990001',name:'Sekolah Popup',venue:'Popup Test Hotel',head_name:'Kepala Asli'};
+      await q("UPDATE assignment_roster SET data=jsonb_set(jsonb_set(data,'{schools}',COALESCE(data->'schools','[]'::jsonb) || $1::jsonb),'{venues}',COALESCE(data->'venues','[]'::jsonb) || $2::jsonb) WHERE id=1",[JSON.stringify([school]),JSON.stringify(['Popup Test Hotel'])]);
+      await q("INSERT INTO venue_arrival_recap(venue_id,marks,detail_rows) VALUES($1,'{}',$2)",[venue.id,JSON.stringify([{name:'Perwakilan Uji',position:'Bendahara',institution:'Sekolah Popup',arrival_status:'selesai'}])]);
+      await q("INSERT INTO attendance(person_id,session_id,venue_id,status,photo_path) VALUES($1,$2,$3,'valid','popup.jpg')",[person.id,session.id,venue.id]);
+      const entries=await getVenueAttendanceDetails(venue.id,'representative','2026-11-25');
+      assert.equal(entries.length,1);assert.equal(entries[0].name,'Perwakilan Uji');assert.equal(entries[0].people[0].status,'valid');
+      const nextDay=await getVenueAttendanceDetails(venue.id,'representative','2026-11-26');
+      assert.equal(nextDay[0].people[0].status,null);
+    } finally {
+      if(prior)await q('UPDATE assignment_roster SET data=$1 WHERE id=1',[JSON.stringify(prior.data)]);
+      await q('DELETE FROM attendance WHERE session_id=$1',[session.id]);
+      await q('DELETE FROM sessions WHERE id=$1',[session.id]);await q('DELETE FROM people WHERE id=$1',[person.id]);
+      await q('DELETE FROM venue_arrival_recap WHERE venue_id=$1',[venue.id]);await q('DELETE FROM venues WHERE id=$1',[venue.id]);
+    }
+  });
 });

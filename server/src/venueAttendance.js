@@ -5,6 +5,7 @@ import { HttpError } from './util.js';
 import { eventVenueScope } from './eventVenues.js';
 import { sourceAttendance } from './sourceAttendance.js';
 import { getSchoolArrivalStatuses, arrivalVenueKey } from './arrivalRecap.js';
+import { representativeMatcher, representativeAttendance } from './representativeRecords.js';
 
 const emptyCount = () => ({ total: 0, registered: 0, attended: 0, recorded: 0 });
 const nameKey = (name) => String(name || '').normalize('NFKD').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
@@ -24,12 +25,6 @@ function schoolRepresentatives(schools, venue) {
       if (seen.has(identity)) return false;
       seen.add(identity); return true;
     });
-}
-
-function representativeRecord(record, entries) {
-  const matches = entries.filter(e => [record.name, record.original_name].some(name => nameKey(name) && nameKey(name) === nameKey(e.name)) &&
-    (!record.npsn || String(record.npsn).split(';').includes(e.npsn)));
-  return matches.length === 1;
 }
 
 function assignmentProfiles(rows, profiles, venueIds, venueId) {
@@ -131,18 +126,24 @@ const recordGroup = p => {
   if (p.role === 'peserta') return Object.entries(participantPositions).find(([, value]) => value === position || position === 'kepala sekolah' && value === 'pengawas')?.[0] || 'other';
   return 'other';
 };
-const loadSessionRecords = (venueId, day, testSession) => q(`SELECT a.id,a.person_id,a.venue_id,a.status,
+const loadSessionRecords = (venueId, day, testSession) => q(`WITH fallback_names AS MATERIALIZED (
+  SELECT r.venue_id,lower(trim(d->>'position')) AS position,lower(trim(d->>'institution')) AS institution,
+    min(d->>'name') AS name
+  FROM venue_arrival_recap r CROSS JOIN LATERAL jsonb_array_elements(r.detail_rows) d
+  WHERE ($1::int IS NULL OR r.venue_id=$1)
+    AND trim(d->>'name') NOT IN ('','-') AND lower(d->>'name') NOT LIKE '%belum ada%'
+  GROUP BY r.venue_id,lower(trim(d->>'position')),lower(trim(d->>'institution'))
+  HAVING count(DISTINCT lower(trim(d->>'name')))=1
+)
+SELECT a.id,a.person_id,a.venue_id,a.status,
   CASE WHEN lower(trim(p.position)) IN ('bendahara','pengawas','kepala sekolah','dinas pendidikan') AND arrival.representatives->p.id::text->>'name' IS NOT NULL
     THEN arrival.representatives->p.id::text->>'name'
-  WHEN lower(trim(p.name)) IN ('(belum ada di biodata)','belum ada di biodata','(belum ada)','-','') THEN COALESCE((
-    SELECT min(d->>'name') FROM venue_arrival_recap r CROSS JOIN LATERAL jsonb_array_elements(r.detail_rows) d
-    WHERE r.venue_id=a.venue_id AND lower(trim(d->>'position'))=lower(trim(p.position))
-      AND lower(trim(d->>'institution'))=lower(trim(p.institution))
-      AND trim(d->>'name') NOT IN ('','-') AND lower(d->>'name') NOT LIKE '%belum ada%'
-    HAVING count(DISTINCT lower(trim(d->>'name')))=1
-  ),p.name) ELSE p.name END AS name,p.name AS original_name,p.institution,p.npsn,p.ruangan AS room,p.role,p.position
+  WHEN lower(trim(p.name)) IN ('(belum ada di biodata)','belum ada di biodata','(belum ada)','-','') THEN COALESCE(fallback.name,p.name)
+  ELSE p.name END AS name,p.name AS original_name,p.institution,p.npsn,p.ruangan AS room,p.role,p.position
   FROM attendance a JOIN sessions s ON s.id=a.session_id JOIN people p ON p.id=a.person_id
   LEFT JOIN venue_arrival_recap arrival ON arrival.venue_id=a.venue_id
+  LEFT JOIN fallback_names fallback ON fallback.venue_id=a.venue_id
+    AND fallback.position=lower(trim(p.position)) AND fallback.institution=lower(trim(p.institution))
   WHERE ($1::int IS NULL OR a.venue_id=$1) AND a.status IN ('valid','review','ditolak','berhalangan')
     AND ($2::date IS NULL OR (s.starts_at AT TIME ZONE 'Asia/Jakarta')::date=$2)
     AND (CASE WHEN $3::int IS NULL THEN NOT s.is_test ELSE s.is_test AND s.id=$3 END)
@@ -151,15 +152,11 @@ const loadSessionRecords = (venueId, day, testSession) => q(`SELECT a.id,a.perso
 export async function getVenueAttendanceDetails(venueId, group, day = null, testSession = null) {
   if (group === 'representative' && eventId() === 5) {
     const [{ rows: [roster] }, { rows: [venue] }, { rows: records }] = await Promise.all([
-      loadRoster(), q('SELECT name FROM venues WHERE id=$1', [venueId]), loadSessionRecords(venueId, day, testSession),
+      q("SELECT data->'schools' AS schools FROM assignment_roster WHERE id=1"), q('SELECT name FROM venues WHERE id=$1', [venueId]), loadSessionRecords(venueId, day, testSession),
     ]);
-    const entries = schoolRepresentatives(await getSchoolArrivalStatuses(roster?.schools || []), venue?.name);
-    return entries.map(entry => {
-      const matching = records.filter(record => representativeRecord(record, entries) &&
-        [record.name, record.original_name].some(name => nameKey(name) === nameKey(entry.name)));
-      const record = matching.length === 1 ? matching[0] : null;
-      return { ...entry, people: entry.people.map(p => ({ ...p, registered: !!record, status: record?.status || null })) };
-    });
+    const schools=(roster?.schools || []).filter(s=>arrivalVenueKey(s.venue)===arrivalVenueKey(venue?.name));
+    const entries = schoolRepresentatives(await getSchoolArrivalStatuses(schools,venueId), venue?.name);
+    return representativeAttendance(entries,records);
   }
   const [entries, { rows: records }] = await Promise.all([
     group === 'other' ? Promise.resolve([]) : loadVenueAttendanceDetails(venueId, group, day, testSession),
@@ -170,7 +167,8 @@ export async function getVenueAttendanceDetails(venueId, group, day = null, test
     const isRepresentative = entry => representatives.some(p => nameKey(p.name) === nameKey(entry.name) &&
       (p.npsn && entry.npsn ? String(entry.npsn).split(';').includes(p.npsn) : nameKey(p.institution) === nameKey(entry.institution)));
     entries.splice(0, entries.length, ...entries.filter(entry => !isRepresentative(entry)));
-    records.splice(0, records.length, ...records.filter(record => !representativeRecord(record, representatives)));
+    const matchRepresentative=representativeMatcher(representatives);
+    records.splice(0, records.length, ...records.filter(record => !matchRepresentative(record)));
   }
   const actual = records.filter(p => recordGroup(p) === group).map(p => {
     const linked = entries.filter(e => e.source_profile_id === p.person_id);
@@ -362,8 +360,9 @@ export async function getVenueAttendance(venueId, day = null, testSession = null
   }
   for (const [id, entries] of representativesByVenue) {
     const { rows: records } = await loadSessionRecords(id, day, testSession);
+    const matchRepresentative=representativeMatcher(entries);
     for (const record of records) {
-      if (!representativeRecord(record, entries)) continue;
+      if (!matchRepresentative(record)) continue;
       const card = cards.get(id);
       const group = recordGroup(record);
       card[group].recorded = Math.max(0, card[group].recorded - 1);
