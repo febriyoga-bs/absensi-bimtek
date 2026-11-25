@@ -1,4 +1,5 @@
 import { eventId } from './eventContext.js';
+import { arrivedAtVenue } from '../../shared/venueArrival.js';
 import { pksVerifierArrivalSql } from './pksVerifierArrival.js';
 import { schoolIdentity, similarSchool } from './schoolIdentity.js';
 import { q } from './db.js';
@@ -325,8 +326,7 @@ export async function getVenueAttendance(venueId, day = null, testSession = null
       const assigned = schools.filter(school => arrivalVenueKey(school.venue) === arrivalVenueKey(card.name));
       const representatives = schoolRepresentatives(assigned, card.name);
       representativesByVenue.set(card.id, representatives);
-      card.representative = { ...emptyCount(), arrivalTarget: representatives.filter(e =>
-        ['selesai','sudah_tiba','sedang_antre'].includes(e.people[0].arrival_status)).length };
+      card.representative = { ...emptyCount(), arrivalTarget: representatives.filter(arrivedAtVenue).length };
       for (const [group, role] of [['bendahara', 'Bendahara'], ['pengawas', 'Kepala Sekolah']]) {
         const seen = new Set();
         for (const school of assigned) {

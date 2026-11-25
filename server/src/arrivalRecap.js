@@ -61,7 +61,7 @@ export async function getSchoolArrivalStatuses(schools, venueId = null) {
     const head = attendeeNameKey(headName);
     const isHead = (name, row) => row.position === 'Kepala Sekolah' || name === head;
     const canInferTreasurer = attendees.size === 2 && [...attendees].filter(([name, row]) => isHead(name, row)).length === 1;
-    const fallbackRole = head && attendees.size === 1 ? 'Perwakilan Sekolah' : 'Peserta sekolah';
+    const fallbackRole = 'Perwakilan Sekolah';
     const arrival_attendees = [...attendees].map(([name, row]) => ({
       name: row.name,
       role: isHead(name, row) ? 'Kepala Sekolah' : canInferTreasurer ? 'Bendahara' : fallbackRole,

@@ -47,6 +47,7 @@ function VenueAttendanceCard({ venue, day, testSession, onDetails, visibleGroups
                 path: `/admin/venue-attendance/${venue.id}/${key}${testSession ? `?test_session_id=${testSession.id}` : day ? `?day=${day.date}` : ''}`,
                 sessionDay: testSession ? sessionTitle(testSession) : day && checkInDayLabel(day),
                 filterByCheckIn: true,
+                arrivedOnly: key === 'representative',
                 sourceTotal: key === 'representative' ? arrivalTarget : venue[key].source === 'arrival' ? total : undefined,
               })}>
               <span className="venue-attendance__label">{label} <FontIcon name="chevron-right" /></span>

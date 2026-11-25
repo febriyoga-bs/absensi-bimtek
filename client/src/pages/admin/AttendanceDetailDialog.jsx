@@ -1,4 +1,5 @@
 import { personName } from '../../lib/personName.js';
+import { arrivedAtVenue } from '../../../../shared/venueArrival.js';
 import { useEffect, useRef, useState } from 'react';
 import { eventPath } from '../../event.js';
 import { api, adminToken } from '../../api.js';
@@ -54,7 +55,8 @@ export default function AttendanceDetailDialog({ details, onClose }) {
     return () => { current = false; };
   }, [details]);
 
-  const detailEntries = detailResult?.entries ?? details?.entries;
+  const allEntries = detailResult?.entries ?? details?.entries;
+  const detailEntries = details?.arrivedOnly ? allEntries?.filter(arrivedAtVenue) : allEntries;
   const checkedIn = details?.filterByCheckIn ? detailEntries?.filter((entry) =>
     entry.people?.some((person) => ['valid', 'review', 'ditolak', 'berhalangan'].includes(person.status))) : null;
   const notCheckedIn = details?.filterByCheckIn ? detailEntries?.filter((entry) =>
@@ -76,7 +78,7 @@ export default function AttendanceDetailDialog({ details, onClose }) {
           {!detailResult && <p className="muted small" role="status">Memuat status absensi...</p>}
           {detailResult?.error && <p className="alert alert--warn" role="status">Status absensi gagal dimuat. Tutup dan buka kembali daftar untuk mencoba lagi.</p>}
           {details.sourceTotal != null && detailEntries && <p className="muted small">
-            Acuan undangan sumber kehadiran: {number.format(details.sourceTotal)}.
+            {details.arrivedOnly ? 'Sudah tiba atau sedang antre di venue' : 'Acuan undangan sumber kehadiran'}: {number.format(details.sourceTotal)}.
             {detailEntries.length !== details.sourceTotal && ` Detail sumber memuat ${number.format(detailEntries.length)} entri; selisih dengan ringkasan sumber perlu diperiksa.`}
             {' '}Status absensi ditautkan hanya jika profil cocok; entri yang belum cocok tetap ditampilkan.
           </p>}
