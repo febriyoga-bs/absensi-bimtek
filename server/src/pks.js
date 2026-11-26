@@ -1,5 +1,4 @@
-import {parseProgressExport,progressExportUrl} from './revitProgressExport.js';
-import { readRevitExport } from './revitHttp.js';
+import { loadRevitProgressJson } from './revitProgressJson.js';
 import { progressLabels, progressStages, progressStage } from '../../shared/pksProgress.js';
 import { Router } from 'express';
 import { q } from './db.js';
@@ -42,7 +41,7 @@ const progressCache = createAsyncCache({ ttl: 300000, maxEntries: 3, staleIfErro
   describeStale:value=>Object.assign(value instanceof Map?new Map(value):Array.isArray(value)?[...value]:{...value},
     {stale:true,warning:staleWarning}) });
 function loadProgressExport() {
-  return progressCache.get('export',async()=>parseProgressExport(await readRevitExport(progressExportUrl)));
+  return progressCache.get('export', loadRevitProgressJson);
 }
 async function loadProgressSchools() {
   const data=await loadProgressExport();
