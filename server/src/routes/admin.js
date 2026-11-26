@@ -612,7 +612,10 @@ const assignedToLo = (account, venue, includeOrganizations = false) => `(${accou
         CROSS JOIN LATERAL jsonb_to_recordset(r.data->'attendance_assignments'->(l.id::text))
           AS m(code text,name text,position text,npsn text,venue_id int)
         WHERE r.id=1 AND m.venue_id=p.venue_id AND lower(trim(m.position))=lower(trim(p.position))
-          AND ${nameKeySql('m.name')}=${nameKeySql('p.name')}
+          AND (${nameKeySql('m.name')}=${nameKeySql('p.name')}
+            OR (${eventId() === 5 ? 'true' : 'false'} AND lower(trim(p.position)) IN ('kepala sekolah','bendahara')
+              AND m.npsn IS NOT NULL AND string_to_array(replace(m.npsn,' ',''),';') &&
+                string_to_array(replace(p.npsn,' ',''),';')))
           AND (lower(m.code)=lower(p.code) OR (
             m.npsn IS NOT NULL AND string_to_array(replace(m.npsn,' ',''),';') &&
               string_to_array(replace(p.npsn,' ',''),';')
