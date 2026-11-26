@@ -542,7 +542,7 @@ function ProgressSchoolsDialog({ context, data, error, loading, query, onQueryCh
                 <td><strong>{row.name}</strong><small>NPSN {row.npsn}</small></td>
                 <td>{row.kabKota}</td>
                 <td>{row.hotel}</td>
-                <td><span>{status || '—'}</span></td>
+                <td><div className="pks-progress-status-list">{(status || '-').split(/\s+(?=Kirim proposal RAB\b)/i).map((part, index) => <span key={index}>{part}</span>)}</div></td>
               </tr>;
             })}</tbody>
           </table>

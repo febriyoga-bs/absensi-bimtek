@@ -122,7 +122,8 @@ html[data-theme="dark"] .pks-page {
 .pks-progress-dialog__table td { padding: 11px 13px; border-top: 1px solid var(--line); vertical-align: top; }
 .pks-progress-dialog__table td:first-child strong, .pks-progress-dialog__table td:first-child small { display: block; }
 .pks-progress-dialog__table td:first-child small { margin-top: 3px; color: var(--muted); font-size: 11px; }
-.pks-progress-dialog__table td:last-child span { display: inline-block; padding: 4px 9px; border-radius: 999px; background: var(--pks-filter); color: var(--accent); white-space: nowrap; }
+.pks-progress-status-list { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 160px; max-width: 280px; }
+.pks-progress-dialog__table .pks-progress-status-list span { display: block; max-width: 100%; box-sizing: border-box; padding: 5px 9px; border-radius: 7px; background: var(--pks-filter); color: var(--accent); white-space: normal; overflow-wrap: anywhere; line-height: 1.5; }
 .pks-progress-dialog__status, .pks-progress-dialog__empty { margin: 0; padding: 28px; color: var(--muted); text-align: center; }
 .pks-progress-dialog__footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 12px; }
 .pks-progress-dialog__footer nav { display: flex; align-items: center; gap: 10px; }
