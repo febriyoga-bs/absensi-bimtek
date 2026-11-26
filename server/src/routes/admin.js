@@ -19,7 +19,7 @@ import { getArrivalRecap, getArrivalRecapDetails, importArrivalRecap } from '../
 import { finiteInteger } from '../security.js';
 import { pksRoutes } from '../pks.js';
 import { eventId } from '../eventContext.js';
-import { linkPksArrivalProfiles, refreshPksArrivalProfiles } from '../pksArrivalProfileLinks.js';
+import { linkPksArrivalProfiles } from '../pksArrivalProfileLinks.js';
 import {getSchoolIdentityAudit} from '../auditSchoolIdentities.js';
 import {correctSchoolArrival} from '../correctSchoolArrival.js';
 import { pksVerifierArrivalSql } from '../pksVerifierArrival.js';
@@ -692,18 +692,13 @@ r.get('/scan/participants', ah(async (req, res) => {
   if (testSessionId !== null && (!Number.isInteger(testSessionId) || testSessionId < 1 || testSessionId > 2147483647)) {
     throw new HttpError(400, 'Sesi uji coba tidak valid.');
   }
-  if (category === 'sekolah') await refreshPksArrivalProfiles(req.user.role === 'lo' ? req.user.venue : venueId);
+  if (category === 'sekolah') await linkPksArrivalProfiles(req.user.role === 'lo' ? req.user.venue : venueId);
   const { rows: [list] } = await q(
     `WITH active_owners AS MATERIALIZED (
       SELECT id,name,venue_id FROM lo_accounts WHERE active
     ), candidate_people AS MATERIALIZED (
       SELECT p.* FROM people p
       WHERE p.role='peserta' AND p.archived_at IS NULL AND (${scanCategories[category]})
-        AND ($1='' OR p.name ILIKE '%'||$1||'%' OR p.code ILIKE '%'||$1||'%'
-          OR p.institution ILIKE '%'||$1||'%' OR p.npsn ILIKE '%'||$1||'%'
-          OR EXISTS (SELECT 1 FROM venues search_venue WHERE search_venue.id=p.venue_id AND search_venue.name ILIKE '%'||$1||'%')
-          OR EXISTS (SELECT 1 FROM venue_arrival_recap search_recap WHERE search_recap.venue_id=p.venue_id
-            AND search_recap.representatives->p.id::text->>'name' ILIKE '%'||$1||'%'))
         AND ($7::text='' OR (lower(trim(p.position))=$7 OR ($7='pengawas' AND lower(trim(p.position))='kepala sekolah')))
         AND ($2::int IS NULL OR p.venue_id=$2)
         AND ($10::int IS NULL OR p.venue_id=(SELECT venue_id FROM active_owners WHERE id=$10))

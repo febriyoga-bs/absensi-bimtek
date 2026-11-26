@@ -5,8 +5,6 @@ import adminRoutes, { loginHandler, loginLimiter } from './routes/admin.js';
 import { requestLimiter, securityHeaders } from './security.js';
 import { eventRoutes, selectEvent, invalidateEventMetadata } from './events.js';
 import { publicPksRoutes } from './pks.js';
-import { invalidateArrivalProfileRefresh } from './pksArrivalProfileLinks.js';
-import { databaseUnavailable } from './databaseErrors.js';
 
 /**
  * Aplikasi Express tanpa listen().
@@ -22,9 +20,6 @@ app.use(securityHeaders);
 app.use('/api', requestLimiter);
 app.use(express.json({ limit: '3mb' }));
 app.use((req, res, next) => {
-  if (!['GET','HEAD','OPTIONS'].includes(req.method)) {
-    res.once('finish', () => { if (res.statusCode < 400) invalidateArrivalProfileRefresh(); });
-  }
   if (!['GET','HEAD','OPTIONS'].includes(req.method) && /^\/api\/admin\/sessions(?:\/|$)/.test(req.path)) {
     res.once('finish', () => { if (res.statusCode < 400) invalidateEventMetadata(); });
   }
@@ -52,10 +47,6 @@ app.use((err, req, res, next) => {
   console.error('Request failed', { method: req.method, path: req.path, code: err.code || err.name, message });
   if (req.path === '/api/admin/export' && (err.code === '57014' || err.message === 'Query read timeout')) {
     return res.status(504).json({ error: 'Pengambilan data ekspor melewati batas waktu. Coba unduh per venue atau ulangi beberapa saat lagi.' });
-  }
-  if (databaseUnavailable(err)) {
-    res.set('Retry-After', '5');
-    return res.status(503).json({ error: 'Koneksi database sedang sibuk atau terputus. Tunggu sebentar lalu muat ulang. Jika tadi menyimpan absensi, periksa status peserta sebelum mencoba lagi.' });
   }
   res.status(500).json({ error: 'Terjadi kesalahan server' });
 });

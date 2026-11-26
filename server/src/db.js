@@ -5,7 +5,6 @@ import { fileURLToPath } from 'url';
 import { currentEvent, searchPathSql } from './eventContext.js';
 import { scopedConnection } from './scopedConnection.js';
 import { eventSql, unifiedStorage, setUnifiedStorage } from './unifiedStorage.js';
-import { discardDatabaseConnection } from './databaseErrors.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const serverless = !!process.env.VERCEL;
@@ -28,11 +27,6 @@ export const rawPool = new pg.Pool({
   idle_in_transaction_session_timeout: 20000,
 });
 rawPool.on('error', (e) => console.error('pg pool error', e.message));
-// Pool error handlers cover idle clients only. Checked-out clients also need
-// a listener so a dropped socket cannot crash the entire serverless instance.
-rawPool.on('connect', (client) => {
-  client.on('error', (error) => console.error('pg connection error', { code: error.code || error.name }));
-});
 
 let storageCheck, storageCheckedAt = 0;
 export async function ensureStorageMode() {
@@ -51,20 +45,15 @@ export const q = async (text, params) => {
     const error = new Error('Server database sedang sibuk. Coba lagi sebentar.'); error.status = 503; throw error;
   }
   const client = await rawPool.connect();
-  let releaseError;
   try {
     await client.query(`BEGIN; ${searchPathSql()}`);
     const result = await client.query(eventSql(text), params);
     await client.query('COMMIT');
     return result;
   } catch (error) {
-    if (discardDatabaseConnection(error)) releaseError = error;
-    else {
-      try { await client.query('ROLLBACK'); }
-      catch (rollbackError) { releaseError = rollbackError; }
-    }
+    await client.query('ROLLBACK').catch(() => {});
     throw error;
-  } finally { client.release(releaseError); }
+  } finally { client.release(); }
 };
 
 export const pool = {

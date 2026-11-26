@@ -5,12 +5,6 @@ import { schoolIdentity } from './schoolIdentity.js';
 import { pksSchoolHeadCorrections } from './pksSchoolHeadCorrections.js';
 
 import { arrivalPersonKey } from '../../shared/pksAttendeeName.js';
-import { createArrivalProfileRefresh } from './arrivalProfileRefresh.js';
-
-const profileRefresh = createArrivalProfileRefresh(linkPksArrivalProfiles);
-export const invalidateArrivalProfileRefresh = () => profileRefresh.clear();
-export const refreshPksArrivalProfiles = (venueId = null) => eventId() === 5
-  ? profileRefresh.refresh(eventId(), venueId) : Promise.resolve();
 
 export function planArrivalProfileLinks(schools, profiles, recaps) {
   const identities = new Map();
@@ -85,15 +79,12 @@ export function planArrivalProfileLinks(schools, profiles, recaps) {
     if (remaining.length <= empty.length) remaining.forEach((person,index) => assigned.set(person, empty[index]));
     for (const [person, profile] of assigned) {
       const replacement = { name: person.name, original_name: profile.name, role: person.role, npsn: String(school.npsn) };
-      // PostgreSQL jsonb reorders object keys. Comparing JSON strings made
-      // already-correct bindings look changed on every directory request.
-      const unchanged = Object.keys(replacement).every(key => recap.representatives?.[profile.id]?.[key] === replacement[key]);
-      const hasMark = ['selesai','sudah_tiba','sedang_antre','belum_tiba'].includes(person.status);
-      if (unchanged && (!hasMark || recap.marks?.[profile.id] === person.status)) continue;
+      if (JSON.stringify(recap.representatives?.[profile.id]) === JSON.stringify(replacement)
+        && recap.marks?.[profile.id] === person.status) continue;
       if (!patches.has(profile.venue_id)) patches.set(profile.venue_id, { venue_id: profile.venue_id, imported_at: recap.imported_at, marks: {}, representatives: {} });
       const patch = patches.get(profile.venue_id);
       patch.representatives[profile.id] = replacement;
-      if (hasMark) patch.marks[profile.id] = person.status;
+      if (['selesai','sudah_tiba','sedang_antre','belum_tiba'].includes(person.status)) patch.marks[profile.id] = person.status;
     }
   }
   return [...patches.values()];
@@ -117,7 +108,5 @@ export async function linkPksArrivalProfiles(venueId = null) {
   await q(`UPDATE venue_arrival_recap r SET marks=COALESCE(r.marks,'{}'::jsonb)||p.marks,
     representatives=COALESCE(r.representatives,'{}'::jsonb)||p.representatives
     FROM jsonb_to_recordset($1::jsonb) AS p(venue_id int,marks jsonb,representatives jsonb,imported_at timestamptz)
-    WHERE r.venue_id=p.venue_id AND r.imported_at=p.imported_at
-      AND (COALESCE(r.marks,'{}'::jsonb) IS DISTINCT FROM (COALESCE(r.marks,'{}'::jsonb)||p.marks)
-        OR COALESCE(r.representatives,'{}'::jsonb) IS DISTINCT FROM (COALESCE(r.representatives,'{}'::jsonb)||p.representatives))`, [JSON.stringify(patches)]);
+    WHERE r.venue_id=p.venue_id AND r.imported_at=p.imported_at`, [JSON.stringify(patches)]);
 }
