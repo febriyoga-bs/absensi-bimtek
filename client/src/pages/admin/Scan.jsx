@@ -175,7 +175,7 @@ export default function Scan() {
         .then((response) => { if (current) setList(response); })
         .catch((error) => { if (current) setListError(error.message); })
         .finally(() => { if (current) setLoading(false); });
-    }, search.trim() ? 220 : 0);
+    }, search.trim() ? 400 : 0);
     return () => { current = false; clearTimeout(timer); };
   }, [tab, search, page, filterVenue, filterArrival, filterLo, filterPosition, filterFacilitator, filterAttendance, sort, direction, lo, revision, testSessionId]);
 

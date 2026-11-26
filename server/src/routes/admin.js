@@ -19,7 +19,7 @@ import { getArrivalRecap, getArrivalRecapDetails, importArrivalRecap } from '../
 import { finiteInteger } from '../security.js';
 import { pksRoutes } from '../pks.js';
 import { eventId } from '../eventContext.js';
-import { linkPksArrivalProfiles } from '../pksArrivalProfileLinks.js';
+import { linkPksArrivalProfiles, refreshPksArrivalProfiles } from '../pksArrivalProfileLinks.js';
 import {getSchoolIdentityAudit} from '../auditSchoolIdentities.js';
 import {correctSchoolArrival} from '../correctSchoolArrival.js';
 import { pksVerifierArrivalSql } from '../pksVerifierArrival.js';
@@ -692,7 +692,7 @@ r.get('/scan/participants', ah(async (req, res) => {
   if (testSessionId !== null && (!Number.isInteger(testSessionId) || testSessionId < 1 || testSessionId > 2147483647)) {
     throw new HttpError(400, 'Sesi uji coba tidak valid.');
   }
-  if (category === 'sekolah') await linkPksArrivalProfiles(req.user.role === 'lo' ? req.user.venue : venueId);
+  if (category === 'sekolah') await refreshPksArrivalProfiles(req.user.role === 'lo' ? req.user.venue : venueId);
   const { rows: [list] } = await q(
     `WITH active_owners AS MATERIALIZED (
       SELECT id,name,venue_id FROM lo_accounts WHERE active

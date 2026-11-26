@@ -5,6 +5,7 @@ import adminRoutes, { loginHandler, loginLimiter } from './routes/admin.js';
 import { requestLimiter, securityHeaders } from './security.js';
 import { eventRoutes, selectEvent, invalidateEventMetadata } from './events.js';
 import { publicPksRoutes } from './pks.js';
+import { invalidateArrivalProfileRefresh } from './pksArrivalProfileLinks.js';
 
 /**
  * Aplikasi Express tanpa listen().
@@ -20,6 +21,9 @@ app.use(securityHeaders);
 app.use('/api', requestLimiter);
 app.use(express.json({ limit: '3mb' }));
 app.use((req, res, next) => {
+  if (!['GET','HEAD','OPTIONS'].includes(req.method)) {
+    res.once('finish', () => { if (res.statusCode < 400) invalidateArrivalProfileRefresh(); });
+  }
   if (!['GET','HEAD','OPTIONS'].includes(req.method) && /^\/api\/admin\/sessions(?:\/|$)/.test(req.path)) {
     res.once('finish', () => { if (res.statusCode < 400) invalidateEventMetadata(); });
   }

@@ -5,6 +5,12 @@ import { schoolIdentity } from './schoolIdentity.js';
 import { pksSchoolHeadCorrections } from './pksSchoolHeadCorrections.js';
 
 import { arrivalPersonKey } from '../../shared/pksAttendeeName.js';
+import { createArrivalProfileRefresh } from './arrivalProfileRefresh.js';
+
+const profileRefresh = createArrivalProfileRefresh(linkPksArrivalProfiles);
+export const invalidateArrivalProfileRefresh = () => profileRefresh.clear();
+export const refreshPksArrivalProfiles = (venueId = null) => eventId() === 5
+  ? profileRefresh.refresh(eventId(), venueId) : Promise.resolve();
 
 export function planArrivalProfileLinks(schools, profiles, recaps) {
   const identities = new Map();
