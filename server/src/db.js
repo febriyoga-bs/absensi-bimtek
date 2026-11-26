@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { currentEvent, searchPathSql } from './eventContext.js';
 import { scopedConnection } from './scopedConnection.js';
 import { eventSql, unifiedStorage, setUnifiedStorage } from './unifiedStorage.js';
+import { discardDatabaseConnection } from './databaseErrors.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const serverless = !!process.env.VERCEL;
@@ -45,15 +46,20 @@ export const q = async (text, params) => {
     const error = new Error('Server database sedang sibuk. Coba lagi sebentar.'); error.status = 503; throw error;
   }
   const client = await rawPool.connect();
+  let releaseError;
   try {
     await client.query(`BEGIN; ${searchPathSql()}`);
     const result = await client.query(eventSql(text), params);
     await client.query('COMMIT');
     return result;
   } catch (error) {
-    await client.query('ROLLBACK').catch(() => {});
+    if (discardDatabaseConnection(error)) releaseError = error;
+    else {
+      try { await client.query('ROLLBACK'); }
+      catch (rollbackError) { releaseError = rollbackError; }
+    }
     throw error;
-  } finally { client.release(); }
+  } finally { client.release(releaseError); }
 };
 
 export const pool = {
