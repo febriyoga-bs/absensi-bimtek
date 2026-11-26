@@ -28,6 +28,7 @@ import { loginLo } from '../loLogin.js';
 import { changeLoPassword } from '../loPassword.js';
 import { eventVenueScope } from '../eventVenues.js';
 import { attendanceExportLoCtes } from '../attendanceExport.js';
+import { attendanceRankingSql } from '../attendanceRankingSql.js';
 
 const r = Router();
 
@@ -517,6 +518,7 @@ r.get('/sessions', ah(async (req, res) => {
   const v = scopeVenue(req);
   const { rows } = await q(
     `SELECT s.*,
+       ${req.query.summary === '0' ? '' : `
        (SELECT count(*) FROM people p WHERE (s.role='semua' OR p.role=s.role)
           AND ${inRosterAt('LEAST(now(), s.ends_at)')}
           AND (cardinality(COALESCE(s.venue_ids,'{}'))=0 OR p.venue_id IS NULL OR p.venue_id = ANY(s.venue_ids))
@@ -529,6 +531,7 @@ r.get('/sessions', ah(async (req, res) => {
        (SELECT COALESCE(json_agg(x ORDER BY x.name), '[]') FROM (
           SELECT v.name, count(*)::int AS n FROM attendance a JOIN venues v ON v.id=a.venue_id
           WHERE a.session_id=s.id AND a.status IN ('valid','review','ditolak','berhalangan') AND ($1::int IS NULL OR a.venue_id=$1) GROUP BY v.name) x) AS by_venue,
+       `}
        now() BETWEEN s.starts_at AND s.ends_at AS is_open
      FROM sessions s
      WHERE ($1::int IS NULL OR cardinality(COALESCE(s.venue_ids,'{}'))=0 OR $1 = ANY(s.venue_ids))
@@ -1089,71 +1092,7 @@ r.get('/reporting/attendance-ranking', ah(async (req, res) => {
     const { rows: sessions } = await q('SELECT id FROM sessions WHERE id=$1 AND NOT is_test', [sessionId]);
     if (!sessions.length) throw new HttpError(400, 'Sesi resmi tidak ditemukan.');
   }
-  const { rows } = await q(`WITH owners AS (
-    SELECT l.id,l.name,l.venue_id,v.name AS venue,
-      count(*) OVER (PARTITION BY l.venue_id,l.name) AS same_name
-    FROM lo_accounts l JOIN venues v ON v.id=l.venue_id
-  ), targets AS (
-    SELECT DISTINCT l.id AS owner_id,p.id AS person_id
-    FROM assignment_roster r
-    CROSS JOIN LATERAL jsonb_each(r.data->'attendance_assignments') entries
-    JOIN owners l ON entries.key=l.id::text
-    CROSS JOIN LATERAL jsonb_to_recordset(entries.value) AS m(code text,name text,position text,npsn text,venue_id int)
-    JOIN people p ON p.venue_id=l.venue_id AND p.venue_id=m.venue_id AND p.role='peserta'
-      AND lower(trim(m.position))=lower(trim(p.position))
-      AND ${nameKeySql('m.name')}=${nameKeySql('p.name')}
-      AND (lower(m.code)=lower(p.code) OR (m.npsn IS NOT NULL
-        AND string_to_array(replace(m.npsn,' ',''),';') && string_to_array(replace(p.npsn,' ',''),';')))
-    WHERE r.id=1 AND p.archived_at IS NULL
-      AND (lower(trim(p.position)) IN ('bendahara','pengawas','kepala sekolah') OR lower(trim(p.position)) ~ '^(verifikator|fasil(itator)?)($|[[:space:]])')
-      AND ($1::int IS NULL OR EXISTS (SELECT 1 FROM sessions selected WHERE selected.id=$1 AND selected.role IN ('peserta','semua') AND (cardinality(COALESCE(selected.venue_ids,'{}'))=0 OR p.venue_id=ANY(selected.venue_ids))))
-  ), presence AS MATERIALIZED (
-    SELECT DISTINCT a.person_id,a.venue_id FROM attendance a JOIN sessions s ON s.id=a.session_id
-    WHERE NOT s.is_test AND a.status IN ('valid','review') AND ($1::int IS NULL OR s.id=$1)
-  ), presence_flags AS MATERIALIZED (
-    SELECT t.owner_id,t.person_id,
-      (evidence.person_id IS NOT NULL) AS present
-    FROM targets t JOIN owners owner ON owner.id=t.owner_id
-    LEFT JOIN presence evidence ON evidence.person_id=t.person_id AND evidence.venue_id=owner.venue_id
-  ), presence_counts AS (
-    SELECT owner_id,count(*) FILTER (WHERE present)::int AS present FROM presence_flags GROUP BY owner_id
-  ), work AS MATERIALIZED (
-    SELECT DISTINCT ON (a.scanned_by,a.venue_id,a.person_id) a.*
-    FROM attendance a JOIN sessions s ON s.id=a.session_id
-    WHERE NOT s.is_test AND ($1::int IS NULL OR s.id=$1)
-      AND a.method IN ('manual','qr') AND a.status IN ('valid','review','berhalangan')
-    ORDER BY a.scanned_by,a.venue_id,a.person_id,CASE WHEN a.status='berhalangan' THEN 1 ELSE 0 END,a.created_at DESC
-  )
-  ${detail ? `SELECT p.id,p.name,p.institution,p.position,p.npsn,l.venue,
-    COALESCE(pf.present,false) AS present,a.status,a.created_at,a.participant_note
-    FROM targets t JOIN owners l ON l.id=t.owner_id JOIN people p ON p.id=t.person_id
-    LEFT JOIN presence_flags pf ON pf.owner_id=t.owner_id AND pf.person_id=t.person_id
-    LEFT JOIN work a ON l.same_name=1 AND a.venue_id=l.venue_id AND a.person_id=p.id AND a.scanned_by='LO '||l.name
-    WHERE l.id=$2 AND (${({
-      assigned:'true',present:'COALESCE(pf.present,false)',completed:'a.id IS NOT NULL',
-      target:'COALESCE(pf.present,false)',unavailable:"a.status='berhalangan'",
-      participants:"a.id IS NOT NULL AND a.status<>'berhalangan' AND lower(trim(p.position)) IN ('bendahara','pengawas','kepala sekolah')",
-      facilitators:"a.id IS NOT NULL AND a.status<>'berhalangan' AND lower(trim(p.position)) ~ '^(verifikator|fasil(itator)?)($|[[:space:]])'",
-    })[metric]}) ORDER BY p.name,p.id` : `SELECT l.id,l.name,l.venue,
-    (SELECT count(*)::int FROM targets t WHERE t.owner_id=l.id) AS assigned,
-    COALESCE((SELECT present FROM presence_counts pc WHERE pc.owner_id=l.id),0) AS present,
-    count(DISTINCT p.id) FILTER (WHERE a.status<>'berhalangan' AND lower(trim(p.position)) IN ('bendahara','pengawas','kepala sekolah'))::int AS participants,
-    count(DISTINCT p.id) FILTER (WHERE a.status<>'berhalangan' AND lower(trim(p.position)) ~ '^(verifikator|fasil(itator)?)($|[[:space:]])')::int AS facilitators,
-    count(DISTINCT p.id) FILTER (WHERE a.status<>'berhalangan')::int AS total,
-    count(DISTINCT p.id) FILTER (WHERE a.status='berhalangan')::int AS unavailable,
-    count(DISTINCT p.id) FILTER (WHERE a.status='berhalangan' AND EXISTS (
-      SELECT 1 FROM presence_flags pf WHERE pf.owner_id=l.id AND pf.person_id=p.id AND NOT pf.present
-    ))::int AS unavailable_absent
-  FROM owners l
-  LEFT JOIN work a ON l.same_name=1 AND a.venue_id=l.venue_id AND a.scanned_by='LO '||l.name
-    AND a.method IN ('manual','qr') AND a.status IN ('valid','review','berhalangan')
-    AND EXISTS (SELECT 1 FROM sessions s WHERE s.id=a.session_id AND NOT s.is_test
-      AND ($1::int IS NULL OR s.id=$1))
-  LEFT JOIN people p ON p.id=a.person_id AND p.role='peserta'
-    AND EXISTS (SELECT 1 FROM targets t WHERE t.owner_id=l.id AND t.person_id=p.id)
-    AND (lower(trim(p.position)) IN ('bendahara','pengawas','kepala sekolah') OR lower(trim(p.position)) ~ '^(verifikator|fasil(itator)?)($|[[:space:]])')
-  GROUP BY l.id,l.name,l.venue
-  ORDER BY total DESC,l.name,l.id`}`, detail ? [sessionId,ownerId] : [sessionId]);
+  const { rows } = await q(attendanceRankingSql(detail ? metric : null), detail ? [sessionId,ownerId] : [sessionId]);
   res.json(rows);
 }));
 

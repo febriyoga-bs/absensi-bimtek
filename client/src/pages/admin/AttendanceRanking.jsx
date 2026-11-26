@@ -17,7 +17,7 @@ export default function AttendanceRanking({ venue, query, owner = '', facilitato
   const detailButton=(row,metric,label,value)=><button type="button" className="pks-count-button" aria-haspopup="dialog" aria-label={`Lihat ${label}: ${value} orang — ${personName(row.name)}`} onClick={()=>setSelection({owner:row,metric,label,sessionId,sessionName:sessionTitle(sessions.find(s=>String(s.id)===sessionId) || {})})}>{value}</button>;
   useEffect(() => {
     let current = true;
-    api('/admin/sessions', { admin: true })
+    api('/admin/sessions?official=1&summary=0', { admin: true })
       .then((data) => { if (current) {
         const official = data.filter((s) => !s.is_test && s.role !== 'panitia');
         const ordered = [...official].sort((a, b) => new Date(b.starts_at) - new Date(a.starts_at) || b.id - a.id);

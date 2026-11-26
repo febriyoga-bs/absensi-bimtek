@@ -100,6 +100,11 @@ test('test session recaps stay separate from official attendance and validate sc
   assert.equal(detail.find(row=>row.name==='Only test').people[0].status,'review');
   assert.equal(detail.find(row=>row.name==='Person 4').people[0].status,null);
   const tests=await read('/api/admin/sessions?event=4&test_only=1');assert.equal(tests.length,1);assert.equal(tests[0].is_test,true);
+  const fullSessions=await read('/api/admin/sessions?event=4&official=1');
+  const lightSessions=await read('/api/admin/sessions?event=4&official=1&summary=0');
+  assert.deepEqual(lightSessions.map(s=>s.id),fullSessions.map(s=>s.id));
+  assert.ok(lightSessions.every(s=>!s.is_test && !Object.hasOwn(s,'expected') && !Object.hasOwn(s,'by_venue')));
+  assert.ok(fullSessions.every(s=>Object.hasOwn(s,'expected') && Object.hasOwn(s,'by_venue')));
   for(const suffix of ['event=4&test_session_id=1',`event=3&test_session_id=${testId}`]){
     assert.equal((await fetch(origin+'/api/admin/venue-attendance?'+suffix,{headers})).status,404);
   }
@@ -117,4 +122,16 @@ test('profile backfill is scoped to the selected event in unified storage',async
     assert.deepEqual(rows,[{name:'Shared Person',venue_id:1}]);
     assert.equal((await q('SELECT photo_path FROM attendance')).rows[0].photo_path,`r2:events/${id}/original.jpg`);
   });
+});
+
+test('attendance ranking queries stay inside their selected event',async()=>{
+  const headers={Authorization:`Bearer ${signAdmin({role:'admin'})}`};
+  for(const id of [3,4]){
+    const response=await fetch(`${origin}/api/admin/reporting/attendance-ranking?event=${id}&session_id=1`,{headers});
+    assert.equal(response.status,200,await response.clone().text());
+    const rows=await response.json();
+    assert.equal(rows.length,1);
+    assert.equal(rows[0].venue,`Venue ${id}`);
+    assert.equal(rows[0].assigned,0);
+  }
 });
