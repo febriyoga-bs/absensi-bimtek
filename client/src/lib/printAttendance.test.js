@@ -17,11 +17,16 @@ test('rendered PDF starts with summary then LO, verifier and school-sorted parti
   const streams = [...bytes.toString('latin1').matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)]
     .map(match=>inflateSync(Buffer.from(match[1],'latin1')).toString('latin1'));
   assert.equal(streams.length,4);
+  for (const page of streams) assert.doesNotMatch(page,/Sesi Contoh|catatan absensi - Dibuat|Dibuat /);
   assert.match(streams[0],/Total Catatan Absensi/);
   assert.match(streams[0],/Perwakilan Sekolah/);
   assert.doesNotMatch(streams[0],/Total orang pada hasil filter/);
   assert.match(streams[1],/LO - Hadir - 1 orang \/ 1 catatan/);
   assert.match(streams[2],/Verifikator - Hadir/);
+  assert.doesNotMatch(streams[1],/NPSN/);
+  assert.doesNotMatch(streams[2],/NPSN/);
+  for (const stream of streams) assert.doesNotMatch(stream,/Sesi Contoh|catatan absensi - Dibuat/);
+  for (const stream of [streams[1],streams[2]]) assert.doesNotMatch(stream,/NPSN/);
   assert.match(streams[3],/Peserta - Hadir - 2 orang \/ 2 catatan/);
   assert.ok(streams[3].indexOf('Zahra')<streams[3].indexOf('Aaron'));
   assert.match(streams[3],/NPSN 00123456/);

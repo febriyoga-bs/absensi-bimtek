@@ -1,5 +1,5 @@
 import { preparePdfResume, cachedPdfPhoto, prepareVenuePdfBatch } from './pdfResume.js';
-import { attendancePdfGroups, attendancePdfCategorySummary, attendancePdfSections, attendancePdfName, attendancePdfPosition } from './attendancePdfGroups.js';
+import { attendancePdfGroups, attendancePdfCategorySummary, attendancePdfSections, attendancePdfName, attendancePdfPosition, attendancePdfCategory } from './attendancePdfGroups.js';
 import { personName } from './personName.js';
 import { api, adminToken } from '../api.js';
 import { eventPath } from '../event.js';
@@ -59,7 +59,7 @@ export async function createAttendancePdf({ records, title, heading = 'Rekap Abs
   const { jsPDF } = await import('jspdf');
   const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
   pdf.setProperties({ title: printable(heading), author: 'Dashboard LO' });
-  const gap = 4, width = (277 - 3 * gap) / 4, lineHeight = 3.1, printed = time(Date.now());
+  const gap = 4, width = (277 - 3 * gap) / 4, lineHeight = 3.1, photoFraction = 0.5;
   let y, cards = [], rowOnPage = 0, sectionTitle = 'Ringkasan Absensi';
   const groups = attendancePdfGroups(records);
   const uniquePeople = rows => new Set(rows.map(row => row.person_id ?? row.code ?? row.id)).size;
@@ -75,9 +75,7 @@ export async function createAttendancePdf({ records, title, heading = 'Rekap Abs
     pdf.setFillColor(23, 59, 118); pdf.rect(10, 8, 277, headerHeight, 'F');
     pdf.text(headingLines, 14, 16.5);
     pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(40, 59, 83);
-    const scope = pdf.splitTextToSize(printable(title), 277);
-    pdf.text(scope, 10, 13 + headerHeight); y = 16 + headerHeight + scope.length * 3.4;
-    pdf.text(`${records.length} catatan absensi - Dibuat ${printed} WIB`, 10, y); y += 6;
+    y = 16 + headerHeight;
     pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.text(sectionTitle, 10, y); y += 6;
   };
   header(); const cardHeight = (194 - y - gap) / 2;
@@ -119,7 +117,7 @@ export async function createAttendancePdf({ records, title, heading = 'Rekap Abs
       const x = 10 + index * (width + gap); let top = y + 4;
       pdf.setDrawColor(209, 221, 235); pdf.setFillColor(248, 250, 254);
       pdf.roundedRect(x, y, width, height, 2, 2, 'FD');
-      const photoHeight = height * 0.34;
+      const photoHeight = height * photoFraction;
       const photoWidth = width - 6;
       pdf.setFillColor(235, 240, 247);
       pdf.rect(x + 3, top, photoWidth, photoHeight, 'F');
@@ -159,14 +157,14 @@ export async function createAttendancePdf({ records, title, heading = 'Rekap Abs
     }
     const fields = [
       [attendancePdfName(row), true], [loLabel(attendancePdfPosition(row))],
-      [`${row.institution || '-'} - NPSN ${row.npsn || '-'}`],
+      ...(['lo','verifikator'].includes(attendancePdfCategory(row)) ? [] : [[`${row.institution || '-'} - NPSN ${row.npsn || '-'}`]]),
       [`Venue: ${row.venue_name || '-'}`],
       [`${time(row.created_at)} WIB - ${statuses[row.status] || row.status}`],
       [`Dicatat oleh ${row.scanned_by ? personName(row.scanned_by) : '-'}`],
       [`Catatan Kendala: ${row.participant_note || '-'}`],
     ];
     const lines = fields.flatMap(([value, bold]) => textLines(value, bold));
-    const count = Math.max(2, Math.floor((cardHeight * 0.66 - 10) / lineHeight));
+    const count = Math.max(2, Math.floor((cardHeight * (1 - photoFraction) - 10) / lineHeight));
     let part = lines;
     if (lines.length > count) {
       overflow.push({ name: attendancePdfName(row), code: row.code, lines: fields.slice(1).map(([text, bold]) => ({ text, bold })) });
