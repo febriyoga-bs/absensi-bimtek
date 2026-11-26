@@ -28,6 +28,11 @@ export const rawPool = new pg.Pool({
   idle_in_transaction_session_timeout: 20000,
 });
 rawPool.on('error', (e) => console.error('pg pool error', e.message));
+// Pool error handlers cover idle clients only. Checked-out clients also need
+// a listener so a dropped socket cannot crash the entire serverless instance.
+rawPool.on('connect', (client) => {
+  client.on('error', (error) => console.error('pg connection error', { code: error.code || error.name }));
+});
 
 let storageCheck, storageCheckedAt = 0;
 export async function ensureStorageMode() {

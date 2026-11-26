@@ -1,11 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { rawPool, q } from '../src/db.js';
+import { EventEmitter } from 'node:events';
 
 test('database errors release or discard connections without reusing timed-out clients', async () => {
   const originalQuery = rawPool.query, originalConnect = rawPool.connect;
   rawPool.query = async () => ({ rows: [] });
   try {
+    const client = new EventEmitter();
+    rawPool.emit('connect', client);
+    const log = console.error;
+    console.error = () => {};
+    try { assert.doesNotThrow(() => client.emit('error', new Error('Connection terminated unexpectedly'))); }
+    finally { console.error = log; }
     for (const kind of ['timeout', 'sql', 'rollback', 'success']) {
       const commands = [], releases = [];
       const error = new Error(kind === 'timeout' ? 'Query read timeout' : 'bad SQL');
