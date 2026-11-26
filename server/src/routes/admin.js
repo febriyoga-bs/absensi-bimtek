@@ -1164,7 +1164,7 @@ r.get('/attendance', ah(async (req, res) => {
     q(
       `SELECT a.id, a.status, a.risk_score, a.flags, a.lat, a.lng, a.accuracy_m, a.distance_m,
               a.created_at, a.device_id, a.user_agent, a.ip, a.photo_path, a.photo_history, a.venue_id, a.method, a.scanned_by, a.participant_note,
-              p.name, p.code, p.role, p.institution, p.position, v.name AS venue_name,
+              p.name, p.code, p.role, p.institution, p.position, p.npsn, v.name AS venue_name,
               arrival.representatives->p.id::text AS representative,
               ${assignedToLo('$6', '$2')} AS can_verify,
               ${canDeleteAttendance('$6', '$2')} AS can_delete,

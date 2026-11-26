@@ -1,8 +1,24 @@
+import { eventLabel } from '../event.js';
+import { personName } from './personName.js';
+
+export const attendancePdfName = row => personName(row.representative?.name || row.name);
+export const attendancePdfPosition = row => eventLabel(row.representative?.role || row.position || '-');
+
+export function attendancePdfCategory(row) {
+  const position = attendancePdfPosition(row).trim().toLowerCase();
+  if (/^lo($|\s)|^liaison officer$/.test(position)) return 'lo';
+  if (/^(verifikator|fasil)/.test(position)) return 'verifikator';
+  if (position === 'perwakilan sekolah') return 'perwakilan';
+  if (position === 'kepala sekolah') return 'kepsek';
+  if (position === 'bendahara' || position === 'sekolah') return 'bendahara';
+  return 'lainnya';
+}
+
 export function attendancePdfGroups(records) {
   const groups = [
     { key:'hadir', label:'Hadir', rows:[] },
     { key:'berhalangan', label:'Berhalangan Hadir', rows:[] },
-    { key:'lainnya', label:'Ditolak / Status Lain', rows:[] },
+    { key:'lainnya', label:'Absen Ditolak', rows:[] },
   ];
   for (const row of records) groups[row.status === 'berhalangan' ? 1 : ['valid','review'].includes(row.status) ? 0 : 2].rows.push(row);
   return groups;
@@ -10,31 +26,27 @@ export function attendancePdfGroups(records) {
 
 export function attendancePdfCategorySummary(records) {
   const categories = [
-    ['bendahara','Bendahara (Sekolah)'], ['pengawas','Pengawas'],
-    ['fasil','Fasilitator'], ['dinas','Dinas Pendidikan'], ['bpmp','BB/BPMP'],
-    ['lo','LO'], ['lainnya','Lainnya'],
+    ['kepsek','Kepala Sekolah'], ['bendahara','Bendahara'],
+    ['perwakilan','Perwakilan Sekolah'], ['verifikator','Verifikator'], ['lo','LO'],
+    ['lainnya','Lainnya'],
   ];
-  const category = row => {
-    const p = String(row.position || '').trim().toLowerCase();
-    if (/^fasil/.test(p)) return 'fasil';
-    if (p === 'bendahara' || p === 'sekolah') return 'bendahara';
-    if (p === 'pengawas') return 'pengawas';
-    if (p === 'dinas pendidikan') return 'dinas';
-    if (['bb/bpmp','bpmp','bbpmp'].includes(p)) return 'bpmp';
-    if (/^lo($|\s)|^liaison officer$/.test(p)) return 'lo';
-    return 'lainnya';
-  };
   const unique = rows => new Set(rows.map(row => row.person_id ?? row.code ?? row.id)).size;
   return categories.map(([key,label])=>{
-    const rows = records.filter(row=>category(row)===key);
+    const rows = records.filter(row=>attendancePdfCategory(row)===key);
     const groups = attendancePdfGroups(rows);
     return {key,label,total:unique(rows),hadir:unique(groups[0].rows),berhalangan:unique(groups[1].rows),lainnya:unique(groups[2].rows)};
-  }).filter(row=>!['lo','lainnya'].includes(row.key)||row.total>0);
+  }).filter(row=>row.key!=='lainnya'||row.total>0);
 }
 
 export function attendancePdfSections(records) {
-  const isLo = row => /^lo($|\s)|^liaison officer$/i.test(String(row.position || '').trim());
-  return [true, false].flatMap(lo => attendancePdfGroups(records.filter(row => isLo(row) === lo))
+  const collator = new Intl.Collator('id-ID', { sensitivity:'base', numeric:true });
+  const section = row => {
+    const category = attendancePdfCategory(row);
+    return ['lo','verifikator'].includes(category) ? category : 'peserta';
+  };
+  return [['lo','LO'],['verifikator','Verifikator'],['peserta','Peserta']].flatMap(([key,label]) => attendancePdfGroups(records.filter(row => section(row) === key))
     .filter(group => group.rows.length)
-    .map(group => ({...group,label:`${lo ? 'LO' : 'Peserta / Panitia'} - ${group.label}`})));
+    .map(group => ({...group,label:`${label} - ${group.label}`,rows:[...group.rows].sort((a,b) =>
+      (key === 'peserta' ? collator.compare(a.institution || '', b.institution || '') || collator.compare(a.npsn || '', b.npsn || '') : 0)
+      || collator.compare(attendancePdfName(a),attendancePdfName(b)) || Number(a.id)-Number(b.id))})));
 }

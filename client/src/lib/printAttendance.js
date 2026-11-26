@@ -1,5 +1,5 @@
 import { preparePdfResume, cachedPdfPhoto, prepareVenuePdfBatch } from './pdfResume.js';
-import { attendancePdfGroups, attendancePdfCategorySummary, attendancePdfSections } from './attendancePdfGroups.js';
+import { attendancePdfGroups, attendancePdfCategorySummary, attendancePdfSections, attendancePdfName, attendancePdfPosition } from './attendancePdfGroups.js';
 import { personName } from './personName.js';
 import { api, adminToken } from '../api.js';
 import { eventPath } from '../event.js';
@@ -49,9 +49,13 @@ export async function printAttendance({ filters, title, heading = 'Rekap Absensi
   state.dataComplete = true;
   if (state.photos.size) onProgress?.(`melanjutkan dengan ${state.photos.size} foto yang sudah siap`);
   if (!records.length) throw Object.assign(new Error('Tidak ada absensi yang cocok dengan filter untuk diunduh.'), { code: 'NO_RECORDS' });
-  const collator = new Intl.Collator('id-ID', { sensitivity: 'base', numeric: true });
-  records.sort((a, b) => collator.compare(a.venue_name || '', b.venue_name || '')
-    || collator.compare(personName(a.name), personName(b.name)) || Number(a.id) - Number(b.id));
+  const result = await createAttendancePdf({ records, title, heading, onProgress, state });
+  if (!outputOnly) downloadFile(result, attendanceFilename(heading, 'pdf'));
+  state.photos.clear(); state.records = []; state.dataComplete = false;
+  return result;
+}
+
+export async function createAttendancePdf({ records, title, heading = 'Rekap Absensi', onProgress, state = { photos: new Map() } }) {
   const { jsPDF } = await import('jspdf');
   const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
   pdf.setProperties({ title: printable(heading), author: 'Dashboard LO' });
@@ -78,9 +82,8 @@ export async function printAttendance({ filters, title, heading = 'Rekap Absensi
   };
   header(); const cardHeight = (194 - y - gap) / 2;
   const summaryRows = [
-    ['Total orang pada hasil filter', uniquePeople(records)],
     ...groups.map(group => [group.label, uniquePeople(group.rows)]),
-    ['Total catatan absensi', records.length],
+    ['Total Catatan Absensi', records.length],
   ];
   let summaryY = y + 5;
   for (const [index, [label, value]] of summaryRows.entries()) {
@@ -102,7 +105,7 @@ export async function printAttendance({ filters, title, heading = 'Rekap Absensi
     values.forEach((value,i)=>pdf.text(String(value),columns[i],summaryY+5.4,{align:i?'right':'left'}));
     summaryY += 8;
   };
-  drawCategoryRow(['Kategori','Hadir','Berhalangan','Ditolak / Lain','Total'],true,0);
+  drawCategoryRow(['Kategori','Hadir','Berhalangan','Absen Ditolak','Total'],true,0);
   categoryRows.forEach((row,index)=>drawCategoryRow([row.label,row.hadir,row.berhalangan,row.lainnya,row.total],false,index));
   pdf.setTextColor(40,59,83);
   pdf.setFont('helvetica','normal'); pdf.setFontSize(8);
@@ -116,7 +119,7 @@ export async function printAttendance({ filters, title, heading = 'Rekap Absensi
       const x = 10 + index * (width + gap); let top = y + 4;
       pdf.setDrawColor(209, 221, 235); pdf.setFillColor(248, 250, 254);
       pdf.roundedRect(x, y, width, height, 2, 2, 'FD');
-      const photoHeight = height * 0.5;
+      const photoHeight = height * 0.34;
       const photoWidth = width - 6;
       pdf.setFillColor(235, 240, 247);
       pdf.rect(x + 3, top, photoWidth, photoHeight, 'F');
@@ -154,16 +157,19 @@ export async function printAttendance({ filters, title, heading = 'Rekap Absensi
         throw new Error(`Foto ${personName(row.name)} gagal dimuat. ${state.photos.size} foto sudah siap. Klik Lanjutkan PDF tanpa menutup dialog untuk melanjutkan.`);
       }
     }
-    const lines = [ ...textLines(personName(row.name), true), ...textLines([row.code, loLabel(row.position)].filter(Boolean).join(' - ')),
-      ...textLines(row.institution || '-'), ...textLines(`Venue: ${row.venue_name || '-'}`),
-      ...textLines(`${time(row.created_at)} WIB - ${statuses[row.status] || row.status}`),
-      ...(row.scanned_by ? textLines(`Dicatat oleh ${personName(row.scanned_by)}`) : []),
-      ...(row.participant_note ? [...textLines(row.status === 'berhalangan' ? 'Alasan berhalangan hadir' : 'Catatan kendala', true), ...textLines(row.participant_note)] : []),
-      ];
-    const count = Math.max(2, Math.floor((cardHeight * 0.5 - 12) / lineHeight));
+    const fields = [
+      [attendancePdfName(row), true], [loLabel(attendancePdfPosition(row))],
+      [`${row.institution || '-'} - NPSN ${row.npsn || '-'}`],
+      [`Venue: ${row.venue_name || '-'}`],
+      [`${time(row.created_at)} WIB - ${statuses[row.status] || row.status}`],
+      [`Dicatat oleh ${row.scanned_by ? personName(row.scanned_by) : '-'}`],
+      [`Catatan Kendala: ${row.participant_note || '-'}`],
+    ];
+    const lines = fields.flatMap(([value, bold]) => textLines(value, bold));
+    const count = Math.max(2, Math.floor((cardHeight * 0.66 - 10) / lineHeight));
     let part = lines;
     if (lines.length > count) {
-      overflow.push({ name: personName(row.name), code: row.code, lines: lines.slice(count - 1) });
+      overflow.push({ name: attendancePdfName(row), code: row.code, lines: fields.slice(1).map(([text, bold]) => ({ text, bold })) });
       part = [...lines.slice(0, count - 1), { text: `Rincian lanjutan: lampiran ${overflow.length}`, bold: true }];
     }
     cards.push({ photo, lines: part });
@@ -173,25 +179,26 @@ export async function printAttendance({ filters, title, heading = 'Rekap Absensi
     flush();
   }
   sectionTitle = 'Lampiran Rincian Lanjutan';
-  // Keep eight distinct profiles on each full page without discarding long notes.
+  // Pack continuations together instead of adding a page for every long card.
+  if (overflow.length) { pdf.addPage(); header(); }
   for (const [index, entry] of overflow.entries()) {
-    pdf.addPage(); header();
-    const continuation = textLines(`Lampiran ${index + 1}: ${entry.name} (${entry.code || '-'})`, true);
-    for (const line of [...continuation, ...entry.lines]) {
-      if (y > 191) { pdf.addPage(); header(); }
+    const continuation = [{ text: `Lampiran ${index + 1}: ${entry.name} (${entry.code || '-'})`, bold: true }, ...entry.lines];
+    if (y > 180) { pdf.addPage(); header(); }
+    for (const line of continuation) {
       pdf.setFont('helvetica', line.bold ? 'bold' : 'normal'); pdf.setFontSize(line.bold ? 8 : 7);
-      pdf.setTextColor(40, 59, 83); pdf.text(line.text, 10, y); y += lineHeight;
+      for (const text of pdf.splitTextToSize(printable(line.text), 277)) {
+        if (y > 191) { pdf.addPage(); header(); }
+        pdf.setTextColor(40, 59, 83); pdf.text(text, 10, y); y += lineHeight;
+      }
     }
+    y += 4;
   }
   const pages = pdf.getNumberOfPages();
   for (let page = 1; page <= pages; page++) {
     pdf.setPage(page); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(100);
     pdf.text(`Halaman ${page} / ${pages}`, 287, 202, { align: 'right' });
   }
-  const result = pdf.output('blob');
-  if (!outputOnly) downloadFile(result, attendanceFilename(heading, 'pdf'));
-  state.photos.clear(); state.records = []; state.dataComplete = false;
-  return result;
+  return pdf.output('blob');
 }
 
 export async function printAttendanceByVenue({ filters, venues, sessionName, titleForVenue, onProgress, resumeState = {} }) {
