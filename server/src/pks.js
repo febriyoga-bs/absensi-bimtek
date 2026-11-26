@@ -1,6 +1,5 @@
-import {fetchCompleteSchoolPages} from './revitSchoolPages.js';
-import { readRevitHtml } from './revitHttp.js';
-import { progressSourceUrl, progressSchoolUrl, parseProgressPage, parseProgressSchoolPage } from './pksProgressSource.js';
+import {parseProgressExport,progressExportUrl} from './revitProgressExport.js';
+import { readRevitExport } from './revitHttp.js';
 import { progressLabels, progressStages, progressStage } from '../../shared/pksProgress.js';
 import { Router } from 'express';
 import { q } from './db.js';
@@ -42,40 +41,12 @@ const staleWarning='Revit sementara tidak tersedia. Menampilkan data terakhir ya
 const progressCache = createAsyncCache({ ttl: 300000, maxEntries: 3, staleIfError:1800000,
   describeStale:value=>Object.assign(value instanceof Map?new Map(value):Array.isArray(value)?[...value]:{...value},
     {stale:true,warning:staleWarning}) });
-async function fetchProgressSchoolPage(hotel, page, metric = 'total', query = '', perPage = null) {
-  const url = new URL(progressSchoolUrl);
-  url.search = new URLSearchParams({ jenis: 'pks', bimtek: '1', metric, hotel, q: query, page: String(page) });
-  if (perPage) url.searchParams.set('per_page',String(perPage));
-  return parseProgressSchoolPage(await readRevitHtml(url));
+function loadProgressExport() {
+  return progressCache.get('export',async()=>parseProgressExport(await readRevitExport(progressExportUrl)));
 }
-
-async function fetchAllProgressSchools(_hotels, metric = 'total') {
-  return fetchCompleteSchoolPages((hotel,page,sourceMetric,perPage)=>
-    fetchProgressSchoolPage(hotel,page,sourceMetric,'',perPage),metric);
-}
-
-function loadProgressSchools(hotels) {
-  return progressCache.get('schools', () => fetchAllProgressSchools(hotels));
-}
-
-async function loadProgressAchievements(source) {
-  return progressCache.get('achievements', async () => {
-    const reached = new Map();
-    const jobs = source.metrics.filter(item => progressStages.includes(item.metric));
-    if (jobs.length !== progressStages.length) throw new HttpError(502, 'Dashboard Revit belum menyediakan sembilan tahap capaian lengkap.');
-    let cursor = 0;
-    await Promise.all(Array.from({ length: 1 }, async () => {
-      while (cursor < jobs.length) {
-        const item = jobs[cursor++];
-        const rows = await fetchAllProgressSchools(source.hotels, item.sourceMetric);
-        for (const row of rows) {
-          if (!reached.has(row.npsn)) reached.set(row.npsn, new Set());
-          reached.get(row.npsn).add(item.metric);
-        }
-      }
-    }));
-    return reached;
-  });
+async function loadProgressSchools() {
+  const data=await loadProgressExport();
+  return Object.assign([...data.schools],data.stale?{stale:true}:{});
 }
 
 const metricForProgressStatus = progressStage;
@@ -112,9 +83,9 @@ pksRoutes.get('/', ah(async (req, res) => {
 
 progressRoutes.get('/', ah(async (_req, res) => {
   if (eventId() !== 5) throw new HttpError(404, 'Rekap ini hanya tersedia untuk Bimtek PKS SPAB.');
-  const html = await readRevitHtml(progressSourceUrl);
+  const {schools,...source}=await loadProgressExport();
   res.set('Cache-Control', 'private, max-age=60');
-  res.json(parseProgressPage(html));
+  res.json(source);
 }));
 
 progressRoutes.get('/schools', ah(async (req, res) => {
@@ -125,26 +96,28 @@ progressRoutes.get('/schools', ah(async (req, res) => {
   const page = Number(req.query.page || 1);
   if (!progressMetrics.some(([key]) => key === metric)) throw new HttpError(400, 'Tahap progres tidak valid.');
   if (hotel.length > 120 || query.length > 120 || !Number.isSafeInteger(page) || page < 1 || page > 1000) throw new HttpError(400, 'Filter daftar sekolah tidak valid.');
-  const source = parseProgressPage(await readRevitHtml(progressSourceUrl));
-  const sourceMetric = source.metrics.find(item => item.metric === metric)?.sourceMetric;
-  if (!sourceMetric) throw new HttpError(502, 'Tahap belum tersedia pada dashboard sumber.');
-  const result = await fetchProgressSchoolPage(hotel, page, sourceMetric, query);
+  const source=await loadProgressExport();
+  const term=query.toLocaleLowerCase('id');
+  const rows=source.schools.filter(row=>(!hotel || row.hotel===hotel)
+    && (!term || [row.npsn,row.name,row.kabKota].some(value=>value.toLocaleLowerCase('id').includes(term)))
+    && (metric==='total' || (metric==='tidak_terdata'?row.stage===metric:row.achieved.includes(metric))));
+  const pageSize=20;
   res.set('Cache-Control', 'private, max-age=60');
-  res.json({ ...result, metric, hotel, page, pageSize: result.rows.length });
+  res.json({rows:rows.slice((page-1)*pageSize,page*pageSize),total:rows.length,metric,hotel,page,pageSize,
+    ...(source.stale?{stale:true,warning:staleWarning}:{})});
 }));
 
 progressRoutes.get('/lo-ranking', ah(async (_req, res) => {
   if (eventId() !== 5) throw new HttpError(404, 'Rekap ini hanya tersedia untuk Bimtek PKS SPAB.');
   const ranking = await progressCache.get('lo-ranking', async () => {
-    const [rosterResult, sourceHtml] = await Promise.all([
+    const [rosterResult, source] = await Promise.all([
       q('SELECT data FROM assignment_roster WHERE id=1'),
-      readRevitHtml(progressSourceUrl),
+      loadProgressExport(),
     ]);
-    const source = parseProgressPage(sourceHtml);
     const roster = rosterResult.rows[0]?.data;
     if (!roster?.schools || !roster?.lo) throw new HttpError(503, 'Data penugasan LO belum tersedia.');
-    const sourceSchools = await loadProgressSchools(source.hotels);
-    const achievements = await loadProgressAchievements(source);
+    const sourceSchools = source.schools;
+    const achievements = new Map(sourceSchools.map(row=>[row.npsn,new Set(row.achieved)]));
     const schoolByNpsn = new Map(roster.schools.map(school => [String(school.npsn), school]));
     const ownerByName = new Map(roster.lo.map(owner => [`${owner.venue}:${owner.name}`, {
       name: owner.name, venue: owner.venue, total: 0, assignedNpsn: new Set(),
@@ -164,7 +137,7 @@ progressRoutes.get('/lo-ranking', ah(async (_req, res) => {
       owner.total++;
       const achieved = achievements.get(item.npsn) || new Set();
       for (const target of achieved) owner.metrics[target]++;
-      const stage = metricForProgressStatus(item.status);
+      const stage = item.stage ?? metricForProgressStatus(item.status);
       const score = stage === 'tidak_terdata' || (!stage && !achieved.size) ? null : achieved.size * 100 / stages.length;
       if (score != null) {
         owner.scoreTotal += score;
@@ -184,7 +157,7 @@ progressRoutes.get('/lo-ranking', ah(async (_req, res) => {
       owner.rank = owner.overall == null ? null : rank;
     });
     return { source: source.source, updatedAt: source.updatedAt, owners, totalSourceSchools: sourceSchools.length,
-      ...((sourceSchools.stale || achievements.stale)?{stale:true,warning:staleWarning}:{}) };
+      ...(source.stale?{stale:true,warning:staleWarning}:{}) };
   });
   res.set('Cache-Control', 'private, max-age=60');
   res.json(ranking);
@@ -198,17 +171,12 @@ progressRoutes.get('/statuses', ah(async (req, res) => {
   const allowed = new Set((roster?.schools || [])
     .filter(row => !req.user || req.user.role === 'admin' || (own && row.venue === own.venue && row.lo === own.name))
     .map(row => String(row.npsn)));
-  // School status must not depend on nine separate achievement lists or the summary page.
+  // One cached export supplies every stage and school.
   const schools = await loadProgressSchools([{ hotel: '' }]);
-  let achievements = null;
-  if (req.query.achievements === '1') {
-    const source = parseProgressPage(await readRevitHtml(progressSourceUrl));
-    achievements = await loadProgressAchievements(source);
-  }
   res.json({...Object.fromEntries(schools.filter(row => allowed.has(row.npsn)).map(row => [row.npsn, {
-    stage: metricForProgressStatus(row.status), label: row.status,
-    ...(achievements ? { achieved: [...(achievements.get(row.npsn) || [])] } : {}),
-  }])),...((schools.stale || achievements?.stale)?{_meta:{stale:true,warning:staleWarning}}:{})});
+    stage: row.stage ?? metricForProgressStatus(row.status), label: row.status,
+    achieved: row.achieved,
+  }])),...((schools.stale)?{_meta:{stale:true,warning:staleWarning}}:{})});
 }));
 
 pksRoutes.put('/:npsn/bimtek', ah(async (req,res) => {

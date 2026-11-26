@@ -504,11 +504,18 @@ function SchoolRevitStatus({ status, loading, failed }) {
   const notLoggedIn = status.stage === 'belum_login';
   const hasStageGroup = notLoggedIn || progressGroups.some(({ metrics }) => metrics.includes(status.stage));
   const label = progressMetricLabels.find(([key]) => key === status.stage)?.[1].replace(/^\d+\.\s*/, '');
+  const groupStatus = (group, metrics) => {
+    if (notLoggedIn && group === 'Biodata') return 'Belum login';
+    const reached = Array.isArray(status.achieved)
+      ? metrics.filter(metric => status.achieved.includes(metric)).at(-1)
+      : metrics.includes(status.stage) ? status.stage : null;
+    return progressMetricLabels.find(([key]) => key === reached)?.[1].replace(/^\d+\.\s*/, '') || '-';
+  };
   return <div className="pks-revit-school-stage">
     {progressGroups.map(({ label: group, metrics }) => (
       <div key={group}>
         <small>Status {group === 'RAB & BA' ? 'RAB' : group}</small>
-        <strong>{metrics.includes(status.stage) ? label : '—'}</strong>
+        <strong>{groupStatus(group, metrics)}</strong>
       </div>
     ))}
     {!hasStageGroup && <small>{label || status.label || 'Status belum tersedia'}</small>}
@@ -542,7 +549,7 @@ function ProgressSchoolsDialog({ context, data, error, loading, query, onQueryCh
                 <td><strong>{row.name}</strong><small>NPSN {row.npsn}</small></td>
                 <td>{row.kabKota}</td>
                 <td>{row.hotel}</td>
-                <td><div className="pks-progress-status-list">{(status || '-').split(/\s+(?=Kirim proposal RAB\b)/i).map((part, index) => <span key={index}>{part}</span>)}</div></td>
+                <td><div className="pks-progress-status-list">{(status || '-').split(/\s*·\s*|\s+(?=Kirim proposal RAB\b)/i).map((part, index) => <span key={index}>{part}</span>)}</div></td>
               </tr>;
             })}</tbody>
           </table>

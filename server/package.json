@@ -22,7 +22,8 @@
     "express": "^4.21.2",
     "express-rate-limit": "^7.4.1",
     "jsonwebtoken": "^9.0.2",
-    "pg": "^8.13.1"
+    "pg": "^8.13.1",
+    "read-excel-file": "^9.3.14"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.16"
