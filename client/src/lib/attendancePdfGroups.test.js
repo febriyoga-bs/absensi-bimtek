@@ -1,7 +1,23 @@
-import {test} from 'node:test';
+import {test, beforeEach, afterEach} from 'node:test';
 import assert from 'node:assert/strict';
 import {attendancePdfGroups,attendancePdfCategorySummary,attendancePdfSections,attendancePdfName,attendancePdfPosition} from './attendancePdfGroups.js';
 import {setSelectedEvent} from '../event.js';
+
+beforeEach(()=>setSelectedEvent({id:5}));
+afterEach(()=>setSelectedEvent(null));
+
+test('BIMTEK 3 and 4 use reporting categories and facilitator section labels',()=>{
+ for (const id of [3,4]) {
+  setSelectedEvent({id});
+  const rows=['Bendahara','Pengawas','Dinas Pendidikan','BB/BPMP','Fasilitator Pelaporan','LO']
+   .map((position,index)=>({id:index,name:`Person ${index}`,position,status:'valid'}));
+  const summary=attendancePdfCategorySummary([...rows,rows[1]]);
+  assert.deepEqual(summary.map(r=>r.label),['Bendahara','Pengawas','Dinas','BPMP','Fasilitator','LO']);
+  assert.deepEqual(summary.map(r=>r.total),[1,1,1,1,1,1]);
+  assert.deepEqual(summary.map(r=>r.hadir),[1,1,1,1,1,1]);
+  assert.deepEqual(attendancePdfSections(rows).map(s=>s.label),['LO - Hadir','Fasilitator - Hadir','Peserta - Hadir']);
+ }
+});
 test('PDF separates present, unavailable and rejected records without dropping any',()=>{
  const records=['valid','berhalangan','review','ditolak'].map((status,id)=>({status,id}));
  const groups=attendancePdfGroups(records);

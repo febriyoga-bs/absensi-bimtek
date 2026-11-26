@@ -1,7 +1,26 @@
-import test from 'node:test';
+import test, { beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { inflateSync } from 'node:zlib';
 import { createAttendancePdf } from './printAttendance.js';
+import { setSelectedEvent } from '../event.js';
+
+beforeEach(()=>setSelectedEvent({id:5}));
+afterEach(()=>setSelectedEvent(null));
+
+test('reporting PDFs show all six reporting categories without PKS headings', async()=>{
+  for (const id of [3,4]) {
+    setSelectedEvent({id});
+    const records=['Bendahara','Pengawas','Dinas Pendidikan','BB/BPMP','Fasilitator','LO'].map((position,index)=>({
+      id:index,name:`Contoh ${position}`,position,status:'valid',created_at:'2026-11-12T01:00:00Z',institution:'Instansi Contoh',
+    }));
+    const blob=await createAttendancePdf({records,heading:`BIMTEK ${id}`});
+    const streams=[...Buffer.from(await blob.arrayBuffer()).toString('latin1').matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)]
+      .map(match=>inflateSync(Buffer.from(match[1],'latin1')).toString('latin1'));
+    for (const label of ['Bendahara','Pengawas','Dinas','BPMP','Fasilitator','LO']) assert.ok(streams[0].includes(`(${label})`),label);
+    assert.doesNotMatch(streams[0],/Kepala Sekolah|Perwakilan Sekolah|Verifikator|Lainnya/);
+    assert.match(streams[2],/Fasilitator - Hadir/);
+  }
+});
 
 test('rendered PDF starts with summary then LO, verifier and school-sorted participant cards', async () => {
   const base = { venue_name:'Venue Contoh', created_at:'2026-11-26T01:00:00Z', status:'valid',
