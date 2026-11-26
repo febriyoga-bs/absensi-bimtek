@@ -55,4 +55,6 @@ export function createRevitReader({ fetchPage = (...args) => fetch(...args), ttl
 }
 export const readRevitHtml = createRevitReader();
 
-export const readRevitExport = createRevitReader({binary:true});
+// Cache only after the workbook has been parsed and validated by loadProgressExport.
+// A malformed ZIP must not poison the raw-response cache for five minutes.
+export const readRevitExport = createRevitReader({binary:true,ttl:0});
