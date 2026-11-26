@@ -7,6 +7,7 @@ import AttendanceRankingDetails from './AttendanceRankingDetails.jsx';
 
 export default function AttendanceRanking({ venue, query, owner = '', facilitatorLabel = 'fasilitator', compact = false }) {
   const [sessionId, setSessionId] = useState('');
+  const [targetBasis, setTargetBasis] = useState('assigned');
   const [sessions, setSessions] = useState([]);
   const [sessionError, setSessionError] = useState('');
   const [result, setResult] = useState(null);
@@ -40,7 +41,7 @@ export default function AttendanceRanking({ venue, query, owner = '', facilitato
   const rows = (result || []).filter((row) => !venue || row.venue === venue)
     .map((row) => {
       const completed = row.total + row.unavailable;
-      const target = row.present;
+      const target = targetBasis === 'assigned' ? row.assigned : row.present;
       return { ...row, completed, target, ratio: target ? completed * 100 / target : null };
     })
     .sort((a, b) => (b.ratio ?? -1) - (a.ratio ?? -1) || b.total - a.total || a.name.localeCompare(b.name, 'id'))
@@ -52,24 +53,28 @@ export default function AttendanceRanking({ venue, query, owner = '', facilitato
         {!sessionId && <option value="">{sessionError ? 'Daftar sesi gagal dimuat' : 'Memuat sesi resmi…'}</option>}
         {sessions.map((session) => <option key={session.id} value={session.id}>{sessionTitle(session)} ({session.role})</option>)}
       </select></label>
+      <label>Target<select value={targetBasis} onChange={(event) => { setTargetBasis(event.target.value); setSelection(null); }}>
+        <option value="assigned">Berdasarkan binaan</option>
+        <option value="present">Berdasarkan hadir di venue</option>
+      </select></label>
       <button type="button" className="btn btn--sm" onClick={() => setRevision((value) => value + 1)}>Muat ulang</button>
     </div>
     {sessionError && <p className="alert alert--err" role="alert">Daftar sesi gagal dimuat. {sessionError}</p>}
     {!sessionId && !sessionError && sessions.length === 0 && <p className="muted">Menunggu daftar sesi resmi. Klik Muat ulang jika belum tersedia.</p>}
-    {compact ? <div className="pks-attendance-help"><p>Absensi dihitung per orang, bukan per sekolah.</p><details><summary>Cara hitung</summary><p>Progres mencakup absensi dan catatan mundur/berhalangan oleh LO pada sesi pilihan. Target mengikuti jumlah binaan yang tercatat hadir di venue pada sesi pilihan. Kehadiran aktual mengikuti absensi resmi sesi pilihan, tanpa rekap kedatangan. Sesi panitia tidak ditampilkan pada peringkat pencatatan binaan peserta/verifikator. Absensi mandiri dan ditolak tidak dihitung sebagai pekerjaan LO.</p></details></div> : <p className="muted small">Progres mencakup binaan yang diabsenkan dan yang dicatat Mundur/Berhalangan Hadir oleh LO pada sesi pilihan. Target mengikuti jumlah binaan yang tercatat hadir di venue pada sesi pilihan. Kehadiran aktual berdasarkan absensi resmi sesi pilihan, tanpa rekap kedatangan. Absensi mandiri dan status ditolak tidak dihitung sebagai pekerjaan LO.</p>}
+    {compact ? <div className="pks-attendance-help"><p>Absensi dihitung per orang, bukan per sekolah.</p><details><summary>Cara hitung</summary><p>Progres mencakup absensi dan catatan mundur/berhalangan oleh LO pada sesi pilihan. Target mengikuti pilihan filter: seluruh binaan atau binaan yang tercatat hadir di venue pada sesi pilihan. Kehadiran aktual mengikuti absensi resmi sesi pilihan, tanpa rekap kedatangan. Sesi panitia tidak ditampilkan pada peringkat pencatatan binaan peserta/verifikator. Absensi mandiri dan ditolak tidak dihitung sebagai pekerjaan LO.</p></details></div> : <p className="muted small">Progres mencakup binaan yang diabsenkan dan yang dicatat Mundur/Berhalangan Hadir oleh LO pada sesi pilihan. Target mengikuti pilihan filter: seluruh binaan atau binaan yang tercatat hadir di venue pada sesi pilihan. Kehadiran aktual berdasarkan absensi resmi sesi pilihan, tanpa rekap kedatangan. Absensi mandiri dan status ditolak tidak dihitung sebagai pekerjaan LO.</p>}
     {error && <p className="alert alert--err" role="alert">{error}</p>}
     {sessionId && !result && !error && <p role="status">Memuat peringkat absensi…</p>}
     {result && <div className="reporting-ranking" tabIndex={0}>
       {rows.length ? <ol>{rows.map((row) => <li key={row.id}>
         <div className="reporting-ranking-name"><b>{row.rank}. {personName(row.name)}<LoRepresentation name={row.name}/></b>
-          <strong>{compact ? (row.ratio == null ? 'Belum ada binaan tercatat hadir di venue' : `${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(row.ratio)}% tercatat`) : <>{row.completed}/{row.target} sudah dicatat{row.ratio == null ? '' : ` (${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(row.ratio)}%)`}</>}</strong></div>
+          <strong>{compact ? (row.ratio == null ? (targetBasis === 'assigned' ? 'Belum ada binaan' : 'Belum ada binaan tercatat hadir di venue') : `${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(row.ratio)}% tercatat`) : <>{row.completed}/{row.target} sudah dicatat{row.ratio == null ? '' : ` (${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(row.ratio)}%)`}</>}</strong></div>
         <progress aria-label={`${row.completed} dari ${row.target} sudah dicatat oleh ${personName(row.name)}`} value={row.ratio ?? 0} max={100} />
         {compact ? <>
           <p className="pks-attendance-venue">{row.venue}</p>
           <dl className="pks-attendance-metrics">
             <div><dt>Binaan</dt><dd>{detailButton(row,'assigned','Binaan',row.assigned)}<small>orang</small></dd></div>
             <div><dt>Hadir di venue</dt><dd>{detailButton(row,'present','Hadir di venue',row.present)}<small>orang</small></dd></div>
-            <div><dt>Sudah dicatat</dt><dd>{detailButton(row,'completed','Sudah dicatat',row.completed)}<small>dari {detailButton(row,'target','Target pencatatan',row.target)} target</small></dd></div>
+            <div><dt>Sudah dicatat</dt><dd>{detailButton(row,'completed','Sudah dicatat',row.completed)}<small>dari {detailButton(row,targetBasis === 'assigned' ? 'assigned' : 'target','Target pencatatan',row.target)} target</small></dd></div>
             <div><dt>Berhalangan</dt><dd>{detailButton(row,'unavailable','Berhalangan',row.unavailable)}<small>orang</small></dd></div>
           </dl>
           <details className="pks-attendance-breakdown"><summary>Rincian absensi</summary><p>{detailButton(row,'participants','Peserta sudah diabsenkan',row.participants)} peserta dan {detailButton(row,'facilitators',`${facilitatorLabel} sudah diabsenkan`,row.facilitators)} {facilitatorLabel} sudah diabsenkan. {detailButton(row,'unavailable','Berhalangan',row.unavailable)} orang dicatat mundur/berhalangan.</p></details>
