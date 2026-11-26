@@ -1,0 +1,19 @@
+{
+  "event_id": 5,
+  "npsn": "10102835",
+  "venue": "Lumire Jakarta",
+  "head_name": "Tarna Yultri",
+  "reason": "Konfirmasi pengguna: kepala sekolah SD Negeri 3 Labuhan Haji adalah Tarna Yultri (Tarnayultri pada rekap), bukan nama lama Asmina. Tarna Yultri dan bendahara Meri Safrida sudah tiba. Koreksi identitas tanpa memindahkan foto, status, atau catatan absensi sesi.",
+  "attendees": [
+    {
+      "name": "Tarna Yultri",
+      "role": "Kepala Sekolah",
+      "status": "selesai"
+    },
+    {
+      "name": "Meri Safrida",
+      "role": "Bendahara",
+      "status": "selesai"
+    }
+  ]
+}

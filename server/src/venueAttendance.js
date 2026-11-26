@@ -166,7 +166,6 @@ export async function getVenueAttendanceDetails(venueId, group, day = null, test
     const matchRepresentative = representativeMatcher(representatives);
     return records.filter(record => recordGroup(record) === group && !selected.has(record.person_id) && !matchRepresentative(record))
       .map(record => ({name:record.name,institution:record.institution,npsn:record.npsn,
-        profile_issue:'Catatan sesi ini belum masuk target kedatangan dengan nama, NPSN, dan peran yang cocok.',
         people:[{name:record.name,registered:true,status:record.status}]}));
   }
   if (group === 'representative' && eventId() === 5) {

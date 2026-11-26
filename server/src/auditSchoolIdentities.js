@@ -84,7 +84,8 @@ export function auditSchoolIdentities(schools, profiles=[], recaps=[]) {
     if (arrivals.length && !sourceHead.length && !arrivals.some(p=>p.role==='Kepala Sekolah')) {
       add('UNRESOLVED_HEAD_IDENTITY',`Pemetaan: ${school.head_name || '(nama kosong)'}. Rekap: ${arrivals.map(p=>`${p.name} (${p.status})`).join('; ')}. Bisa pergantian kepala sekolah atau perwakilan; belum terbukti salah.`);
     }
-    if (arrivals.length>2) add('MORE_THAN_TWO_SOURCE_NAMES',`${arrivals.length} nama pada sekolah ini; perlu memeriksa sumber dan identitas.`);
+    const arrivedNames=arrivals.filter(p=>['selesai','sudah_tiba','sedang_antre'].includes(p.status));
+    if (arrivedNames.length>2) add('MORE_THAN_TWO_SOURCE_NAMES',`${arrivedNames.length} nama sudah tiba/antre pada sekolah ini; perlu memeriksa sumber dan identitas.`);
   }
   return findings;
 }

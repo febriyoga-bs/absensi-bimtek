@@ -2,6 +2,7 @@ import { q } from './db.js';
 import { eventId } from './eventContext.js';
 import { getSchoolArrivalStatuses, arrivalVenueKey } from './arrivalRecap.js';
 import { schoolIdentity } from './schoolIdentity.js';
+import { pksSchoolHeadCorrections } from './pksSchoolHeadCorrections.js';
 
 import { arrivalPersonKey } from '../../shared/pksAttendeeName.js';
 
@@ -23,9 +24,18 @@ export function planArrivalProfileLinks(schools, profiles, recaps) {
   const patches = new Map();
   for (const school of schools) {
     const identity = `${arrivalVenueKey(school.venue)}:${schoolIdentity(school.name)}`;
-    const sharedIdentity=identities.get(identity)?.size !== 1;
+    // The shared resolver already distinguishes exact school names and explicit
+    // NPSN corrections. Do not discard its resolved participants a second time.
+    const sharedIdentity=identities.get(identity)?.size !== 1
+      && school.arrival_identity_ambiguous !== false;
     const candidates = profilesBySchool.get(`${arrivalVenueKey(school.venue)}:${school.npsn}`) || [];
-    const arrivals = (school.arrival_attendees || []).filter(p=>!sharedIdentity
+    const sourceArrivals=school.arrival_attendees || [];
+    // Keep absence evidence in the source, but it must not occupy either
+    // of the two slots used by the participants who actually arrived.
+    const linkableArrivals=sourceArrivals.length>2
+      ? sourceArrivals.filter(p=>!['belum_tiba','belum_tercatat','berhalangan'].includes(p.status))
+      : sourceArrivals;
+    const arrivals = linkableArrivals.filter(p=>!sharedIdentity
       || (p.role==='Kepala Sekolah' && arrivalPersonKey(p.name)===arrivalPersonKey(school.head_name)));
     if (!candidates.length || candidates.length > 2 || !arrivals.length || arrivals.length > 2) continue;
     if (new Set(arrivals.map(p=>arrivalPersonKey(p.name))).size !== arrivals.length) continue;
@@ -42,8 +52,21 @@ export function planArrivalProfileLinks(schools, profiles, recaps) {
     for (const person of arrivals) {
       if (assigned.has(person) || person.role === 'Perwakilan Sekolah') continue;
       const role = String(person.role).toLowerCase().replace(/\s/g, '');
-      const slots = candidates.filter(p => !used.has(p.id) && !p.has_attendance
-        && /^(kepala sekolah|bendahara)\s*[—–-]/i.test(p.name || '')
+      const head=arrivals.filter(p=>p.role==='Kepala Sekolah');
+      const confirmedPair=arrivals.length===2 && head.length===1 && person.role==='Bendahara'
+        && (arrivalPersonKey(school.head_name)===arrivalPersonKey(head[0].name)
+          || candidates.some(p=>p.position==='Kepala Sekolah'
+            && arrivalPersonKey(p.name)===arrivalPersonKey(head[0].name)))
+        && !sharedIdentity;
+      const confirmedHead=person.role==='Kepala Sekolah' && !!school.head_name
+        && arrivalPersonKey(school.head_name)===arrivalPersonKey(person.name) && !sharedIdentity;
+      const slots = candidates.filter(p => !used.has(p.id)
+        && (!p.has_attendance || confirmedHead || (confirmedPair && /^bendahara\s*[—–-]/i.test(p.name || '')))
+        && (/^(kepala sekolah|bendahara)\s*[—–-]/i.test(p.name || '')
+          || (confirmedHead && !p.has_attendance
+            && !!pksSchoolHeadCorrections[school.npsn]?.previous
+            && arrivalPersonKey(p.name)===arrivalPersonKey(pksSchoolHeadCorrections[school.npsn].previous)
+            && arrivalPersonKey(person.name)===arrivalPersonKey(pksSchoolHeadCorrections[school.npsn].name)))
         && String(p.position).toLowerCase().replace(/\s/g, '') === role);
       if (slots.length === 1) { assigned.set(person, slots[0]); used.add(slots[0].id); }
     }

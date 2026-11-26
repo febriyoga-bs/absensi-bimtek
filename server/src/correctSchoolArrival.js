@@ -13,6 +13,7 @@ export async function correctSchoolArrival(correction, {apply=false,expectedImpo
     || typeof correction.reason!=='string' || correction.reason.length>1000
     || typeof correction.head_name!=='string' || correction.head_name.length>400
     || correction.attendees.some(p=>typeof p.name!=='string' || !p.name.trim() || p.name.length>400
+      || (p.represents != null && (typeof p.represents!=='string' || !p.represents.trim() || p.represents.length>400))
       || !['selesai','sudah_tiba','sedang_antre','belum_tiba','belum_tercatat'].includes(p.status))
     || !['Kepala Sekolah','Bendahara'].every(role=>correction.attendees.some(p=>p.role===role))
     || new Set(correction.attendees.map(p=>arrivalPersonKey(p.name))).size!==2) {
@@ -69,9 +70,12 @@ export async function correctSchoolArrival(correction, {apply=false,expectedImpo
       const marks={...recap.marks}, representatives={...recap.representatives};
       for (const profile of profiles) {
         const attendee=correction.attendees.find(a=>a.role===profile.position);
-        await client.query('UPDATE people SET name=$1 WHERE id=$2',[attendee.name,profile.id]);
+        // A confirmed substitute keeps the canonical office holder on the profile.
+        await client.query('UPDATE people SET name=$1 WHERE id=$2',[attendee.represents || attendee.name,profile.id]);
         marks[profile.id]=attendee.status;
         delete representatives[profile.id];
+        if (attendee.represents) representatives[profile.id]={name:attendee.name,original_name:attendee.represents,
+          role:attendee.role,npsn:correction.npsn};
       }
       await client.query('UPDATE venue_arrival_recap SET marks=$1,representatives=$2 WHERE venue_id=$3',
         [JSON.stringify(marks),JSON.stringify(representatives),profiles[0].venue_id]);

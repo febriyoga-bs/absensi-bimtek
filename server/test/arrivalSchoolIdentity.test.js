@@ -26,3 +26,15 @@ test('identical school names resolve only uniquely named heads, leaving treasure
  assert.ok(result.every(s=>s.arrival_attendees[0].role==='Kepala Sekolah' && s.arrival_attendees[0].status==='selesai'));
  assert.ok(result.every(s=>s.arrival_identity_ambiguous));
 });
+
+
+test('head identity ignores academic titles and punctuation; unmatched names are both representatives',async()=>{
+ const schools=[{npsn:'99990001',name:'SD TEST',venue:'Lumire Jakarta',head_name:'Dr. Suryani, S.Pd., SD'}];
+ let rows=['Suryani.S.Pd,SD','Meri Safrida'].map(name=>({name,institution:'SD TEST',venue:'Lumire Jakarta',position:'Sekolah',arrival_status:'selesai'}));
+ const query=async sql=>({rows:sql.includes('arrival_corrections')?[{corrections:{}}]:rows});
+ let result=await eventContext.run({id:5},()=>getSchoolArrivalStatuses(schools,null,query));
+ assert.deepEqual(result[0].arrival_attendees.map(p=>p.role),['Kepala Sekolah','Bendahara']);
+ rows=rows.map((p,i)=>({...p,name:i?'Another person':'Different person',position:'Kepala Sekolah'}));
+ result=await eventContext.run({id:5},()=>getSchoolArrivalStatuses(schools,null,query));
+ assert.deepEqual(result[0].arrival_attendees.map(p=>p.role),['Perwakilan Sekolah','Perwakilan Sekolah']);
+});

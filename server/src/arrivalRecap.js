@@ -84,9 +84,10 @@ export async function getSchoolArrivalStatuses(schools, venueId = null, query = 
     if (correction && arrivalVenueKey(correction.venue) === arrivalVenueKey(school.venue)) {
       return {...school, head_name:correction.head_name || school.head_name,
         arrival_attendees:correction.attendees,
+          arrival_identity_ambiguous:false,
         arrival_status:correction.attendees.reduce((best,p)=>(priority[p.status] || 0)>(priority[best] || 0)?p.status:best,null)};
     }
-    const isHead = (name, row) => row.position === 'Kepala Sekolah' || name === head;
+    const isHead = name => !!head && name === head;
     const canInferTreasurer = attendees.size === 2 && [...attendees].filter(([name, row]) => isHead(name, row)).length === 1;
     const fallbackRole = 'Perwakilan Sekolah';
     const arrival_attendees = [...attendees].map(([name, row]) => ({
@@ -334,13 +335,31 @@ export async function importArrivalRecap(rows, summary = null, { audit = false }
     const { rows: previous } = await q('SELECT venue_id,representatives FROM venue_arrival_recap');
     for (const snapshot of snapshotsToSave) {
       const bindings = previous.find(row => row.venue_id === snapshot.venue_id)?.representatives || {};
-      for (const [id, representative] of Object.entries(bindings)) {
-        if (representative.role !== 'Perwakilan Sekolah' || snapshot.representatives[id]) continue;
+      for (const [id, previousRepresentative] of Object.entries(bindings)) {
+        let representative=previousRepresentative;
         const profile = people.find(p => String(p.id) === id && p.venue_id === snapshot.venue_id);
         if (!profile) continue;
         const entries = snapshot.detail_rows.filter(row => attendeeNameKey(row.name) === attendeeNameKey(representative.name)
           && schoolKey(row.institution) === schoolKey(profile.institution));
         if (entries.length !== 1) continue;
+        const confirmedSubstitute=representative.original_name
+          && attendeeNameKey(representative.original_name)===attendeeNameKey(profile.name)
+          && representative.role && key(representative.role)===key(profile.position);
+        if (representative.role !== 'Perwakilan Sekolah' && !confirmedSubstitute) {
+          // Preserve an existing binding only when its role remains provable:
+          // the named head and one other source attendee in this exact school.
+          const headProfiles=people.filter(p=>p.venue_id===snapshot.venue_id && roles[key(p.position)]==='kepalasekolah'
+            && key(p.institution)===key(profile.institution));
+          if (headProfiles.length!==1) continue;
+          const headKey=attendeeNameKey(headProfiles[0].name);
+          const schoolRows=snapshot.detail_rows.filter(row=>key(row.institution)===key(profile.institution));
+          const sourceNames=new Set(schoolRows.map(row=>attendeeNameKey(row.name)));
+          const actualRole=attendeeNameKey(representative.name)===headKey?'Kepala Sekolah'
+            : sourceNames.size===2 && sourceNames.has(headKey)?'Bendahara':null;
+          if (!actualRole || key(actualRole)!==key(profile.position)) continue;
+          if (representative.role && representative.role!==actualRole) continue;
+          representative={...representative,role:actualRole};
+        }
         snapshot.representatives[id] = { ...representative, name: entries[0].name };
         if (priority[entries[0].arrival_status]) snapshot.marks[id] = entries[0].arrival_status;
       }

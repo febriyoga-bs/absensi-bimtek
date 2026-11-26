@@ -996,14 +996,44 @@ test('PKS directory binds representatives to existing slots without changing imp
     assert.equal((await request('/admin/school-identity-correction?event=5',{method:'POST',body:{...correctionBody,confirmed:false}})).status,400);
     assert.equal((await request('/admin/school-identity-correction?event=5',{method:'POST',body:correctionBody,token:null})).status,401);
     assert.equal((await request('/admin/school-identity-correction?event=3',{method:'POST',body:correctionBody,token:loAuditToken})).status,403);
-    const importResponse=await request('/admin/arrival-recap/import?event=5',{method:'POST',body:{rows:[
+    const correctedRoster=(await q('SELECT data FROM assignment_roster WHERE id=1')).rows[0].data;
+    await q("UPDATE assignment_roster SET data=data-'arrival_corrections' WHERE id=1");
+    await q("UPDATE venue_arrival_recap SET representatives=$1 WHERE venue_id=$2",[JSON.stringify({[ids[1]]:{name:'Named Treasurer',original_name:'Bendahara - SD Link',role:'Bendahara'}}),venue.id]);
+    const reimportBody={rows:[
       ['Link Test Hotel','Sekolah','Correct Head','SD Link','Selesai','Bersedia Hadir'],
-      ['Link Test Hotel','Sekolah','Bendahara - SD Link','SD Link','','Bersedia Hadir'],
-    ]}});
+      ['Link Test Hotel','Sekolah','Named Treasurer','SD Link','Selesai','Bersedia Hadir'],
+    ]};
+    const importResponse=await request('/admin/arrival-recap/import?event=5',{method:'POST',body:reimportBody});
     assert.equal(importResponse.status,200,await importResponse.clone().text());
     const importResult=await importResponse.json();
     assert.ok(importResult.audit);assert.ok(Array.isArray(importResult.audit.review_schools));
     assert.equal(importResult.audit.event_id,5);
+    const linkedAfterImport=(await q('SELECT marks,representatives FROM venue_arrival_recap WHERE venue_id=$1',[venue.id])).rows[0];
+    assert.equal(linkedAfterImport.representatives[ids[1]].name,'Named Treasurer');
+    assert.equal(linkedAfterImport.marks[ids[1]],'selesai');
+    assert.equal((await request('/admin/arrival-recap/import?event=5',{method:'POST',body:reimportBody})).status,200);
+    assert.deepEqual((await q('SELECT marks,representatives FROM venue_arrival_recap WHERE venue_id=$1',[venue.id])).rows[0],linkedAfterImport);
+    assert.deepEqual((await q('SELECT person_id,status,photo_path FROM attendance WHERE session_id=$1 ORDER BY person_id',[swapSession.id])).rows,swapped);
+    // A recorded substitute must survive repeated imports without becoming the
+    // canonical head or losing its photo/absence payload.
+    await q('UPDATE venue_arrival_recap SET representatives=$1 WHERE venue_id=$2',
+      [JSON.stringify({[ids[0]]:{name:'Confirmed Substitute',original_name:'Correct Head',role:'Kepala Sekolah',npsn:'99990003'},
+        [ids[1]]:linkedAfterImport.representatives[ids[1]]}),venue.id]);
+    const substituteImport={rows:[
+      ['Link Test Hotel','Sekolah','Confirmed Substitute','SD Link','Selesai','Bersedia Hadir'],
+      ['Link Test Hotel','Sekolah','Named Treasurer','SD Link','Selesai','Bersedia Hadir'],
+    ]};
+    for(let repeat=0;repeat<2;repeat++){
+      const response=await request('/admin/arrival-recap/import?event=5',{method:'POST',body:substituteImport});
+      assert.equal(response.status,200,await response.clone().text());
+      const saved=(await q('SELECT marks,representatives FROM venue_arrival_recap WHERE venue_id=$1',[venue.id])).rows[0];
+      assert.equal(saved.representatives[ids[0]].name,'Confirmed Substitute');
+      assert.equal(saved.representatives[ids[0]].role,'Kepala Sekolah');
+      assert.equal(saved.marks[ids[0]],'selesai');
+      assert.equal((await q('SELECT name FROM people WHERE id=$1',[ids[0]])).rows[0].name,'Correct Head');
+      assert.deepEqual((await q('SELECT person_id,status,photo_path FROM attendance WHERE session_id=$1 ORDER BY person_id',[swapSession.id])).rows,swapped);
+    }
+    await q('UPDATE assignment_roster SET data=$1 WHERE id=1',[JSON.stringify(correctedRoster)]);
     await correctSchoolArrival(swap,{apply:true});
     assert.deepEqual((await q('SELECT person_id,status,photo_path FROM attendance WHERE session_id=$1 ORDER BY person_id',[swapSession.id])).rows,swapped);
    } finally {

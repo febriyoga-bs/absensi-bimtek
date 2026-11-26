@@ -6,9 +6,14 @@ export function schoolRoleDetails(schools, role, records) {
     if(people.length)targets.set(String(school.npsn),{school,people});
   }
   return [...targets].map(([npsn,{school,people}])=>{
+    const isUnnamedRoleRecord=record=>role==='Bendahara' && record.position==='Bendahara'
+      && /^bendahara\s*[—–-]/i.test(record.name || '')
+      && (!record.original_name || record.name===record.original_name)
+      && people.length===1;
     const matches=records.filter(record=>String(record.npsn || '').split(';').map(s=>s.trim()).includes(npsn)
       && ['valid','review','ditolak','berhalangan'].includes(record.status)
-      && people.some(p=>[record.name,record.original_name].some(name=>arrivalPersonKey(name)===arrivalPersonKey(p.name))));
+      && (people.some(p=>[record.name,record.original_name].some(name=>arrivalPersonKey(name)===arrivalPersonKey(p.name)))
+        || isUnnamedRoleRecord(record)));
     const priority={valid:0,review:1,ditolak:2,berhalangan:3};
     matches.sort((a,b)=>priority[a.status]-priority[b.status]);
     const record=matches[0];

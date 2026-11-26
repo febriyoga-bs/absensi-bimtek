@@ -1,0 +1,19 @@
+{
+  "event_id": 5,
+  "npsn": "10101744",
+  "venue": "Novotel Mangga Dua",
+  "head_name": "Ramatsyah",
+  "reason": "Konfirmasi pengguna: nama kepala sekolah SDN Ranto Panyang Rubek perlu diganti dari Nasrul Sani menjadi Ramatsyah sesuai pemetaan terbaru dan rekap kedatangan. Ramatsyah dan bendahara Edi Saputra sudah tiba. Tidak memindahkan foto atau catatan absensi sesi.",
+  "attendees": [
+    {
+      "name": "Ramatsyah",
+      "role": "Kepala Sekolah",
+      "status": "selesai"
+    },
+    {
+      "name": "Edi Saputra",
+      "role": "Bendahara",
+      "status": "selesai"
+    }
+  ]
+}
