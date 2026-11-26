@@ -20,6 +20,7 @@ import { finiteInteger } from '../security.js';
 import { pksRoutes } from '../pks.js';
 import { eventId } from '../eventContext.js';
 import { linkPksArrivalProfiles } from '../pksArrivalProfileLinks.js';
+import { scanAssignmentSql } from '../scanAssignmentSql.js';
 import {getSchoolIdentityAudit} from '../auditSchoolIdentities.js';
 import {correctSchoolArrival} from '../correctSchoolArrival.js';
 import { pksVerifierArrivalSql } from '../pksVerifierArrival.js';
@@ -692,12 +693,15 @@ r.get('/scan/participants', ah(async (req, res) => {
   if (testSessionId !== null && (!Number.isInteger(testSessionId) || testSessionId < 1 || testSessionId > 2147483647)) {
     throw new HttpError(400, 'Sesi uji coba tidak valid.');
   }
-  if (category === 'sekolah') await linkPksArrivalProfiles(req.user.role === 'lo' ? req.user.venue : venueId);
+  // Reconcile on explicit arrival import, not while opening/searching the list.
+  // Concurrent readers must never compete to update the same venue recap row.
   const { rows: [list] } = await q(
     `WITH active_owners AS MATERIALIZED (
       SELECT id,name,venue_id FROM lo_accounts WHERE active
     ), candidate_people AS MATERIALIZED (
-      SELECT p.* FROM people p
+      SELECT p.*,lower(trim(p.position)) AS position_key,lower(p.code) AS code_key,
+        ${nameKeySql('p.name')} AS name_key,string_to_array(replace(p.npsn,' ',''),';') AS school_ids
+      FROM people p
       WHERE p.role='peserta' AND p.archived_at IS NULL AND (${scanCategories[category]})
         AND ($7::text='' OR (lower(trim(p.position))=$7 OR ($7='pengawas' AND lower(trim(p.position))='kepala sekolah')))
         AND ($2::int IS NULL OR p.venue_id=$2)
@@ -713,20 +717,7 @@ r.get('/scan/participants', ah(async (req, res) => {
         AS m(code text,name text,position text,npsn text,venue_id int)
       WHERE roster.id=1 AND m.venue_id=l.venue_id
         AND m.venue_id IN (SELECT venue_id FROM candidate_people)
-    ), assigned_people AS MATERIALIZED (
-      SELECT DISTINCT p.id,m.account_id,m.lo_name
-      FROM candidate_people p JOIN mappings m ON p.venue_id=m.venue_id
-        AND lower(trim(p.position))=m.position
-        AND (${nameKeySql('p.name')}=m.name_key
-          OR (${eventId() === 5 ? 'true' : 'false'} AND lower(trim(p.position)) IN ('kepala sekolah','bendahara')
-            AND m.school_ids && string_to_array(replace(p.npsn,' ',''),';')))
-        AND (lower(p.code)=m.code OR (m.school_ids IS NOT NULL
-          AND m.school_ids && string_to_array(replace(p.npsn,' ',''),';')))
-      WHERE p.role='peserta' AND p.archived_at IS NULL
-      UNION
-      SELECT p.id,l.id,l.name FROM candidate_people p JOIN active_owners l ON p.venue_id=l.venue_id
-      WHERE p.role='peserta' AND p.archived_at IS NULL AND lower(trim(p.position)) IN ('dinas pendidikan','bb/bpmp')
-    ), assignments AS MATERIALIZED (
+    ), ${scanAssignmentSql(eventId())}, assignments AS MATERIALIZED (
       SELECT id,jsonb_agg(lo_name ORDER BY lo_name) AS assigned_los,
         bool_or(account_id=$5::int) AS owned FROM assigned_people GROUP BY id
     ), school_facilitators AS MATERIALIZED (

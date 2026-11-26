@@ -27,6 +27,15 @@ export const rawPool = new pg.Pool({
   idle_in_transaction_session_timeout: 20000,
 });
 rawPool.on('error', (e) => console.error('pg pool error', e.message));
+rawPool.on('connect', (client) => {
+  // The pool's error listener covers idle clients; checked-out clients need
+  // their own listener so a broken socket cannot terminate the process.
+  client.on('error', (error) => console.error('pg connection error', { code: error.code || error.name }));
+});
+
+const unusableConnection = (error) => ['ECONNRESET','ECONNREFUSED','EPIPE','ETIMEDOUT'].includes(error?.code)
+  || /^08/.test(error?.code || '')
+  || /Query read timeout|Connection terminated|Client has encountered a connection error/i.test(error?.message || '');
 
 let storageCheck, storageCheckedAt = 0;
 export async function ensureStorageMode() {
@@ -45,15 +54,22 @@ export const q = async (text, params) => {
     const error = new Error('Server database sedang sibuk. Coba lagi sebentar.'); error.status = 503; throw error;
   }
   const client = await rawPool.connect();
+  let releaseError;
   try {
     await client.query(`BEGIN; ${searchPathSql()}`);
     const result = await client.query(eventSql(text), params);
     await client.query('COMMIT');
     return result;
   } catch (error) {
-    await client.query('ROLLBACK').catch(() => {});
+    // A client timeout can leave the query running. Do not queue another
+    // command behind it or return that connection to the pool.
+    if (unusableConnection(error)) releaseError = error;
+    else {
+      try { await client.query('ROLLBACK'); }
+      catch (rollbackError) { releaseError = rollbackError; }
+    }
     throw error;
-  } finally { client.release(); }
+  } finally { client.release(releaseError); }
 };
 
 export const pool = {
