@@ -54,3 +54,11 @@ test('different pages queue upstream requests rather than sending a burst',async
  await Promise.all(['a','b','c'].map(p=>read(`https://example.org/${p}`)));
  assert.equal(max,1);
 });
+
+
+test('binary exports share cached requests without decoding XLSX bytes as text',async()=>{
+ let count=0;const bytes=Buffer.from([80,75,3,4,255]);
+ const read=createRevitReader({binary:true,interval:0,fetchPage:async()=>{count++;return {ok:true,arrayBuffer:async()=>bytes};}});
+ const [a,b]=await Promise.all([read('https://example.org/export'),read('https://example.org/export')]);
+ assert.deepEqual(a,bytes);assert.deepEqual(b,bytes);await read('https://example.org/export');assert.equal(count,1);
+});

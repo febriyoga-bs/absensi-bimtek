@@ -1,13 +1,13 @@
 export const progressGroups = [
   { label: 'Biodata', className: 'pks-progress-group--bio', metrics: ['login', 'bio_isi', 'bio_kirim', 'bio_ok'] },
-  { label: 'RAB & BA', className: 'pks-progress-group--rab', metrics: ['sepakat_rab', 'ba'] },
+  { label: 'RAB & BA', className: 'pks-progress-group--rab', metrics: ['rab_kirim', 'sepakat_rab', 'ba'] },
   { label: 'PKS', className: 'pks-progress-group--pks', metrics: ['pks', 'pks_ppk', 'meterai'] },
 ];
 export const progressStages = progressGroups.flatMap(group => group.metrics);
 export const progressLabels = [
   ['total', 'Total sekolah'], ['login', 'Sudah login'], ['bio_isi', 'Sudah mengisi biodata'],
   ['bio_kirim', 'Sudah kirim biodata'], ['bio_ok', 'Sudah verifikasi biodata'],
-  ['sepakat_rab', 'Sepakat RAB'], ['ba', 'TTD BA'], ['pks', 'TTE Kepsek PKS'],
+  ['rab_kirim', 'Kirim proposal RAB'], ['sepakat_rab', 'Sepakat RAB'], ['ba', 'TTD BA'], ['pks', 'TTE Kepsek PKS'],
   ['pks_ppk', 'TTE PPK PKS'], ['meterai', 'E-Meterai'], ['tidak_terdata', 'Tidak terdata'],
 ];
 export const progressMetricLabels = progressLabels.map(([key, label]) => [key,
@@ -16,9 +16,9 @@ export function progressStage(status) {
   const value = String(status || '').toLocaleLowerCase('id');
   if (value.includes('tidak terdata')) return 'tidak_terdata';
   const later = [['meterai', /e[- ]?meterai/], ['pks_ppk', /tte ppk pks/], ['pks', /tte kepsek pks/],
-    ['ba', /ttd ba|tanda tangan ba/], ['sepakat_rab', /sepakat rab/], ['bio_ok', /sudah verifikasi biodata/],
+    ['ba', /ttd ba|tanda tangan ba/], ['sepakat_rab', /sepakat rab/], ['rab_kirim', /kirim proposal rab/], ['bio_ok', /sudah verifikasi biodata/],
     ['bio_kirim', /sudah kirim biodata|menunggu verifikasi biodata/],
-    ['bio_isi', /sudah mengisi biodata/], ['login', /sudah login|belum mengisi biodata|proses mengisi biodata/]];
+    ['bio_isi', /sudah mengisi biodata|proses mengisi biodata/], ['login', /sudah login|belum mengisi biodata/]];
   return later.find(([, pattern]) => pattern.test(value))?.[0] || (value.includes('belum login') ? 'belum_login' : null);
 }
 export function hasProgressStage(stage, metric) {

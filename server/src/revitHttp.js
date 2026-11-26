@@ -2,7 +2,7 @@ import { HttpError } from './util.js';
 
 // Public Revit pages are shared across dashboard requests; never cache user data here.
 export function createRevitReader({ fetchPage = (...args) => fetch(...args), ttl = 300000, now = Date.now,
-  pause = ms => new Promise(resolve=>setTimeout(resolve,ms)), interval = 150 } = {}) {
+  pause = ms => new Promise(resolve=>setTimeout(resolve,ms)), interval = 150, binary = false } = {}) {
   const saved = new Map(), pending = new Map();
   const blocked=new Map();
   let queue=Promise.resolve();
@@ -17,7 +17,7 @@ export function createRevitReader({ fetchPage = (...args) => fetch(...args), ttl
       let error;
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          const response = await fetchPage(key, { headers: { Accept: 'text/html', 'User-Agent': 'BIMTEK-Dashboard/1.0' }, signal: AbortSignal.timeout(15000) });
+          const response = await fetchPage(key, { headers: { Accept: binary ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'text/html', 'User-Agent': 'BIMTEK-Dashboard/1.0' }, signal: AbortSignal.timeout(15000) });
           if (!response.ok) {
             if (response.status===429) {
               const header=response.headers?.get?.('retry-after');
@@ -32,8 +32,8 @@ export function createRevitReader({ fetchPage = (...args) => fetch(...args), ttl
             await pause(500);
             continue;
           }
-          const html = await response.text();
-          if (!html.trim()) throw new Error('empty response');
+          const html = binary ? Buffer.from(await response.arrayBuffer()) : await response.text();
+          if (binary ? !html.length : !html.trim()) throw new Error('empty response');
           if (saved.size >= 256) saved.delete(saved.keys().next().value);
           saved.set(key, { at: now(), html });
           return html;
@@ -50,3 +50,5 @@ export function createRevitReader({ fetchPage = (...args) => fetch(...args), ttl
   };
 }
 export const readRevitHtml = createRevitReader();
+
+export const readRevitExport = createRevitReader({binary:true});
