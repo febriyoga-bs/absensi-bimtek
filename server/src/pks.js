@@ -1,3 +1,4 @@
+import {fetchCompleteSchoolPages} from './revitSchoolPages.js';
 import { readRevitHtml } from './revitHttp.js';
 import { progressSourceUrl, progressSchoolUrl, parseProgressPage, parseProgressSchoolPage } from './pksProgressSource.js';
 import { progressLabels, progressStages, progressStage } from '../../shared/pksProgress.js';
@@ -41,32 +42,16 @@ const staleWarning='Revit sementara tidak tersedia. Menampilkan data terakhir ya
 const progressCache = createAsyncCache({ ttl: 300000, maxEntries: 3, staleIfError:1800000,
   describeStale:value=>Object.assign(value instanceof Map?new Map(value):Array.isArray(value)?[...value]:{...value},
     {stale:true,warning:staleWarning}) });
-async function fetchProgressSchoolPage(hotel, page, metric = 'total', query = '') {
+async function fetchProgressSchoolPage(hotel, page, metric = 'total', query = '', perPage = null) {
   const url = new URL(progressSchoolUrl);
   url.search = new URLSearchParams({ jenis: 'pks', bimtek: '1', metric, hotel, q: query, page: String(page) });
+  if (perPage) url.searchParams.set('per_page',String(perPage));
   return parseProgressSchoolPage(await readRevitHtml(url));
 }
 
-async function fetchAllProgressSchools(hotels, metric = 'total') {
-  const firstPages = await Promise.all(hotels.map(hotel => fetchProgressSchoolPage(hotel.hotel, 1, metric)));
-  const jobs = [];
-  firstPages.forEach((page, hotelIndex) => {
-    const pageSize = Math.max(1, page.rows.length);
-    const pages = Math.ceil(page.total / pageSize);
-    for (let pageNumber = 2; pageNumber <= pages; pageNumber++) jobs.push({ hotel: hotels[hotelIndex].hotel, page: pageNumber });
-  });
-  const results = [...firstPages.flatMap(page => page.rows)];
-  let cursor = 0;
-  const workers = Array.from({ length: Math.min(2, jobs.length) }, async () => {
-    while (cursor < jobs.length) {
-      const index = cursor++;
-      const job = jobs[index];
-      const page = await fetchProgressSchoolPage(job.hotel, job.page, metric);
-      results.push(...page.rows);
-    }
-  });
-  await Promise.all(workers);
-  return results;
+async function fetchAllProgressSchools(_hotels, metric = 'total') {
+  return fetchCompleteSchoolPages((hotel,page,sourceMetric,perPage)=>
+    fetchProgressSchoolPage(hotel,page,sourceMetric,'',perPage),metric);
 }
 
 function loadProgressSchools(hotels) {
