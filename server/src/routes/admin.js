@@ -699,6 +699,11 @@ r.get('/scan/participants', ah(async (req, res) => {
     ), candidate_people AS MATERIALIZED (
       SELECT p.* FROM people p
       WHERE p.role='peserta' AND p.archived_at IS NULL AND (${scanCategories[category]})
+        AND ($1='' OR p.name ILIKE '%'||$1||'%' OR p.code ILIKE '%'||$1||'%'
+          OR p.institution ILIKE '%'||$1||'%' OR p.npsn ILIKE '%'||$1||'%'
+          OR EXISTS (SELECT 1 FROM venues search_venue WHERE search_venue.id=p.venue_id AND search_venue.name ILIKE '%'||$1||'%')
+          OR EXISTS (SELECT 1 FROM venue_arrival_recap search_recap WHERE search_recap.venue_id=p.venue_id
+            AND search_recap.representatives->p.id::text->>'name' ILIKE '%'||$1||'%'))
         AND ($7::text='' OR (lower(trim(p.position))=$7 OR ($7='pengawas' AND lower(trim(p.position))='kepala sekolah')))
         AND ($2::int IS NULL OR p.venue_id=$2)
         AND ($10::int IS NULL OR p.venue_id=(SELECT venue_id FROM active_owners WHERE id=$10))
