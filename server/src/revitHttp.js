@@ -34,6 +34,10 @@ export function createRevitReader({ fetchPage = (...args) => fetch(...args), ttl
           }
           const html = binary ? Buffer.from(await response.arrayBuffer()) : await response.text();
           if (binary ? !html.length : !html.trim()) throw new Error('empty response');
+          // An HTML error/login page can be returned with HTTP 200. Do not cache
+          // it for five minutes as if it were a valid Excel export.
+          if(binary && (html[0]!==80 || html[1]!==75))
+            throw new HttpError(503,'Revit mengembalikan respons selain file Excel. Coba muat ulang.');
           if (saved.size >= 256) saved.delete(saved.keys().next().value);
           saved.set(key, { at: now(), html });
           return html;

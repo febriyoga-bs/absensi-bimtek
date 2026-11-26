@@ -23,5 +23,5 @@ test('multiple programs use the highest biodata stage and require every program 
 test('incomplete or malformed exports fail instead of replacing valid cached data',async()=>{
  assert.throws(()=>parseProgressExportSheets(summary(2),[columns,row('12345678','Belum login',Array(6).fill('Belum'))]),/seluruh/);
  assert.throws(()=>parseProgressExportSheets(summary(1),[columns.slice(0,4)]),/Kolom/);
- await assert.rejects(parseProgressExport(Buffer.from('<html>429</html>')),/tidak valid/);
+ await assert.rejects(parseProgressExport(Buffer.from('<html>429</html>')),/selain file Excel/);
 });

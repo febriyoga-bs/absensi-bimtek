@@ -1,4 +1,4 @@
-import {readSheet} from 'read-excel-file/node';
+import {readRevitSheets} from './revitXlsxSheets.js';
 import {progressLabels,progressStages,progressStage} from '../../shared/pksProgress.js';
 import {HttpError} from './util.js';
 export const progressExportUrl=(()=>{
@@ -58,8 +58,13 @@ export function parseProgressExportSheets(summary,detail){
 }
 export async function parseProgressExport(buffer){
  try{
-  if(buffer.length>20000000 || buffer[0]!==80 || buffer[1]!==75)throw Error('Not an XLSX export');
-  const [summary,detail]=await Promise.all([readSheet(buffer,'Rekap Hotel'),readSheet(buffer,'Daftar Sekolah')]);
+  if(buffer.length>20000000)throw new HttpError(502,'Ukuran export Revit melebihi batas pembacaan.');
+  if(buffer[0]!==80 || buffer[1]!==75)throw new HttpError(502,'Revit mengembalikan respons selain file Excel. Coba muat ulang.');
+  const [summary,detail]=readRevitSheets(buffer);
   return parseProgressExportSheets(summary,detail);
- }catch(error){if(error instanceof HttpError)throw error;throw new HttpError(502,'File export Revit tidak valid atau formatnya berubah.');}
+ }catch(error){
+  if(error instanceof HttpError)throw error;
+  console.error('Revit export parsing failed',{name:error.name,code:error.code,message:error.message});
+  throw new HttpError(502,'File export Revit belum dapat dibaca. Coba muat ulang.');
+ }
 }

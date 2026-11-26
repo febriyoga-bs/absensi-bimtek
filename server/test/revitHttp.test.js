@@ -62,3 +62,11 @@ test('binary exports share cached requests without decoding XLSX bytes as text',
  const [a,b]=await Promise.all([read('https://example.org/export'),read('https://example.org/export')]);
  assert.deepEqual(a,bytes);assert.deepEqual(b,bytes);await read('https://example.org/export');assert.equal(count,1);
 });
+
+
+test('HTTP 200 HTML export errors are rejected without poisoning the binary cache',async()=>{
+ let count=0;const bytes=Buffer.from([80,75,3,4]);
+ const read=createRevitReader({binary:true,interval:0,fetchPage:async()=>({ok:true,arrayBuffer:async()=>++count===1?Buffer.from('<html>blocked</html>'):bytes})});
+ await assert.rejects(read('https://example.org/export'),/selain file Excel/);
+ assert.deepEqual(await read('https://example.org/export'),bytes);assert.equal(count,2);
+});
