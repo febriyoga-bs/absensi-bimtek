@@ -501,7 +501,8 @@ function SchoolRevitStatus({ status, loading, failed }) {
   if (failed && !status) return <span>Status Revit belum dapat dimuat. Klik Coba lagi di atas tabel.</span>;
   if (loading) return <span>Memuat status Revit…</span>;
   if (!status) return <span>NPSN tidak ditemukan di Revit</span>;
-  const hasStageGroup = progressGroups.some(({ metrics }) => metrics.includes(status.stage));
+  const notLoggedIn = status.stage === 'belum_login';
+  const hasStageGroup = notLoggedIn || progressGroups.some(({ metrics }) => metrics.includes(status.stage));
   const label = progressMetricLabels.find(([key]) => key === status.stage)?.[1].replace(/^\d+\.\s*/, '');
   return <div className="pks-revit-school-stage">
     {progressGroups.map(({ label: group, metrics }) => (
