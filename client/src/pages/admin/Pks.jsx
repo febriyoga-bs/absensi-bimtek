@@ -138,11 +138,13 @@ export default function Pks({ publicView = false }) {
   const [query, setQuery] = useState('');
   const [selectedVenue, setVenue] = useState('');
   const [selectedOwner, setOwner] = useState('');
-  const ownLo = loView ? data?.lo?.[0] : null;
-  const venue = loView ? ownLo?.venue || '' : selectedVenue;
-  const owner = loView ? ownLo?.name || '' : selectedOwner;
-  const [verifier, setVerifier] = useState('');
   const [view, setView] = useState('schools');
+  const rankingView = view === 'ranking' || view === 'verifierRanking';
+  const ownDirectory = loView && !rankingView;
+  const ownLo = loView ? data?.lo?.[0] : null;
+  const venue = ownDirectory ? ownLo?.venue || '' : selectedVenue;
+  const owner = ownDirectory ? ownLo?.name || '' : selectedOwner;
+  const [verifier, setVerifier] = useState('');
   const [status, setStatus] = useState('');
   const [arrivalFilter, setArrivalFilter] = useState('');
   const [arrivalByParticipant, setArrivalByParticipant] = useState(false);
@@ -271,8 +273,7 @@ export default function Pks({ publicView = false }) {
   const verifiers = groupPksVerifiers(data?.verifiers, data?.schools);
   const rankingData = loView ? globalRoster : data;
   const rankingVerifiers = loView ? groupPksVerifiers(globalRoster?.verifiers, globalRoster?.schools) : verifiers;
-  const rankingView = view === 'ranking' || view === 'verifierRanking';
-  const filterData = rankingView && !loView ? rankingData : data;
+  const filterData = rankingView ? rankingData : data;
   const verifierOptions = [...new Set((data?.schools || [])
     .filter(row => (!venue || row.venue === venue) && (!owner || row.lo === owner))
     .map(row => row.facilitator).filter(Boolean))]
@@ -364,16 +365,16 @@ export default function Pks({ publicView = false }) {
         <div className={`pks-filters${view === 'schools' ? ' pks-filters--schools' : ''}${showArrivalFilter ? ' pks-filters--with-arrival' : ''}`}>
           <FilterField label="Pencarian"><input type="search" value={query} placeholder={view === 'schools' ? 'Nama sekolah, NPSN, atau nomor PKS' : 'Cari nama atau venue'} onChange={e => { setQuery(e.target.value); setPage(1); }} /></FilterField>
           <FilterField label="Venue">
-            <select value={venue} disabled={loView} onChange={e => { setVenue(e.target.value); setOwner(''); setVerifier(''); setPage(1); }}>
-              {!loView && <option value="">Semua venue</option>}
-              {loView && !venue && <option value="">Venue belum ditetapkan</option>}
+            <select value={venue} disabled={ownDirectory} onChange={e => { setVenue(e.target.value); setOwner(''); setVerifier(''); setPage(1); }}>
+              {!ownDirectory && <option value="">Semua venue</option>}
+              {ownDirectory && !venue && <option value="">Venue belum ditetapkan</option>}
               {(filterData?.venues || []).map(name => <option key={name}>{name}</option>)}
             </select>
           </FilterField>
           <FilterField label="LO bertugas">
-            <select value={owner} disabled={loView} onChange={e => { setOwner(e.target.value); setVerifier(''); setPage(1); }}>
-              {!loView && <option value="">Semua LO</option>}
-              {loView && !owner && <option value="">Penugasan LO belum tersedia</option>}
+            <select value={owner} disabled={ownDirectory} onChange={e => { setOwner(e.target.value); setVerifier(''); setPage(1); }}>
+              {!ownDirectory && <option value="">Semua LO</option>}
+              {ownDirectory && !owner && <option value="">Penugasan LO belum tersedia</option>}
               {(filterData?.lo || []).filter(row => !venue || row.venue === venue).map(row => <option value={row.name} key={row.venue + row.name}>{personName(row.name)}</option>)}
             </select>
           </FilterField>
