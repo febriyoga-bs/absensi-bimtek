@@ -58,5 +58,20 @@ test('ranking and drilldowns preserve assignment, session and recorder boundarie
     }
     const all = (await db.query(attendanceRankingSql(), [null])).rows.find(r => r.id === 1);
     assert.deepEqual([all.assigned,all.present,all.total,all.participants,all.facilitators,all.unavailable], [4,3,3,2,1,0]);
+    // A roster account_id explicitly links the old recorder name to a renamed
+    // account. Count both spellings once, preserving venue/assignment boundaries.
+    await db.exec(`UPDATE assignment_roster SET data=data || '{"lo":[{"account_id":1,"name":"Owner","venue":"Venue A"}]}'::jsonb;
+      UPDATE lo_accounts SET name='Renamed Owner' WHERE id=1;
+      INSERT INTO attendance VALUES(10,1,2,1,'LO Renamed Owner','qr','valid','2026-11-27 08:00Z',NULL);`);
+    const renamed=(await db.query(attendanceRankingSql(),[null])).rows.find(r=>r.id===1);
+    assert.equal(renamed.name,'Renamed Owner');
+    assert.deepEqual([renamed.total,renamed.participants,renamed.facilitators],[3,2,1]);
+    const renamedDetails=(await db.query(attendanceRankingSql('completed'),[1,1])).rows;
+    assert.deepEqual(renamedDetails.map(r=>r.id),[1,2]);
+    // Never credit an alias that another account at this venue also owns.
+    await db.exec("INSERT INTO lo_accounts VALUES(5,'Owner',1)");
+    const ambiguous=(await db.query(attendanceRankingSql(),[1])).rows.find(r=>r.id===1);
+    assert.equal(ambiguous.total,0);
+    assert.equal(ambiguous.unavailable,0);
   } finally { await db.close(); }
 });

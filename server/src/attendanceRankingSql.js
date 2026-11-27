@@ -10,9 +10,17 @@ const detailFilters = {
 export function attendanceRankingSql(metric = null) {
   if (metric !== null && !Object.hasOwn(detailFilters, metric)) throw new Error('Invalid ranking metric');
   return `WITH owners AS MATERIALIZED (
-    SELECT l.id,l.name,l.venue_id,v.name AS venue,
-      count(*) OVER (PARTITION BY l.venue_id,l.name) AS same_name
+    SELECT l.id,l.name,l.venue_id,v.name AS venue
     FROM lo_accounts l JOIN venues v ON v.id=l.venue_id
+  ), recorder_names AS MATERIALIZED (
+    SELECT id AS owner_id,venue_id,name FROM owners
+    UNION
+    SELECT l.id,l.venue_id,m.name FROM assignment_roster r
+    CROSS JOIN LATERAL jsonb_to_recordset(r.data->'lo') AS m(account_id int,name text,venue text)
+    JOIN owners l ON l.id=m.account_id AND l.venue=m.venue
+    WHERE r.id=1 AND m.name IS NOT NULL
+  ), recorders AS MATERIALIZED (
+    SELECT *,count(*) OVER (PARTITION BY venue_id,name) AS same_recorder FROM recorder_names
   ), selected_sessions AS MATERIALIZED (
     SELECT id,role,venue_ids FROM sessions WHERE NOT is_test AND ($1::int IS NULL OR id=$1)
   ), candidate_people AS MATERIALIZED (
@@ -50,16 +58,17 @@ export function attendanceRankingSql(metric = null) {
   ), presence AS MATERIALIZED (
     SELECT DISTINCT person_id,venue_id FROM session_attendance WHERE status IN ('valid','review')
   ), work AS MATERIALIZED (
-    SELECT DISTINCT ON (scanned_by,venue_id,person_id) * FROM session_attendance
-    WHERE method IN ('manual','qr')
-    ORDER BY scanned_by,venue_id,person_id,CASE WHEN status='berhalangan' THEN 1 ELSE 0 END,created_at DESC
+    SELECT DISTINCT ON (r.owner_id,a.venue_id,a.person_id) a.*,r.owner_id FROM session_attendance a
+    JOIN recorders r ON r.same_recorder=1 AND r.venue_id=a.venue_id AND a.scanned_by='LO '||r.name
+    WHERE a.method IN ('manual','qr')
+    ORDER BY r.owner_id,a.venue_id,a.person_id,CASE WHEN a.status='berhalangan' THEN 1 ELSE 0 END,a.created_at DESC
   ), target_results AS MATERIALIZED (
     SELECT t.owner_id,t.person_id,(e.person_id IS NOT NULL) AS present,
       p.position_key IN ('bendahara','pengawas','kepala sekolah') AS is_participant,
       a.id AS work_id,a.status${metric ? ',a.created_at,a.participant_note' : ''}
     FROM targets t JOIN owners l ON l.id=t.owner_id JOIN candidate_people p ON p.id=t.person_id
     LEFT JOIN presence e ON e.person_id=t.person_id AND e.venue_id=l.venue_id
-    LEFT JOIN work a ON l.same_name=1 AND a.venue_id=l.venue_id AND a.person_id=t.person_id AND a.scanned_by='LO '||l.name
+    LEFT JOIN work a ON a.owner_id=l.id AND a.venue_id=l.venue_id AND a.person_id=t.person_id
   )
   ${metric ? `SELECT p.id,p.name,p.institution,p.position,p.npsn,l.venue,t.present,t.status,t.created_at,t.participant_note
     FROM target_results t JOIN owners l ON l.id=t.owner_id JOIN people p ON p.id=t.person_id
