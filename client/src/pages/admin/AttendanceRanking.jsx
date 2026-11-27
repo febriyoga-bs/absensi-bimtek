@@ -44,7 +44,7 @@ export default function AttendanceRanking({ venue, query, owner = '', facilitato
       const target = targetBasis === 'assigned' ? row.assigned : row.present;
       return { ...row, completed, target, ratio: target ? completed * 100 / target : null };
     })
-    .sort((a, b) => (b.ratio ?? -1) - (a.ratio ?? -1) || b.total - a.total || a.name.localeCompare(b.name, 'id'))
+    .sort((a, b) => (b.ratio ?? -1) - (a.ratio ?? -1) || b.completed - a.completed || a.name.localeCompare(b.name, 'id'))
     .map((row, i) => ({ ...row, rank: i + 1 }))
     .filter((row) => (!owner || row.name === owner) && row.name.toLowerCase().includes(query));
   return <section className={compact ? 'pks-attendance-ranking' : undefined} aria-label="Peringkat absensi LO">
