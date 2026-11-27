@@ -135,3 +135,25 @@ test('attendance ranking queries stay inside their selected event',async()=>{
     assert.equal(rows[0].assigned,0);
   }
 });
+
+test('Excel/CSV exports use linked attendee names and roles with event isolation and profile fallback',async()=>{
+  const headers={Authorization:`Bearer ${signAdmin({role:'admin'})}`};
+  for(const id of [3,4]) await scoped(id,()=>q(
+    "INSERT INTO venue_arrival_recap(venue_id,marks,representatives) VALUES(1,'{}',$1) ON CONFLICT(venue_id) DO UPDATE SET representatives=EXCLUDED.representatives",
+    [JSON.stringify({'1':{name:`Actual Attendee ${id}`,role:'Perwakilan Sekolah'}})]));
+  for(const id of [3,4]){
+    const response=await fetch(`${origin}/api/admin/export?event=${id}&session_id=1&recorded_only=true`,{headers});
+    assert.equal(response.status,200,await response.clone().text());
+    const csv=await response.text();
+    assert.ok(csv.includes(`Actual Attendee ${id}`));
+    assert.ok(csv.includes('Perwakilan Sekolah'));
+    assert.ok(!csv.includes(`Actual Attendee ${id===3?4:3}`));
+    const filtered=await fetch(`${origin}/api/admin/export?event=${id}&session_id=1&recorded_only=true&q=Actual%20Attendee`,{headers});
+    assert.equal(filtered.status,200);
+    assert.ok((await filtered.text()).includes(`Actual Attendee ${id}`));
+  }
+  await scoped(4,()=>q("UPDATE venue_arrival_recap SET representatives='{}' WHERE venue_id=1"));
+  const response=await fetch(`${origin}/api/admin/export?event=4&session_id=1&recorded_only=true`,{headers});
+  assert.equal(response.status,200);
+  assert.ok((await response.text()).includes('Person 4'));
+});

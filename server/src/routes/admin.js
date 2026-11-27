@@ -1308,7 +1308,10 @@ r.get('/export', ah(async (req, res) => {
   const { session: s, ids: sessionIds } = await attendanceSessionScope(req);
   const { rows } = await q(
     `WITH ${attendanceExportLoCtes}
-     SELECT p.name, p.role, p.institution, p.position, pv.name AS assigned_venue,
+     SELECT COALESCE(NULLIF(arrival.representatives->p.id::text->>'name',''),p.name) AS name,
+            p.role, p.institution,
+            COALESCE(NULLIF(arrival.representatives->p.id::text->>'role',''),p.position) AS position,
+            pv.name AS assigned_venue,
             p.npsn, p.provinsi, p.kab_kota, p.ptn,
             assigned.assigned_lo,
             a.id AS attendance_id, a.photo_path IS NOT NULL AS has_photo,
@@ -1318,8 +1321,10 @@ r.get('/export', ah(async (req, res) => {
      LEFT JOIN venues pv ON pv.id=p.venue_id
      LEFT JOIN attendance a ON a.person_id=p.id AND a.session_id=ANY($1::int[])
      LEFT JOIN venues av ON av.id=a.venue_id
+     LEFT JOIN venue_arrival_recap arrival ON arrival.venue_id=COALESCE(a.venue_id,p.venue_id)
      WHERE (${positionFilter}) AND ($4::text='' OR a.scanned_by=$4) AND ($5::text IS NULL OR a.status=$5)
-       AND ($7::text='' OR p.name ILIKE $7 OR p.npsn ILIKE $7)
+       AND ($7::text='' OR p.name ILIKE $7 OR p.npsn ILIKE $7
+         OR arrival.representatives->p.id::text->>'name' ILIKE $7)
        AND ((a.id IS NOT NULL AND ($3::boolean OR $6::boolean OR a.status IN ('valid','review')) AND ($2::int IS NULL OR a.venue_id=$2))
         OR ($3::boolean AND a.id IS NULL AND EXISTS (SELECT 1 FROM sessions scope
             WHERE scope.id=ANY($1::int[]) AND (scope.role='semua' OR p.role=scope.role)
