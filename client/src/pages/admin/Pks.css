@@ -67,6 +67,16 @@ html[data-theme="dark"] .pks-page {
 .pks-revit-school-stage > div { display: grid; gap: 2px; }
 .pks-ranking-stages { display: grid; gap: 10px; margin-top: 12px; }
 .pks-ranking-stages h4 { margin: 0; padding: 5px 8px; border-radius: 5px; background: var(--pks-filter); color: var(--text); font-size: 11px; }
+.pks-ranking-layout { display: flex; gap: 4px; margin: 12px 0; }
+.pks-ranking-layout button { border: 1px solid var(--line); border-radius: 6px; padding: 6px 14px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+.pks-ranking-layout button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); font-weight: 700; }
+.pks-verifier-ranking-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+.pks-verifier-ranking-table { min-width: 1100px; }
+.pks-verifier-ranking-table col.pks-rank-column { width: 3%; }
+.pks-verifier-ranking-table col.pks-name-column { width: 15%; }
+.pks-verifier-ranking-table col.pks-venue-column { width: 9%; }
+.pks-verifier-ranking-table col.pks-point-column { width: 7%; }
+.pks-verifier-ranking-table-wrap > p { padding: 12px; margin: 0; }
 .pks-bimtek-owners .pks-ranking-stages dl { margin-top: 0; }
 .pks-progress-table-section { min-width: 0; }
 .pks-progress-mobile { display: none; }
@@ -287,6 +297,18 @@ html[data-theme="dark"] .pks-summary__total { --metric-bg: #244b7d; }
 .pks-attendance-metrics dd { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; margin: 0; font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .pks-attendance-metrics dd small { font-size: 13px; font-weight: 400; color: var(--muted); }
 .pks-attendance-breakdown p { padding-top: 8px; }
+.pks-attendance-ranking .reporting-ranking li { padding: 10px 0; }
+.pks-attendance-ranking .reporting-ranking-name { font-size: 14px; gap: 4px 12px; }
+.pks-attendance-ranking .reporting-ranking progress { height: 4px; margin: 6px 0; }
+.pks-attendance-ranking .pks-attendance-help { margin-bottom: 14px; }
+.pks-attendance-breakdown > summary { font-size: 12px; line-height: 1.5; }
+.pks-attendance-breakdown .pks-attendance-venue { color: var(--muted); }
+.pks-attendance-detail-label { float: right; margin-left: 12px; }
+.pks-attendance-breakdown[open] { padding-bottom: 4px; }
+.pks-attendance-breakdown .pks-attendance-metrics { gap: 10px; margin: 12px 0 8px; }
+.pks-attendance-breakdown .pks-attendance-metrics > div { padding-left: 10px; }
+.pks-attendance-breakdown .pks-attendance-metrics dt { font-size: 12px; margin-bottom: 2px; }
+.pks-attendance-breakdown .pks-attendance-metrics dd { font-size: 18px; }
 @media (max-width: 650px) { .pks-attendance-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pks-attendance-ranking > .toolbar { flex-wrap: wrap; } }
 .pks-empty { padding: 44px 20px; text-align: center; font-size: 14px; }
 .pks-empty p { margin: 6px 0 16px; color: var(--muted); }

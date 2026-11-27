@@ -9,6 +9,29 @@ const percent = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 });
 const number = new Intl.NumberFormat('id-ID');
 const sourceStages = progressGroups.map(group => ({ title: group.label === 'Biodata' ? 'BIODATA' : group.label, metrics: progressLabels.filter(([key]) => group.metrics.includes(key)) }));
 
+export function VerifierRankingTable({ rows, onShowSchools }) {
+  const metrics = sourceStages.flatMap(group => group.metrics);
+  const countCell = (row, metric, value) => onShowSchools
+    ? <button type="button" className="pks-progress-count" aria-label={`Lihat sekolah ${row.name}: ${metric === 'total' ? 'Total sekolah' : progressLabels.find(([key]) => key === metric)?.[1]}`} onClick={() => onShowSchools(row, metric)}><strong>{number.format(value)}</strong></button>
+    : <strong>{number.format(value)}</strong>;
+  return <div className="pks-verifier-ranking-table-wrap" role="region" aria-label="Tabel peringkat verifikator" tabIndex={0}>
+    <table className="pks-progress-table pks-verifier-ranking-table">
+      <colgroup><col className="pks-rank-column" /><col className="pks-name-column" /><col className="pks-venue-column" /><col className="pks-point-column" /><col />{metrics.map(([key]) => <col key={key} />)}</colgroup>
+      <thead>
+        <tr><th rowSpan={2} scope="col">#</th><th rowSpan={2} scope="col">Verifikator</th><th rowSpan={2} scope="col">Venue</th><th rowSpan={2} scope="col">Point Progress</th><th rowSpan={2} scope="col">Total sekolah</th>{progressGroups.map(group => <th key={group.label} scope="colgroup" colSpan={group.metrics.length} className={group.className}>{group.label}</th>)}</tr>
+        <tr>{metrics.map(([key, label], index) => <th key={key} scope="col">{index + 1}. {label}</th>)}</tr>
+      </thead>
+      <tbody>{rows.map(row => <tr key={`${row.venue}:${row.name}`}>
+        <td>{row.rank ?? '-'}</td><th scope="row">{personName(row.name)}<LoRepresentation name={row.name} /></th><td>{row.venue}</td>
+        <td><strong>{row.overall == null ? '-' : `${percent.format(row.overall)}%`}</strong></td>
+        <td>{countCell(row, 'total', row.total)}</td>
+        {metrics.map(([key]) => { const count = row.metrics[key] ?? 0; return <td key={key}>{countCell(row, key, count)}<small>{row.total ? `${Math.round(count * 100 / row.total)}%` : '-'}</small></td>; })}
+      </tr>)}</tbody>
+    </table>
+    {!rows.length && <p className="muted">Tidak ada verifikator yang cocok dengan filter.</p>}
+  </div>;
+}
+
 export function rankVerifiers(verifiers, schools, statuses) {
   const stages = sourceStages.flatMap(group => group.metrics.map(([key]) => key));
   const normalize = name => String(name || '').normalize('NFKD').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
@@ -43,6 +66,7 @@ export default function PksRanking({
   sourceRankingLoading, onLoadSourceRanking, onReloadSourceRanking, verifierMode = false, onShowSchools, publicView = false,
 }) {
   const [selectedTab, setTab] = useState('progress');
+  const [verifierLayout, setVerifierLayout] = useState('card');
   const tab = verifierMode ? 'bimtek' : selectedTab;
   const title = verifierMode ? 'Peringkat Verifikator' : 'Peringkat LO';
   const rows = rankPksOwners(data.schools, data.lo, venue)
@@ -76,7 +100,11 @@ export default function PksRanking({
       </details>
       {sourceRankingLoading && <p role="status">Mengambil data Revit dan menghitung {title.toLowerCase()}…</p>}
       {sourceRankingError && <div className="alert alert--err" role="alert">{sourceRankingError} <button className="btn btn--sm" onClick={onReloadSourceRanking}>Coba lagi</button></div>}
-      {sourceRanking && <div className="pks-bimtek-owners">
+      {verifierMode && <div className="pks-ranking-layout" role="group" aria-label="Tampilan peringkat verifikator">
+        <button type="button" aria-pressed={verifierLayout === 'card'} onClick={() => setVerifierLayout('card')}>Card</button>
+        <button type="button" aria-pressed={verifierLayout === 'table'} onClick={() => setVerifierLayout('table')}>Tabel</button>
+      </div>}
+      {sourceRanking && (verifierMode && verifierLayout === 'table' ? <VerifierRankingTable rows={sourceRows} onShowSchools={onShowSchools} /> : <div className="pks-bimtek-owners">
         {sourceRows.map(row => <article key={`${row.venue}:${row.name}`}>
           <div className="pks-overall-heading">
             <h3>
@@ -104,7 +132,7 @@ export default function PksRanking({
           </div>
         </article>)}
         {!sourceRows.length && <p>Tidak ada {verifierMode ? 'verifikator' : 'LO'} yang cocok dengan filter.</p>}
-      </div>}
+      </div>)}
     </> : <>
       <p className="pks-ranking__note">Diurutkan berdasarkan persentase sekolah berstatus Lengkap.</p>
       <div className="reporting-ranking" tabIndex={0} aria-label="Peringkat capaian verifikasi sekolah">

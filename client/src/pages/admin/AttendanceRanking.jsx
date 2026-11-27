@@ -67,17 +67,18 @@ export default function AttendanceRanking({ venue, query, owner = '', facilitato
     {result && <div className="reporting-ranking" tabIndex={0}>
       {rows.length ? <ol>{rows.map((row) => <li key={row.id}>
         <div className="reporting-ranking-name"><b>{row.rank}. {personName(row.name)}<LoRepresentation name={row.name}/></b>
-          <strong>{compact ? (row.ratio == null ? (targetBasis === 'assigned' ? 'Belum ada binaan' : 'Belum ada binaan tercatat hadir di venue') : `${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(row.ratio)}% tercatat`) : <>{row.completed}/{row.target} sudah dicatat{row.ratio == null ? '' : ` (${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(row.ratio)}%)`}</>}</strong></div>
+          <strong>{compact ? (row.ratio == null ? (targetBasis === 'assigned' ? 'Belum ada binaan' : 'Belum ada binaan tercatat hadir di venue') : `${row.completed}/${row.target} · ${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(row.ratio)}%`) : <>{row.completed}/{row.target} sudah dicatat{row.ratio == null ? '' : ` (${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(row.ratio)}%)`}</>}</strong></div>
         <progress aria-label={`${row.completed} dari ${row.target} sudah dicatat oleh ${personName(row.name)}`} value={row.ratio ?? 0} max={100} />
         {compact ? <>
-          <p className="pks-attendance-venue">{row.venue}</p>
+          <details className="pks-attendance-breakdown">
+          <summary><span className="pks-attendance-venue">{row.venue}</span><span className="pks-attendance-detail-label">Rincian absensi</span></summary>
           <dl className="pks-attendance-metrics">
             <div><dt>Binaan</dt><dd>{detailButton(row,'assigned','Binaan',row.assigned)}<small>orang</small></dd></div>
             <div><dt>Hadir di venue</dt><dd>{detailButton(row,'present','Hadir di venue',row.present)}<small>orang</small></dd></div>
             <div><dt>Sudah dicatat</dt><dd>{detailButton(row,'completed','Sudah dicatat',row.completed)}<small>dari {detailButton(row,targetBasis === 'assigned' ? 'assigned' : 'target','Target pencatatan',row.target)} target</small></dd></div>
             <div><dt>Berhalangan</dt><dd>{detailButton(row,'unavailable','Berhalangan',row.unavailable)}<small>orang</small></dd></div>
           </dl>
-          <details className="pks-attendance-breakdown"><summary>Rincian absensi</summary><p>{detailButton(row,'participants','Peserta sudah diabsenkan',row.participants)} peserta dan {detailButton(row,'facilitators',`${facilitatorLabel} sudah diabsenkan`,row.facilitators)} {facilitatorLabel} sudah diabsenkan. {detailButton(row,'unavailable','Berhalangan',row.unavailable)} orang dicatat mundur/berhalangan.</p></details>
+          <p>{detailButton(row,'participants','Peserta sudah diabsenkan',row.participants)} peserta dan {detailButton(row,'facilitators',`${facilitatorLabel} sudah diabsenkan`,row.facilitators)} {facilitatorLabel} sudah diabsenkan. {detailButton(row,'unavailable','Berhalangan',row.unavailable)} orang dicatat mundur/berhalangan.</p></details>
         </> : <p>{row.present}/{row.assigned} peserta/{facilitatorLabel} hadir di venue · {row.participants} peserta dan {row.facilitators} {facilitatorLabel} sudah diabsenkan · {row.unavailable} mundur/berhalangan hadir · {row.venue}</p>}
       </li>)}</ol> : <p className="muted">Tidak ada LO yang cocok dengan filter.</p>}
     </div>}
